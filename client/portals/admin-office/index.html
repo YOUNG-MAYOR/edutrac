@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Office — EduTrack NG</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+  <script src="../../js/config.js"></script>
+  <script src="../../api/database.js"></script>
+  <script src="../../api/auth.js"></script>
+  <script>
+    (async () => {
+      const session = await db.auth.getSession().then(r => r.data.session);
+      if (!session) { window.location.href = '/login.html'; return; }
+      const { data: user } = await db.from('users')
+        .select('role, is_active').eq('id', session.user.id).single();
+      if (!user || !user.is_active) { window.location.href = '/login.html'; return; }
+      const allowed = ['vp_admin', 'registrar', 'admin'];
+      if (!allowed.includes(user.role)) { authGuard(allowed); return; }
+      window.location.replace('/portals/admin-office/student-admission.html');
+    })();
+  </script>
+  <style>
+    body { margin:0; display:flex; align-items:center; justify-content:center;
+           height:100vh; font-family:sans-serif; background:#f8fafc; color:#64748b; }
+  </style>
+</head>
+<body><p>Redirecting…</p>
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Results Overview</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    /* ── Section pill nav ─────────────────────────────── */
+    .section-pills {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
+    }
+    .section-pill {
+      padding: 7px 16px; border-radius: 100px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      border: 2px solid var(--border);
+      background: var(--surface); color: var(--ink-2);
+      transition: var(--transition);
+    }
+    .section-pill:hover { border-color: var(--primary); color: var(--primary); }
+    .section-pill.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    /* ── Score badge ──────────────────────────────────── */
+    .score-badge {
+      display: inline-block; padding: 2px 7px;
+      border-radius: 4px; font-size: 12px; font-weight: 700;
+    }
+    .score-badge.pass   { background: #dcfce7; color: #16a34a; }
+    .score-badge.fail   { background: #fee2e2; color: #991b1b; }
+    .score-badge.warn   { background: #fef9c3; color: #854d0e; }
+    .score-badge.empty  { background: var(--surface-3); color: var(--ink-4); }
+
+    /* ── Table ────────────────────────────────────────── */
+    .results-table-wrap { overflow-x: auto; }
+    .results-table {
+      min-width: 700px;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    .results-table th {
+      background: var(--ink); color: white; padding: 10px 12px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .4px; white-space: nowrap; position: sticky; top: 0;
+      border-right: 1px solid #ffffff22;
+    }
+    .results-table th:last-child { border-right: none; }
+    .results-table td {
+      padding: 9px 12px; border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border-2); font-size: 13px;
+      vertical-align: middle;
+    }
+    .results-table td:last-child { border-right: none; }
+    .results-table tr:last-child td { border-bottom: none; }
+    .results-table tr:hover td { background: var(--primary-light); }
+    .subject-group-header td {
+      background: var(--surface-2) !important;
+      font-size: 11px; font-weight: 700; color: var(--ink-3);
+      text-transform: uppercase; letter-spacing: 1px; padding: 6px 12px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    /* Student cell */
+    .student-cell { display: flex; align-items: center; gap: 10px; }
+    .student-cell .info { min-width: 0; }
+    .student-cell .name { font-weight: 600; font-size: 14px; }
+    .student-cell .sub  { font-size: 11px; color: var(--ink-3); }
+
+    /* Combo tag */
+    .combo-tag {
+      display: inline-block; padding: 1px 8px; border-radius: 10px;
+      font-size: 10px; font-weight: 700;
+      background: #1a2e6e; color: #f0c040; margin-left: 5px;
+    }
+
+    /* Missing subject warning */
+    .missing-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; background: #fee2e2; color: #991b1b; font-weight: 600;
+    }
+
+    /* Publish results bar */
+    .publish-bar {
+      background: var(--success-light); border: 1px solid var(--success);
+      border-radius: var(--radius-sm); padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; gap: 12px; flex-wrap: wrap;
+    }
+    .publish-bar__text { font-size: 13px; color: #14532d; font-weight: 600; }
+    .unpublish-bar {
+      background: var(--warning-light); border: 1px solid var(--warning);
+      border-radius: var(--radius-sm); padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; gap: 12px; flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let currentUser, currentTerm;
+let allClasses = [], allExams = [], gradingScale = [];
+let classSubjectMap = {};    // classId → [subjects]
+let comboSubjectMap = {};    // comboId → [subjects]
+let comboNameMap    = {};    // comboId → name
+let selectedSection = '';
+let selectedClassId = '';
+
+const SECTIONS = [
+  { key: 'SENIOR',  label: 'Senior Section',  icon: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>' },
+  { key: 'JUNIOR',  label: 'Junior Section',  icon: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>' },
+  { key: 'PRIMARY', label: 'Primary Section', icon: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>' },
+  { key: 'NURSERY', label: 'Nursery Section', icon: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg></span>' },
+];
+
+function getSection(cls) {
+  const s = cls.section;
+  if (s) return s;
+  const t = (cls.level || cls.name || '').toLowerCase();
+  if (/senior|sss/.test(t) || /^ss[s]?\s*[123]/i.test(cls.name)) return 'SENIOR';
+  if (/junior|jss/.test(t) || /^jss/i.test(cls.name))            return 'JUNIOR';
+  if (/primary|pry/.test(t))                                      return 'PRIMARY';
+  if (/nurs|kg/.test(t))                                          return 'NURSERY';
+  return 'JUNIOR';
+}
+
+(async () => {
+  currentUser = await initPage(
+    ['exam_officer','vp_academic','admin'],
+    'Results Overview', 'results'
+  );
+  if (!currentUser) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <button class="btn btn--secondary btn--sm" onclick="exportCSV()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> CSV</button>
+  `;
+
+  // Fetch current term first so we can use its ID in the parallel queries below
+  const { data: term } = await db.from('terms')
+    .select('*').eq('school_id', currentUser.school_id).eq('is_current', true).maybeSingle();
+  const termId = term?.id || '';
+
+  const [
+    { data: cls   },
+    { data: exm   },
+    { data: scale },
+    { data: combos },
+    { data: comboSubs },
+    { data: classSubs },
+  ] = await Promise.all([
+    db.from('classes').select('id,name,level,section,combination_id').eq('school_id', currentUser.school_id).order('name'),
+    db.from('exams').select('*').eq('school_id', currentUser.school_id).order('name'),
+    db.from('grading_scales').select('*').eq('school_id', currentUser.school_id).order('min_score', { ascending: false }),
+    db.from('subject_combinations').select('id,name').eq('school_id', currentUser.school_id),
+    db.from('combination_subjects').select('combination_id,subject_id,subjects(id,name,code),is_compulsory').eq('school_id', currentUser.school_id),
+    db.from('class_subjects').select('class_id,subject_id,subjects(id,name,code)').eq('school_id', currentUser.school_id).eq('term_id', termId),
+  ]);
+
+  currentTerm  = term;
+  allClasses   = cls   || [];
+  allExams     = exm   || [];
+  gradingScale = scale || [];
+
+  // Build combo maps
+  (combos || []).forEach(c => { comboNameMap[c.id] = c.name; });
+  (comboSubs || []).forEach(cs => {
+    if (!cs.subjects) return;
+    if (!comboSubjectMap[cs.combination_id]) comboSubjectMap[cs.combination_id] = [];
+    if (!comboSubjectMap[cs.combination_id].find(s => s.id === cs.subject_id)) {
+      comboSubjectMap[cs.combination_id].push({ ...cs.subjects, is_compulsory: cs.is_compulsory });
+    }
+  });
+  (classSubs || []).forEach(cs => {
+    if (!cs.subjects) return;
+    if (!classSubjectMap[cs.class_id]) classSubjectMap[cs.class_id] = [];
+    if (!classSubjectMap[cs.class_id].find(s => s.id === cs.subject_id)) {
+      classSubjectMap[cs.class_id].push(cs.subjects);
+    }
+  });
+
+  const preClass = new URLSearchParams(location.search).get('class') || '';
+
+  renderPage(preClass);
+  if (preClass) {
+    const cls2 = allClasses.find(c => c.id === preClass);
+    if (cls2) { selectedSection = getSection(cls2); selectedClassId = preClass; }
+    loadResults();
+  }
+})();
+
+// ── Render page shell ──────────────────────────────────────────
+function renderPage(preClass = '') {
+  // Group classes by section
+  const sectionGroups = {};
+  allClasses.forEach(c => { const s = getSection(c); (sectionGroups[s] = sectionGroups[s]||[]).push(c); });
+
+  const activeSections = SECTIONS.filter(s => sectionGroups[s.key]?.length > 0);
+
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Results Overview</h1>
+        <p class="page-subtitle">${currentTerm?.name || '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ No active term'} · Scores verified per class combination and subject assignment</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div style="margin-bottom:12px;">
+        <div class="form-label" style="margin-bottom:8px;">Filter by Section</div>
+        <div class="section-pills">
+          ${activeSections.map(s => `
+            <div class="section-pill ${selectedSection === s.key ? 'active' : ''}"
+                 onclick="selectSection('${s.key}')">
+              ${s.icon} ${s.label}
+              <span style="background:rgba(255,255,255,.25);padding:1px 6px;border-radius:8px;font-size:11px;margin-left:4px;">
+                ${sectionGroups[s.key]?.length || 0}
+              </span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+          <label class="form-label">Class</label>
+          <select class="form-control" id="classSelect" onchange="onClassChange(this.value)">
+            <option value="">— Select Class —</option>
+            ${(selectedSection
+              ? allClasses.filter(c => getSection(c) === selectedSection)
+              : allClasses
+            ).map(c => `<option value="${c.id}" ${c.id===preClass?'selected':''}>${c.name}${c.combination_id ? ' ('+comboNameMap[c.combination_id]+')' : ''}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;min-width:160px;">
+          <label class="form-label">Subject Filter</label>
+          <select class="form-control" id="subjectFilter" onchange="loadResults()">
+            <option value="">All Assigned Subjects</option>
+          </select>
+        </div>
+        <button class="btn btn--primary" onclick="loadResults()">Load Results</button>
+      </div>
+    </div>
+
+    <div id="publishBar"></div>
+    <div id="resultsContainer">
+      <div class="et-empty" style="padding:60px 0;">
+        <div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span></div>
+        <p>Select a class to view results</p>
+      </div>
+    </div>
+  `;
+}
+
+function selectSection(key) {
+  selectedSection = key;
+  selectedClassId = '';
+  renderPage();
+  // Update class select to filter by section
+  const sel = document.getElementById('classSelect');
+  if (sel) {
+    sel.innerHTML = '<option value="">— Select Class —</option>' +
+      allClasses.filter(c => getSection(c) === key)
+        .map(c => `<option value="${c.id}">${c.name}${c.combination_id ? ' ('+comboNameMap[c.combination_id]+')' : ''}</option>`)
+        .join('');
+  }
+}
+
+function onClassChange(classId) {
+  selectedClassId = classId;
+  if (classId) loadResults();
+}
+
+// ── Load and display results ───────────────────────────────────
+async function loadResults() {
+  const classId = document.getElementById('classSelect')?.value || selectedClassId;
+  if (!classId || !currentTerm) return;
+  selectedClassId = classId;
+
+  const container = document.getElementById('resultsContainer');
+  showLoader(container, 'Loading results…');
+
+  const cls = allClasses.find(c => c.id === classId);
+  const sectionKey = getSection(cls);
+
+  // Enrolled students
+  const { data: enroll } = await db.from('enrollments')
+    .select('student_id, students(id,full_name,admission_no,gender,combination_id)')
+    .eq('class_id', classId).eq('term_id', currentTerm.id);
+  const students = (enroll || []).map(e => e.students).filter(Boolean)
+    .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+  if (!students.length) {
+    showEmpty(container, 'No students enrolled in this class for the current term.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>');
+    return;
+  }
+
+  // All results for this class
+  const { data: results } = await db.from('results')
+    .select('student_id,subject_id,exam_id,score')
+    .eq('class_id', classId).eq('term_id', currentTerm.id).eq('school_id', currentUser.school_id);
+
+  const scoreMap = {};
+  (results || []).forEach(r => {
+    if (!scoreMap[r.student_id]) scoreMap[r.student_id] = {};
+    if (!scoreMap[r.student_id][r.subject_id]) scoreMap[r.student_id][r.subject_id] = {};
+    scoreMap[r.student_id][r.subject_id][r.exam_id] = r.score;
+  });
+
+  // Determine subjects for this class/section
+  // In senior: each student may have a different combination
+  // In others: same subjects for all
+  const termExams = allExams.filter(e => e.term_id === currentTerm.id);
+
+  // Resolve class-level subjects (for filter dropdown)
+  let classSubjects = [];
+  if (sectionKey === 'SENIOR') {
+    // Collect all combinations used by students in this class
+    const usedCombos = [...new Set(students.map(s => s.combination_id).filter(Boolean))];
+    if (cls.combination_id && !usedCombos.includes(cls.combination_id)) usedCombos.push(cls.combination_id);
+    const allSubjectsSet = {};
+    usedCombos.forEach(cid => {
+      (comboSubjectMap[cid] || []).forEach(s => { allSubjectsSet[s.id] = s; });
+    });
+    classSubjects = Object.values(allSubjectsSet).sort((a,b) => a.name.localeCompare(b.name));
+  } else {
+    classSubjects = (classSubjectMap[classId] || []).sort((a,b) => a.name.localeCompare(b.name));
+  }
+
+  // Update subject filter dropdown
+  const subFilter = document.getElementById('subjectFilter');
+  if (subFilter) {
+    subFilter.innerHTML = '<option value="">All Assigned Subjects</option>' +
+      classSubjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  }
+
+  const filteredSubjectId = document.getElementById('subjectFilter')?.value || '';
+  const displaySubjects = filteredSubjectId
+    ? classSubjects.filter(s => s.id === filteredSubjectId)
+    : classSubjects;
+
+  // Compute averages + positions
+  const averages = students.map(s => ({
+    studentId: s.id,
+    overall: buildTermSummary(
+      buildResultRows(scoreMap[s.id] || {}, displaySubjects, termExams),
+      gradingScale
+    ).overall
+  }));
+  const positions = assignPositions(averages);
+
+  // Publish toggle
+  renderPublishBar(cls, sectionKey);
+
+  // Render table
+  container.innerHTML = `
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div style="background:var(--ink);color:white;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span style="font-weight:700;font-size:15px;">${cls?.name}</span>
+          <span style="font-size:12px;color:#9ca3af;margin-left:8px;">${sectionKey} SECTION · ${students.length} students</span>
+          ${cls?.combination_id ? `<span style="background:rgba(255,255,255,.15);color:#f0c040;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-left:6px;">${comboNameMap[cls.combination_id]||''}</span>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn--sm" style="background:rgba(255,255,255,.15);color:white;" onclick="exportCSV()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> CSV</button>
+          <button class="btn btn--sm" style="background:rgba(255,255,255,.15);color:white;" onclick="printClass()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>️ Print</button>
+        </div>
+      </div>
+
+      <div class="results-table-wrap">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th style="text-align:left;">#</th>
+              <th style="text-align:left;min-width:200px;">Student</th>
+              ${displaySubjects.map(s => `
+                <th colspan="${termExams.length + 1}" style="text-align:center;border-left:2px solid #ffffff33;">
+                  ${s.name}
+                </th>`).join('')}
+              <th style="text-align:center;border-left:2px solid #ffffff55;min-width:70px;">Avg</th>
+              <th style="text-align:center;min-width:80px;">Position</th>
+            </tr>
+            <tr style="background:#1e3a8a;">
+              <th></th><th></th>
+              ${displaySubjects.map(() =>
+                termExams.map(e => `<th style="font-weight:500;font-size:10px;color:#93c5fd;">${e.name}</th>`).join('') +
+                `<th style="font-size:10px;color:#93c5fd;font-weight:700;">Total</th>`
+              ).join('')}
+              <th></th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${students.map((s, i) => {
+              const studentSubjects = resolveSubjects(s, cls, sectionKey);
+              // Build result rows for this student using their own subject list
+              const studentRows = buildResultRows(scoreMap[s.id] || {}, displaySubjects, termExams);
+              const summary = buildTermSummary(studentRows, gradingScale);
+              const pos = positions[s.id] || {};
+              const comboName = s.combination_id ? comboNameMap[s.combination_id] : null;
+
+              const subjectCells = displaySubjects.map(sub => {
+                // Check if this subject is in student's own combination
+                const isInStudentCombo = sectionKey !== 'SENIOR' ||
+                  !s.combination_id ||
+                  (comboSubjectMap[s.combination_id] || []).some(cs => cs.id === sub.id);
+
+                if (sectionKey === 'SENIOR' && s.combination_id && !isInStudentCombo) {
+                  // This subject is not in student's combination — show N/A
+                  return `<td style="text-align:center;background:#f9f9f9;" colspan="${termExams.length + 1}">
+                    <span style="color:var(--ink-4);font-size:11px;">N/A</span>
+                  </td>`;
+                }
+
+                const subMap = scoreMap[s.id]?.[sub.id] || {};
+                const examCells = termExams.map(e => {
+                  const sc = subMap[e.id];
+                  return `<td style="text-align:center;border-left:1px solid var(--border-2);">
+                    ${sc !== undefined ? `<span class="score-badge ${sc >= 50 ? 'pass' : sc >= 40 ? 'warn' : 'fail'}">${sc}</span>` : '<span class="score-badge empty">—</span>'}
+                  </td>`;
+                }).join('');
+
+                const vals = termExams.map(e => subMap[e.id]).filter(v => v !== undefined);
+                const avg = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+                const g   = avg !== null ? gradeFromScale(avg, gradingScale) : null;
+
+                return examCells + `<td style="text-align:center;font-weight:700;border-left:2px solid var(--border);">
+                  ${avg !== null ? `<span class="score-badge ${avg>=50?'pass':avg>=40?'warn':'fail'}">${avg.toFixed(1)}</span>` : '<span class="score-badge empty">—</span>'}
+                </td>`;
+              }).join('');
+
+              return `
+                <tr>
+                  <td style="color:var(--ink-3);text-align:center;">${i+1}</td>
+                  <td>
+                    <div class="student-cell">
+                      <div class="avatar avatar--sm">${s.full_name.charAt(0)}</div>
+                      <div class="info">
+                        <div class="name">${s.full_name}${comboName ? `<span class="combo-tag">${comboName}</span>` : ''}</div>
+                        <div class="sub">${s.admission_no||'—'}</div>
+                      </div>
+                    </div>
+                  </td>
+                  ${subjectCells}
+                  <td style="text-align:center;font-weight:700;font-size:14px;border-left:2px solid var(--border);color:${(summary.overall||0)>=50?'var(--success)':'var(--danger)'};">
+                    ${summary.overall ?? '—'}
+                  </td>
+                  <td style="text-align:center;font-weight:700;color:#7c3aed;">
+                    ${pos.suffix || '—'}
+                  </td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── Build flat result rows for buildTermSummary ─────────────────
+function buildResultRows(subjectExamScores, subjects, exams) {
+  const rows = [];
+  subjects.forEach(sub => {
+    const examMap = subjectExamScores[sub.id] || {};
+    exams.forEach(e => {
+      const sc = examMap[e.id];
+      if (sc !== undefined) {
+        rows.push({
+          subject_id: sub.id,
+          score: sc,
+          subjects: sub,
+          exams: e,
+        });
+      }
+    });
+  });
+  return rows;
+}
+
+function resolveSubjects(student, cls, sectionKey) {
+  if (sectionKey === 'SENIOR') {
+    if (student.combination_id && comboSubjectMap[student.combination_id]?.length) {
+      return comboSubjectMap[student.combination_id];
+    }
+    if (cls.combination_id && comboSubjectMap[cls.combination_id]?.length) {
+      return comboSubjectMap[cls.combination_id];
+    }
+  }
+  return classSubjectMap[cls.id] || [];
+}
+
+// ── Publish / Unpublish results bar ────────────────────────────
+function renderPublishBar(cls, sectionKey) {
+  const bar = document.getElementById('publishBar');
+  if (!bar || !currentTerm) return;
+  if (currentTerm.results_published) {
+    bar.innerHTML = `
+      <div class="unpublish-bar">
+        <span class="publish-bar__text"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Results for <strong>${currentTerm.name}</strong> are published and visible to students/parents.</span>
+        <button class="btn btn--sm btn--secondary" onclick="togglePublish(false)">Unpublish</button>
+      </div>`;
+  } else {
+    bar.innerHTML = `
+      <div class="publish-bar">
+        <span class="publish-bar__text" style="color:#1e3a8a;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span> Ready to publish results for <strong>${currentTerm.name}</strong>? This makes them visible to students and parents.</span>
+        <button class="btn btn--sm btn--primary" onclick="togglePublish(true)">Publish Results</button>
+      </div>`;
+  }
+}
+
+async function togglePublish(publish) {
+  if (!currentTerm) return;
+  const msg = publish
+    ? 'Publish results? Students and parents will be able to see them immediately.'
+    : 'Unpublish results? Students and parents will no longer see them.';
+  if (!confirm(msg)) return;
+  const { error } = await db.from('terms')
+    .update({ results_published: publish })
+    .eq('id', currentTerm.id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  currentTerm.results_published = publish;
+  toast(publish ? '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Results published!' : '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Results unpublished.', publish ? 'success' : 'info');
+  renderPublishBar(allClasses.find(c => c.id === selectedClassId), getSection(allClasses.find(c=>c.id===selectedClassId)));
+}
+
+// ── Export CSV ─────────────────────────────────────────────────
+function exportCSV() {
+  const table = document.querySelector('.results-table');
+  if (!table) { toast('No data to export.', 'info'); return; }
+  const rows = [...table.querySelectorAll('tr')]
+    .map(tr => [...tr.querySelectorAll('th,td')]
+      .map(td => `"${(td.innerText||'').replace(/"/g,'""')}"`)
+      .join(','));
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(blob),
+    download: `results-${allClasses.find(c=>c.id===selectedClassId)?.name||'class'}-${currentTerm?.name||''}.csv`
+  });
+  a.click();
+}
+
+function printClass() { window.print(); }
+
+// ── Utilities ──────────────────────────────────────────────────
+function assignPositions(studentAverages) {
+  const sorted = [...studentAverages].filter(s => s.overall !== null).sort((a, b) => b.overall - a.overall);
+  const positions = {};
+  let pos = 1;
+  sorted.forEach((s, i) => {
+    if (i > 0 && sorted[i-1].overall !== s.overall) pos = i + 1;
+    positions[s.studentId] = { position: pos, outOf: sorted.length, suffix: getOrdinalSuffix(pos) };
+  });
+  return positions;
+}
+function getOrdinalSuffix(n) {
+  const s = ['th','st','nd','rd'], v = n % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
+}
+</script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

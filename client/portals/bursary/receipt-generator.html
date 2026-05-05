@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EduTrack NG">
+  <title>EduTrack NG — Record Payment</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    /* Receipt print styles */
+    .receipt-preview {
+      font-family: 'Courier New', monospace;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      max-width: 360px;
+    }
+    .receipt-preview h3 { text-align: center; font-size: 16px; margin-bottom: 4px; }
+    .receipt-preview .r-school { text-align: center; font-size: 12px; color: var(--ink-3); margin-bottom: 16px; }
+    .receipt-preview .r-line { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+    .receipt-preview .r-divider { border-top: 1px dashed var(--border); margin: 10px 0; }
+    .receipt-preview .r-total { font-weight: 700; font-size: 16px; color: var(--primary); }
+    .receipt-preview .r-stamp { text-align: center; font-size: 11px; color: var(--ink-3); margin-top: 16px; }
+    .step-indicator { display: flex; gap: 0; margin-bottom: 28px; }
+    .step { flex: 1; text-align: center; padding: 10px; font-size: 13px; font-weight: 600; color: var(--ink-3); border-bottom: 2px solid var(--border); transition: var(--transition); }
+    .step.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .step.done { color: var(--success); border-bottom-color: var(--success); }
+    .student-result-item { padding: 10px 14px; cursor: pointer; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 10px; }
+    .student-result-item:hover { background: var(--surface-2); }
+    .selected-student-card { background: var(--surface-2); border-radius: var(--radius); padding: 14px 16px; display: flex; align-items: center; gap: 14px; margin-bottom: 20px; border-left: 3px solid var(--primary); }
+    .fee-option-row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; cursor: pointer; transition: var(--transition); }
+    .fee-option-row:hover { border-color: var(--primary); background: var(--surface-2); }
+    .fee-option-row.selected { border-color: var(--primary); background: #0a6e3f12; }
+    .fee-option-row input[type=radio] { accent-color: var(--primary); }
+    .amount-display { font-size: 28px; font-weight: 700; color: var(--primary); }
+    .payment-success { text-align: center; padding: 40px 20px; }
+    .payment-success .checkmark { width: 64px; height: 64px; background: var(--success); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+    @media print {
+      body * { visibility: hidden; }
+      .print-area, .print-area * { visibility: visible; }
+      .print-area { position: fixed; left: 0; top: 0; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let user, term, students = [], feeTypes = [];
+let selectedStudent = null, selectedFeeType = null, lastPayment = null;
+
+(async () => {
+  user = await initPage(['admin', 'accountant', 'bursary'], 'Record Payment', 'receipt-generator');
+  if (!user) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <a href="fee-tracker.html" class="btn btn--secondary">
+      <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      </span> Back to Fee Tracker
+    </a>
+  `;
+
+  const ctx = await loadSchoolContext(user.school_id);
+  term = ctx.term;
+
+  const [{ data: studs }, { data: fees }] = await Promise.all([
+    db.from('students')
+      .select('id,full_name,admission_no,family_id,enrollments(class_id,classes(name))')
+      .eq('school_id', user.school_id)
+      .eq('is_active', true)
+      .order('full_name'),
+    db.from('fee_types').select('*').eq('school_id', user.school_id).order('name')
+  ]);
+
+  students = studs || [];
+  feeTypes = fees || [];
+
+  renderPage();
+})();
+
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1>
+        <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        </span> Record Payment
+      </h1>
+      <p>${term?.name || 'Current Term'} · Record a fee payment for a student</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 380px;gap:24px;align-items:start;">
+
+      <!-- LEFT: Payment Form -->
+      <div>
+        <!-- Step Indicator -->
+        <div class="step-indicator">
+          <div class="step active" id="step1Label">① Select Student</div>
+          <div class="step" id="step2Label">② Fee Type & Amount</div>
+          <div class="step" id="step3Label">③ Confirm & Save</div>
+        </div>
+
+        <!-- STEP 1: Student Search -->
+        <div id="step1" class="card">
+          <div class="card__header"><h3 style="margin:0;font-size:15px;">Select Student</h3></div>
+          <div style="padding:20px;">
+            <div class="form-group" style="margin-bottom:12px;">
+              <div class="search-box" style="position:relative;">
+                <input type="text" id="studentSearch" class="form-control" placeholder="Type student name or admission no…"
+                  oninput="searchStudents()" autocomplete="off" style="padding-left:36px;">
+                <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-3);">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </span>
+              </div>
+              <div id="studentResults" style="border:1px solid var(--border);border-radius:var(--radius-sm);margin-top:4px;max-height:260px;overflow-y:auto;display:none;background:var(--surface);box-shadow:var(--shadow-md);"></div>
+            </div>
+            <div id="selectedStudentDisplay" style="display:none;"></div>
+          </div>
+        </div>
+
+        <!-- STEP 2: Fee Type -->
+        <div id="step2" class="card" style="margin-top:16px;display:none;">
+          <div class="card__header"><h3 style="margin:0;font-size:15px;">Select Fee Type &amp; Amount</h3></div>
+          <div style="padding:20px;">
+            <div id="feeTypeList"></div>
+            <div id="customAmountSection" style="margin-top:16px;display:none;">
+              <div class="form-group">
+                <label class="form-label">Custom Amount (₦) <span class="required">*</span></label>
+                <input type="number" id="customAmount" class="form-control" placeholder="0.00" min="1" step="0.01"
+                  oninput="updatePreview()" style="font-size:18px;font-weight:700;">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 3: Payment Details -->
+        <div id="step3" class="card" style="margin-top:16px;display:none;">
+          <div class="card__header"><h3 style="margin:0;font-size:15px;">Payment Details</h3></div>
+          <div style="padding:20px;">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Payment Method</label>
+                <select id="payMethod" class="form-control" onchange="updatePreview()">
+                  <option value="cash">💵 Cash</option>
+                  <option value="transfer">🏦 Bank Transfer</option>
+                  <option value="pos">💳 POS</option>
+                  <option value="cheque">📄 Cheque</option>
+                  <option value="online">🌐 Online</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Reference / Receipt No.</label>
+                <input type="text" id="payRef" class="form-control" placeholder="Optional" oninput="updatePreview()">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes</label>
+              <input type="text" id="payNotes" class="form-control" placeholder="Optional note (e.g. instalment 1 of 2)">
+            </div>
+            <div id="payError" class="form-error" style="display:none;margin-bottom:12px;"></div>
+            <div style="display:flex;gap:12px;">
+              <button class="btn btn--secondary" onclick="resetToStep1()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                Start Over
+              </button>
+              <button class="btn btn--primary" id="savePayBtn" onclick="savePayment()" style="flex:1;">
+                <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                </span>
+                Confirm &amp; Record Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Receipt Preview -->
+      <div style="position:sticky;top:20px;">
+        <div class="card">
+          <div class="card__header"><h3 style="margin:0;font-size:14px;color:var(--ink-3);">RECEIPT PREVIEW</h3></div>
+          <div style="padding:20px;" id="receiptPreviewWrap">
+            <div style="text-align:center;padding:40px 0;color:var(--ink-3);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:8px;opacity:.4;"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+              <div style="font-size:13px;opacity:.6;">Fill in the form to preview receipt</div>
+            </div>
+          </div>
+          <div style="padding:0 20px 20px;display:none;" id="receiptPrintActions">
+            <button class="btn btn--secondary" onclick="printReceipt()" style="width:100%;">
+              <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              </span> Print Receipt
+            </button>
+          </div>
+        </div>
+
+        <!-- Recent Payments for selected student -->
+        <div class="card" style="margin-top:16px;display:none;" id="studentHistoryCard">
+          <div class="card__header"><h3 style="margin:0;font-size:14px;color:var(--ink-3);">PAYMENT HISTORY</h3></div>
+          <div style="padding:16px;" id="studentHistory"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success overlay (shown after save) -->
+    <div id="successOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:none;align-items:center;justify-content:center;">
+      <div class="card" style="max-width:440px;width:90%;margin:auto;padding:40px;text-align:center;">
+        <div style="width:72px;height:72px;background:var(--success);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <h2 style="margin-bottom:8px;">Payment Recorded!</h2>
+        <p style="color:var(--ink-3);margin-bottom:24px;" id="successMsg">The payment has been saved successfully.</p>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <button class="btn btn--primary" onclick="printAndContinue()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print Receipt
+          </button>
+          <button class="btn btn--secondary" onclick="recordAnother()">Record Another</button>
+          <a href="fee-tracker.html" class="btn btn--secondary">View Fee Tracker</a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Student Search ─────────────────────────────────────────────
+let searchTimeout;
+function searchStudents() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(_doSearch, 220);
+}
+
+function _doSearch() {
+  const q = document.getElementById('studentSearch')?.value.trim().toLowerCase();
+  const resultsEl = document.getElementById('studentResults');
+  if (!q || q.length < 1) { resultsEl.style.display = 'none'; return; }
+
+  const matches = students.filter(s =>
+    s.full_name.toLowerCase().includes(q) ||
+    (s.admission_no || '').toLowerCase().includes(q)
+  ).slice(0, 8);
+
+  if (!matches.length) {
+    resultsEl.innerHTML = '<div style="padding:12px;color:var(--ink-3);font-size:13px;">No students found</div>';
+    resultsEl.style.display = 'block';
+    return;
+  }
+
+  resultsEl.innerHTML = matches.map(s => {
+    const cls = s.enrollments?.[0]?.classes?.name || 'Not enrolled';
+    return `
+      <div class="student-result-item" onclick="selectStudent('${s.id}')">
+        <div class="avatar avatar--sm">${s.full_name.charAt(0)}</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;">${s.full_name}</div>
+          <div style="font-size:11px;color:var(--ink-3);">${s.admission_no || ''} · ${cls}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  resultsEl.style.display = 'block';
+}
+
+async function selectStudent(id) {
+  selectedStudent = students.find(s => s.id === id);
+  if (!selectedStudent) return;
+
+  const resultsEl = document.getElementById('studentResults');
+  const searchEl = document.getElementById('studentSearch');
+  resultsEl.style.display = 'none';
+  searchEl.value = selectedStudent.full_name;
+
+  const cls = selectedStudent.enrollments?.[0]?.classes?.name || 'Not enrolled';
+
+  document.getElementById('selectedStudentDisplay').innerHTML = `
+    <div class="selected-student-card">
+      <div class="avatar">${selectedStudent.full_name.charAt(0)}</div>
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:15px;">${selectedStudent.full_name}</div>
+        <div style="font-size:12px;color:var(--ink-3);">${selectedStudent.admission_no || ''} · ${cls}</div>
+      </div>
+      <button class="btn btn--ghost btn--sm" onclick="clearStudent()">Change</button>
+    </div>
+  `;
+  document.getElementById('selectedStudentDisplay').style.display = 'block';
+  searchEl.style.display = 'none';
+
+  // Show step 2
+  document.getElementById('step2').style.display = '';
+  setStepActive(2);
+  renderFeeTypes();
+  updatePreview();
+  await loadStudentHistory();
+}
+
+function clearStudent() {
+  selectedStudent = null;
+  selectedFeeType = null;
+  document.getElementById('studentSearch').value = '';
+  document.getElementById('studentSearch').style.display = '';
+  document.getElementById('selectedStudentDisplay').style.display = 'none';
+  document.getElementById('step2').style.display = 'none';
+  document.getElementById('step3').style.display = 'none';
+  document.getElementById('studentHistoryCard').style.display = 'none';
+  setStepActive(1);
+  updatePreview();
+}
+
+// ── Fee Types ─────────────────────────────────────────────────
+function renderFeeTypes() {
+  const el = document.getElementById('feeTypeList');
+  if (!feeTypes.length) {
+    el.innerHTML = '<div style="color:var(--ink-3);font-size:13px;">No fee types configured. Go to <a href="../../admin/fees.html">Fee Management</a>.</div>';
+    return;
+  }
+
+  el.innerHTML = feeTypes.map(f => `
+    <label class="fee-option-row" onclick="selectFeeType('${f.id}')">
+      <input type="radio" name="feeType" value="${f.id}" onchange="selectFeeType('${f.id}')">
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${f.name}</div>
+        ${f.description ? `<div style="font-size:11px;color:var(--ink-3);">${f.description}</div>` : ''}
+      </div>
+      <div style="font-size:15px;font-weight:700;color:var(--primary);">${formatMoney(f.amount)}</div>
+    </label>
+  `).join('') + `
+    <label class="fee-option-row" onclick="selectFeeType('custom')">
+      <input type="radio" name="feeType" value="custom" onchange="selectFeeType('custom')">
+      <div style="flex:1;"><div style="font-size:13px;font-weight:600;">Custom Amount</div><div style="font-size:11px;color:var(--ink-3);">Enter a specific amount</div></div>
+      <div style="font-size:12px;color:var(--ink-3);">₦ —</div>
+    </label>
+  `;
+}
+
+function selectFeeType(id) {
+  if (id === 'custom') {
+    selectedFeeType = { id: 'custom', name: 'Custom Payment', amount: 0 };
+    document.getElementById('customAmountSection').style.display = '';
+  } else {
+    selectedFeeType = feeTypes.find(f => f.id === id);
+    document.getElementById('customAmountSection').style.display = 'none';
+  }
+  // Show step 3
+  document.getElementById('step3').style.display = '';
+  setStepActive(3);
+  updatePreview();
+}
+
+// ── Step helpers ───────────────────────────────────────────────
+function setStepActive(n) {
+  [1,2,3].forEach(i => {
+    const el = document.getElementById(`step${i}Label`);
+    if (!el) return;
+    el.className = 'step' + (i < n ? ' done' : i === n ? ' active' : '');
+  });
+}
+
+function resetToStep1() {
+  clearStudent();
+}
+
+// ── Receipt Preview ────────────────────────────────────────────
+function updatePreview() {
+  const wrap = document.getElementById('receiptPreviewWrap');
+  const actions = document.getElementById('receiptPrintActions');
+  if (!selectedStudent || !selectedFeeType) {
+    wrap.innerHTML = `
+      <div style="text-align:center;padding:40px 0;color:var(--ink-3);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:8px;opacity:.4;"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+        <div style="font-size:13px;opacity:.6;">Fill in the form to preview receipt</div>
+      </div>`;
+    if (actions) actions.style.display = 'none';
+    return;
+  }
+
+  const amount = selectedFeeType.id === 'custom'
+    ? Number(document.getElementById('customAmount')?.value || 0)
+    : selectedFeeType.amount;
+  const method = document.getElementById('payMethod')?.value || 'cash';
+  const ref = document.getElementById('payRef')?.value || '—';
+  const cls = selectedStudent.enrollments?.[0]?.classes?.name || '—';
+  const methodLabel = { cash: 'Cash', transfer: 'Bank Transfer', pos: 'POS', cheque: 'Cheque', online: 'Online' }[method] || method;
+  const now = new Date();
+
+  wrap.innerHTML = `
+    <div class="receipt-preview print-area" id="printableReceipt">
+      <h3>🧾 PAYMENT RECEIPT</h3>
+      <div class="r-school">${user?.schools?.name || 'School'}<br>${term?.name || ''}</div>
+      <div class="r-divider"></div>
+      <div class="r-line"><span>Date:</span><span>${now.toLocaleDateString('en-NG', { day:'2-digit', month:'short', year:'numeric' })}</span></div>
+      <div class="r-line"><span>Time:</span><span>${now.toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' })}</span></div>
+      <div class="r-line"><span>Ref:</span><span>${ref !== '—' ? ref : 'AUTO-' + now.getTime().toString().slice(-6)}</span></div>
+      <div class="r-divider"></div>
+      <div class="r-line"><span>Student:</span><span>${selectedStudent.full_name}</span></div>
+      <div class="r-line"><span>Adm No:</span><span>${selectedStudent.admission_no || '—'}</span></div>
+      <div class="r-line"><span>Class:</span><span>${cls}</span></div>
+      <div class="r-divider"></div>
+      <div class="r-line"><span>Fee:</span><span>${selectedFeeType.name}</span></div>
+      <div class="r-line"><span>Method:</span><span>${methodLabel}</span></div>
+      <div class="r-divider"></div>
+      <div class="r-line r-total"><span>AMOUNT PAID:</span><span>${formatMoney(amount)}</span></div>
+      <div class="r-divider"></div>
+      <div class="r-stamp">Thank you for your payment.<br>Keep this receipt for your records.<br><br>— EduTrack NG —</div>
+    </div>
+  `;
+  if (actions) actions.style.display = '';
+}
+
+// ── Load student history ───────────────────────────────────────
+async function loadStudentHistory() {
+  if (!selectedStudent || !term) return;
+  const { data: pays } = await db.from('payments')
+    .select('*, fee_types(name)')
+    .eq('student_id', selectedStudent.id)
+    .eq('term_id', term.id)
+    .order('paid_at', { ascending: false });
+
+  const card = document.getElementById('studentHistoryCard');
+  const el = document.getElementById('studentHistory');
+  if (!pays || !pays.length) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--ink-3);">No payments recorded this term.</div>';
+  } else {
+    el.innerHTML = pays.map(p => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-size:12px;font-weight:600;">${p.fee_types?.name || '—'}</div>
+          <div style="font-size:11px;color:var(--ink-3);">${p.payment_method || '—'} · ${formatDate(p.paid_at)}</div>
+        </div>
+        <div style="font-weight:700;color:var(--success);font-size:13px;">${formatMoney(p.amount_paid)}</div>
+      </div>
+    `).join('');
+  }
+  card.style.display = '';
+}
+
+// ── Save Payment ───────────────────────────────────────────────
+async function savePayment() {
+  const btn = document.getElementById('savePayBtn');
+  const errEl = document.getElementById('payError');
+  errEl.style.display = 'none';
+
+  if (!selectedStudent) { errEl.textContent = 'Please select a student.'; errEl.style.display = 'block'; return; }
+  if (!selectedFeeType) { errEl.textContent = 'Please select a fee type.'; errEl.style.display = 'block'; return; }
+
+  const amount = selectedFeeType.id === 'custom'
+    ? Number(document.getElementById('customAmount')?.value || 0)
+    : Number(selectedFeeType.amount);
+
+  if (!amount || amount <= 0) { errEl.textContent = 'Enter a valid amount greater than zero.'; errEl.style.display = 'block'; return; }
+  if (!term) { errEl.textContent = 'No current term is set. Please configure a term first.'; errEl.style.display = 'block'; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span style="opacity:.6">Saving…</span>';
+
+  try {
+    // Warn if duplicate payment exists
+    if (selectedFeeType.id !== 'custom') {
+      const { data: existing } = await db.from('payments')
+        .select('id, amount_paid')
+        .eq('student_id', selectedStudent.id)
+        .eq('fee_type_id', selectedFeeType.id)
+        .eq('term_id', term.id)
+        .maybeSingle();
+
+      if (existing) {
+        const proceed = confirm(
+          `A payment of ${formatMoney(existing.amount_paid)} already exists for "${selectedFeeType.name}" this term.\n\nRecord an additional payment anyway?`
+        );
+        if (!proceed) {
+          btn.disabled = false;
+          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Confirm &amp; Record Payment';
+          return;
+        }
+      }
+    }
+
+    const payload = {
+      school_id: user.school_id,
+      student_id: selectedStudent.id,
+      term_id: term.id,
+      amount_paid: amount,
+      payment_method: document.getElementById('payMethod')?.value || 'cash',
+      reference: document.getElementById('payRef')?.value || null,
+      notes: document.getElementById('payNotes')?.value || null,
+      received_by: user.id,
+    };
+    if (selectedFeeType.id !== 'custom') payload.fee_type_id = selectedFeeType.id;
+
+    const { data, error } = await db.from('payments').insert(payload).select('*').single();
+    if (error) throw error;
+
+    lastPayment = data;
+    toast('Payment recorded successfully!', 'success');
+
+    // Show success overlay
+    const successMsg = document.getElementById('successMsg');
+    if (successMsg) {
+      successMsg.textContent = `${formatMoney(amount)} recorded for ${selectedStudent.full_name}.`;
+    }
+    const overlay = document.getElementById('successOverlay');
+    if (overlay) { overlay.style.display = 'flex'; }
+
+    // Reload history
+    await loadStudentHistory();
+
+  } catch (err) {
+    errEl.textContent = err.message || 'An error occurred. Please try again.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Confirm &amp; Record Payment`;
+  }
+}
+
+function printReceipt() {
+  window.print();
+}
+
+function printAndContinue() {
+  const overlay = document.getElementById('successOverlay');
+  if (overlay) overlay.style.display = 'none';
+  window.print();
+}
+
+function recordAnother() {
+  const overlay = document.getElementById('successOverlay');
+  if (overlay) overlay.style.display = 'none';
+  resetToStep1();
+}
+</script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Student Admission</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    .family-card {
+      border: 2px solid var(--info);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      background: var(--info-light);
+      margin-bottom: 12px;
+    }
+    .family-card__title { font-size: 13px; font-weight: 700; color: #1d4ed8; margin-bottom: 8px; }
+    .sibling-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: white; border: 1px solid #93c5fd;
+      border-radius: 100px; padding: 3px 10px; font-size: 12px;
+      font-weight: 600; margin: 3px;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- Add/Edit Student Modal -->
+<div class="modal" id="studentModal">
+  <div class="modal__box" style="max-width:600px;">
+    <div class="modal__header">
+      <h2 class="modal__title" id="modalTitle">New Student Admission</h2>
+      <button class="modal__close" onclick="closeModal('studentModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body">
+      <input type="hidden" id="sId">
+
+      <!-- Step indicator -->
+      <div style="display:flex;gap:0;margin-bottom:20px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);">
+        <div id="step1ind" style="flex:1;padding:8px;text-align:center;font-size:12px;font-weight:700;background:var(--primary);color:white;">1 · Bio Data</div>
+        <div id="step2ind" style="flex:1;padding:8px;text-align:center;font-size:12px;font-weight:700;background:var(--surface-3);color:var(--ink-3);">2 · Family Link</div>
+        <div id="step3ind" style="flex:1;padding:8px;text-align:center;font-size:12px;font-weight:700;background:var(--surface-3);color:var(--ink-3);">3 · Enrollment</div>
+      </div>
+
+      <!-- Step 1: Bio Data -->
+      <div id="step1">
+        <div class="form-grid">
+          <div class="form-group col-full">
+            <label class="form-label">Full Name <span class="required">*</span></label>
+            <input type="text" id="sName" class="form-control" placeholder="Surname First Name Other Name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Admission Number</label>
+            <input type="text" id="sAdmNo" class="form-control" placeholder="Auto-generated if blank">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Gender</label>
+            <select id="sGender" class="form-control">
+              <option value="">Select…</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date of Birth</label>
+            <input type="date" id="sDob" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Parent/Guardian Name</label>
+            <input type="text" id="sParentName" class="form-control" placeholder="Parent full name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Parent Phone</label>
+            <input type="tel" id="sParentPhone" class="form-control" placeholder="08012345678">
+          </div>
+          <div class="form-group col-full">
+            <label class="form-label">Home Address</label>
+            <input type="text" id="sAddress" class="form-control" placeholder="Street, City, State">
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+          <button class="btn btn--primary" onclick="goStep(2)">Next → Family Link</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Family Linking -->
+      <div id="step2" style="display:none;">
+        <p style="font-size:13px;color:var(--ink-3);margin-bottom:16px;">
+          Link this student to an existing family to enable <strong>sibling discounts</strong>. 
+          If this is the first child from a family, a new Family ID will be created automatically.
+        </p>
+        <div class="form-group">
+          <label class="form-label">Search Existing Siblings</label>
+          <input type="text" id="siblingSearch" class="form-control" placeholder="Type parent name or sibling name…" oninput="searchSiblings()">
+          <div id="siblingResults" style="margin-top:8px;"></div>
+        </div>
+        <div id="familyPreview" style="display:none;"></div>
+        <input type="hidden" id="sFamilyId">
+        <div class="form-group">
+          <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="newFamily" onchange="toggleNewFamily()"> 
+            <span>Start a new family (no existing siblings)</span>
+          </label>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;">
+          <button class="btn btn--secondary" onclick="goStep(1)">← Back</button>
+          <button class="btn btn--primary" onclick="goStep(3)">Next → Enrollment</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Class Enrollment -->
+      <div id="step3" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">Enroll in Class</label>
+          <select id="sClass" class="form-control" onchange="pickClass()">
+            <option value="">— No class yet —</option>
+          </select>
+        </div>
+        <div id="comboSection" style="display:none;">
+          <label class="form-label">Subject Combination / Section</label>
+          <div id="comboPicker" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:8px;"></div>
+        </div>
+        <div class="form-group" style="margin-top:16px;">
+          <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="sCanLogin"> 
+            <span>Enable student portal login</span>
+          </label>
+        </div>
+        <div id="pinSection" style="display:none;">
+          <div class="form-group">
+            <label class="form-label">Student PIN (4–8 digits)</label>
+            <input type="text" id="sPin" class="form-control" placeholder="e.g. 1234" maxlength="8" style="font-family:var(--mono);letter-spacing:4px;">
+          </div>
+        </div>
+        <div id="sErr" class="form-error" style="display:none;"></div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;">
+          <button class="btn btn--secondary" onclick="goStep(2)">← Back</button>
+          <button class="btn btn--primary" id="saveBtn" onclick="saveStudent()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Admit Student</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let user, term, classes = [], combos = [], comboSubMap = {}, allStudents = [];
+let curStep = 1, selCombo = null;
+
+(async () => {
+  user = await initPage(['admin','vp_admin','registrar'], 'Student Admission', 'student-admission');
+  if (!user) return;
+
+  document.getElementById('topbarActions').innerHTML =
+    `<button class="btn btn--primary" onclick="openAdd()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Admit Student</button>`;
+
+  const ctx = await loadSchoolContext(user.school_id);
+  term = ctx.term; classes = ctx.classes; combos = ctx.combos || [];
+
+  if (combos.length) {
+    const { data: cs } = await db.from('combination_subjects')
+      .select('combination_id,subjects(id,name,code),is_compulsory')
+      .in('combination_id', combos.map(c => c.id));
+    (cs || []).forEach(r => {
+      if (!comboSubMap[r.combination_id]) comboSubMap[r.combination_id] = [];
+      comboSubMap[r.combination_id].push(r.subjects);
+    });
+  }
+
+  await loadStudents();
+  renderPage();
+})();
+
+async function loadStudents() {
+  const { data } = await db.from('students')
+    .select('id,full_name,admission_no,gender,family_id,is_active,created_at,enrollments(class_id,classes(name))')
+    .eq('school_id', user.school_id).order('full_name');
+  allStudents = data || [];
+}
+
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span> Student Admissions</h1>
+      <p>Manage student records and family links for sibling discounts</p>
+    </div>
+    <div class="filter-bar">
+      <div class="search-box" style="flex:1;max-width:280px;">
+        <input class="form-control" id="srch" placeholder="Search name or adm no…" oninput="filter()">
+      </div>
+      <select class="form-control" id="fClass" onchange="filter()" style="max-width:160px;">
+        <option value="">All Classes</option>
+        ${classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+      </select>
+      <select class="form-control" id="fStatus" onchange="filter()" style="max-width:130px;">
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+        <option value="">All</option>
+      </select>
+    </div>
+    <div class="card" style="padding:0;"><div class="table-wrap" id="studentTable" style="border:none;"></div></div>
+  `;
+  filter();
+}
+
+function filter() {
+  const q = (document.getElementById('srch')?.value || '').toLowerCase();
+  const fc = document.getElementById('fClass')?.value || '';
+  const fs = document.getElementById('fStatus')?.value;
+
+  // Build family counts
+  const familyCounts = {};
+  allStudents.forEach(s => { if (s.family_id) familyCounts[s.family_id] = (familyCounts[s.family_id]||0)+1; });
+
+  let list = allStudents.filter(s => {
+    if (q && !s.full_name.toLowerCase().includes(q) && !(s.admission_no||'').toLowerCase().includes(q)) return false;
+    if (fc && !s.enrollments?.some(e => e.class_id === fc)) return false;
+    if (fs === 'active' && !s.is_active) return false;
+    if (fs === 'inactive' && s.is_active) return false;
+    return true;
+  });
+
+  const el = document.getElementById('studentTable');
+  if (!list.length) { showEmpty(el, 'No students found.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>'); return; }
+
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Student</th><th>Class</th><th>Family</th><th>Status</th><th>Admitted</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${list.map(s => {
+          const cls = s.enrollments?.[0]?.classes?.name || '—';
+          const sibCount = s.family_id ? (familyCounts[s.family_id]||1) : 0;
+          return `
+            <tr>
+              <td>
+                <div class="student-cell">
+                  <div class="avatar avatar--sm">${s.full_name.charAt(0)}</div>
+                  <div class="info">
+                    <div class="name">${s.full_name}</div>
+                    <div class="sub">${s.admission_no || 'No Adm No'}</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="chip">${cls}</span></td>
+              <td>
+                ${sibCount > 1
+                  ? `<span class="badge badge--blue"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> ${sibCount} siblings</span>`
+                  : s.family_id
+                    ? `<span class="badge badge--gray">Family linked</span>`
+                    : '<span style="color:var(--ink-4);font-size:12px;">—</span>'}
+              </td>
+              <td><span class="badge ${s.is_active ? 'badge--green' : 'badge--red'}">${s.is_active ? 'Active' : 'Inactive'}</span></td>
+              <td style="color:var(--ink-3);font-size:12px;">${formatDate(s.created_at)}</td>
+              <td>
+                <div class="td-action">
+                  <button class="btn btn--secondary btn--sm" onclick="editStudent('${s.id}')">Edit</button>
+                  <button class="btn btn--ghost btn--sm" onclick="toggleActive('${s.id}',${s.is_active})">${s.is_active ? 'Deactivate' : 'Activate'}</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function openAdd() {
+  document.getElementById('modalTitle').textContent = 'New Student Admission';
+  document.getElementById('sId').value = '';
+  ['sName','sAdmNo','sGender','sDob','sParentName','sParentPhone','sAddress','sPin','sFamilyId'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('newFamily').checked = false;
+  document.getElementById('sCanLogin').checked = false;
+  document.getElementById('pinSection').style.display = 'none';
+  document.getElementById('sErr').style.display = 'none';
+  selCombo = null;
+  populateClassSelect();
+  goStep(1);
+  openModal('studentModal');
+}
+
+function populateClassSelect() {
+  document.getElementById('sClass').innerHTML =
+    `<option value="">— No class yet —</option>` +
+    classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+function goStep(n) {
+  curStep = n;
+  [1,2,3].forEach(i => {
+    document.getElementById('step'+i).style.display = i === n ? 'block' : 'none';
+    const ind = document.getElementById('step'+i+'ind');
+    if (ind) {
+      ind.style.background = i === n ? 'var(--primary)' : i < n ? 'var(--success)' : 'var(--surface-3)';
+      ind.style.color = i <= n ? 'white' : 'var(--ink-3)';
+    }
+  });
+}
+
+async function searchSiblings() {
+  const q = document.getElementById('siblingSearch').value.trim();
+  const res = document.getElementById('siblingResults');
+  if (q.length < 2) { res.innerHTML = ''; return; }
+
+  const { data } = await db.from('students')
+    .select('id,full_name,admission_no,family_id,parent_name')
+    .eq('school_id', user.school_id).eq('is_active', true)
+    .or(`full_name.ilike.%${q}%,parent_name.ilike.%${q}%`)
+    .limit(8);
+
+  if (!data?.length) { res.innerHTML = '<p style="font-size:12px;color:var(--ink-3);">No matching students found.</p>'; return; }
+
+  res.innerHTML = data.map(s => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;cursor:pointer;background:var(--surface);" onclick="selectSibling('${s.id}','${s.family_id||''}','${s.full_name.replace(/'/g,"\\'")}')">
+      <div>
+        <div style="font-weight:600;font-size:13px;">${s.full_name}</div>
+        <div style="font-size:11px;color:var(--ink-3);">${s.admission_no || ''} · Parent: ${s.parent_name || '—'}</div>
+      </div>
+      <span class="badge badge--blue">Link as sibling →</span>
+    </div>
+  `).join('');
+}
+
+async function selectSibling(studentId, familyId, name) {
+  // If sibling has no family_id yet, we'll create one at save time
+  const fid = familyId || 'NEW_FROM_' + studentId;
+  document.getElementById('sFamilyId').value = fid;
+  document.getElementById('siblingSearch').value = '';
+  document.getElementById('siblingResults').innerHTML = '';
+
+  // Show family preview
+  const preview = document.getElementById('familyPreview');
+  preview.style.display = 'block';
+
+  if (familyId) {
+    const { data: siblings } = await db.from('students')
+      .select('id,full_name,admission_no').eq('family_id', familyId).eq('school_id', user.school_id);
+    preview.innerHTML = `
+      <div class="family-card">
+        <div class="family-card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Linked Family (${(siblings||[]).length + 1} members after adding this student)</div>
+        ${(siblings||[]).map(s => `<span class="sibling-chip"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg></span> ${s.full_name}</span>`).join('')}
+        <span class="sibling-chip" style="background:var(--primary);color:white;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> New Student</span>
+        <br><button class="btn btn--ghost btn--sm" style="margin-top:8px;" onclick="clearFamily()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> Remove Link</button>
+      </div>
+    `;
+  } else {
+    preview.innerHTML = `
+      <div class="family-card">
+        <div class="family-card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Will be linked with: ${name}</div>
+        <p style="font-size:12px;color:#1d4ed8;">A new Family ID will be created for both students.</p>
+        <button class="btn btn--ghost btn--sm" style="margin-top:8px;" onclick="clearFamily()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> Remove Link</button>
+      </div>
+    `;
+  }
+}
+
+function clearFamily() {
+  document.getElementById('sFamilyId').value = '';
+  document.getElementById('familyPreview').style.display = 'none';
+}
+
+function toggleNewFamily() {
+  const checked = document.getElementById('newFamily').checked;
+  if (checked) { clearFamily(); document.getElementById('siblingSearch').value = ''; }
+}
+
+function pickClass() {
+  const classId = document.getElementById('sClass').value;
+  const cls = classes.find(c => c.id === classId);
+  const comboSection = document.getElementById('comboSection');
+  const picker = document.getElementById('comboPicker');
+  selCombo = null;
+
+  if (!cls || !combos.length) { comboSection.style.display = 'none'; return; }
+  comboSection.style.display = 'block';
+
+  const ICONS = { Science:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v8L4.72 20.55A1 1 0 0 0 5.6 22h12.8a1 1 0 0 0 .88-1.45L14 10V2"/><line x1="8.5" y1="2" x2="15.5" y2="2"/></svg></span>', Art:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></span>', Commercial:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>', General:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>', default:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>' };
+  picker.innerHTML = `
+    <div onclick="selCombo=null;document.querySelectorAll('.combo-opt').forEach(e=>e.classList.remove('selected'));this.classList.add('selected');"
+      class="combo-opt" style="border:2px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;text-align:center;">
+      <div style="font-size:22px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span></div>
+      <div style="font-weight:700;font-size:13px;">No Section</div>
+      <div style="font-size:11px;color:var(--ink-3);">Assign later</div>
+    </div>
+    ${combos.map(c => `
+      <div onclick="selCombo='${c.id}';document.querySelectorAll('.combo-opt').forEach(e=>e.classList.remove('selected'));this.classList.add('selected');"
+        class="combo-opt" style="border:2px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;text-align:center;">
+        <div style="font-size:22px;">${ICONS[c.name]||ICONS.default}</div>
+        <div style="font-weight:700;font-size:13px;color:${c.color||'var(--primary)'};">${c.name}</div>
+        <div style="font-size:11px;color:var(--ink-3);">${(comboSubMap[c.id]||[]).length} subjects</div>
+      </div>
+    `).join('')}
+  `;
+}
+
+document.addEventListener('change', e => {
+  if (e.target.id === 'sCanLogin') {
+    document.getElementById('pinSection').style.display = e.target.checked ? 'block' : 'none';
+  }
+});
+
+async function saveStudent() {
+  const errEl = document.getElementById('sErr');
+  errEl.style.display = 'none';
+  const name = document.getElementById('sName').value.trim();
+  if (!name) { errEl.textContent = 'Full name is required.'; errEl.style.display = 'block'; return; }
+
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    // Handle family_id
+    let familyId = document.getElementById('sFamilyId').value || null;
+    const newFamilyChecked = document.getElementById('newFamily').checked;
+
+    if (familyId?.startsWith('NEW_FROM_')) {
+      // Link with an existing student that has no family — create new UUID for both
+      const linkedId = familyId.replace('NEW_FROM_', '');
+      familyId = crypto.randomUUID();
+      await db.from('students').update({ family_id: familyId }).eq('id', linkedId);
+    } else if (!familyId && !newFamilyChecked) {
+      familyId = null; // standalone student
+    } else if (!familyId && newFamilyChecked) {
+      familyId = crypto.randomUUID(); // brand new family
+    }
+
+    const id = document.getElementById('sId').value;
+    const payload = {
+      school_id: user.school_id,
+      full_name: name,
+      admission_no: document.getElementById('sAdmNo').value.trim() || null,
+      gender: document.getElementById('sGender').value || null,
+      date_of_birth: document.getElementById('sDob').value || null,
+      parent_name: document.getElementById('sParentName').value.trim() || null,
+      parent_phone: document.getElementById('sParentPhone').value.trim() || null,
+      address: document.getElementById('sAddress').value.trim() || null,
+      family_id: familyId,
+      combination_id: selCombo || null,
+      can_login: document.getElementById('sCanLogin').checked,
+      pin: document.getElementById('sPin').value.trim() || null,
+    };
+
+    let sid;
+    if (id) {
+      const { error } = await db.from('students').update(payload).eq('id', id);
+      if (error) throw error;
+      sid = id;
+    } else {
+      const { data: ns, error } = await db.from('students').insert(payload).select().single();
+      if (error) throw error;
+      sid = ns.id;
+    }
+
+    // Enroll in class
+    const classId = document.getElementById('sClass').value;
+    if (classId && term) {
+      await db.from('enrollments').upsert(
+        { school_id: user.school_id, student_id: sid, class_id: classId, term_id: term.id },
+        { onConflict: 'student_id,term_id' }
+      );
+    }
+
+    toast(id ? 'Student updated!' : 'Student admitted successfully!', 'success');
+    closeModal('studentModal');
+    await loadStudents();
+    filter();
+  } catch (err) {
+    errEl.textContent = err.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Admit Student';
+  }
+}
+
+async function editStudent(id) {
+  const s = allStudents.find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('modalTitle').textContent = 'Edit Student Record';
+  document.getElementById('sId').value = s.id;
+  document.getElementById('sName').value = s.full_name;
+  document.getElementById('sAdmNo').value = s.admission_no || '';
+  document.getElementById('sGender').value = s.gender || '';
+  document.getElementById('sDob').value = s.date_of_birth || '';
+  document.getElementById('sParentName').value = s.parent_name || '';
+  document.getElementById('sParentPhone').value = s.parent_phone || '';
+  document.getElementById('sAddress').value = s.address || '';
+  document.getElementById('sFamilyId').value = s.family_id || '';
+  selCombo = s.combination_id || null;
+  populateClassSelect();
+  const enrolled = s.enrollments?.[0]?.class_id || '';
+  document.getElementById('sClass').value = enrolled;
+  if (enrolled) pickClass();
+  goStep(1);
+  openModal('studentModal');
+}
+
+async function toggleActive(id, current) {
+  if (!confirm(`${current ? 'Deactivate' : 'Activate'} this student?`)) return;
+  const { error } = await db.from('students').update({ is_active: !current }).eq('id', id);
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Updated!', 'success');
+  await loadStudents(); filter();
+}
+</script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

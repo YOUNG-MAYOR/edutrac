@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0a6e3f">
+  <title>EduTrack NG — Timetable</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .tt-grid{display:grid;grid-template-columns:90px repeat(5,1fr);gap:2px;background:var(--border);border-radius:var(--radius);overflow:hidden;font-size:12px;}
+    .tt-cell{background:var(--surface);padding:8px 6px;min-height:70px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;position:relative;}
+    .tt-cell.header{background:var(--ink);color:white;font-weight:700;font-size:11px;min-height:38px;text-transform:uppercase;}
+    .tt-cell.time-col{background:var(--surface-3);font-size:10px;font-weight:700;color:var(--ink-3);}
+    .tt-entry{border-radius:6px;padding:5px 7px;width:100%;font-size:11px;cursor:pointer;}
+    .tt-sub{font-weight:700;font-size:11px;}
+    .tt-tchr{font-size:9px;opacity:.75;margin-top:2px;}
+    .tt-empty{width:100%;height:52px;border:1.5px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--ink-4);cursor:pointer;transition:all .15s;}
+    .tt-empty:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-light);}
+    .gen-step{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:12px;}
+    .gen-num{width:32px;height:32px;border-radius:50%;background:var(--primary);color:white;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .gen-body{flex:1;}
+    .gen-title{font-size:14px;font-weight:700;margin-bottom:6px;}
+    .subject-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:100px;background:var(--primary-light);border:1px solid var(--primary);font-size:12px;font-weight:600;color:var(--primary);margin:3px;}
+    .subject-tag button{background:none;border:none;cursor:pointer;font-size:14px;color:var(--ink-3);line-height:1;padding:0 0 0 2px;}
+    .conflict-badge{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:6px;padding:4px 10px;font-size:12px;}
+    @media print{.no-print{display:none!important;}@page{margin:10mm;size:landscape;}}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<div class="modal" id="entryModal">
+  <div class="modal__box" style="max-width:400px;">
+    <div class="modal__header"><h2 class="modal__title" id="entryTitle">Edit Period</h2><button class="modal__close" onclick="closeModal('entryModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button></div>
+    <div class="modal__body">
+      <div class="form-group">
+        <label class="form-label">Subject</label>
+        <select id="entrySubject" class="form-control"><option value="">— Free Period —</option></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Teacher</label>
+        <select id="entryTeacher" class="form-control"><option value="">— None —</option></select>
+      </div>
+      <div class="form-group"><label class="form-label">Room (optional)</label><input type="text" id="entryRoom" class="form-control" placeholder="e.g. Lab 1"></div>
+      <input type="hidden" id="entryClassId"><input type="hidden" id="entryDay"><input type="hidden" id="entryPeriod"><input type="hidden" id="entryId">
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('entryModal')">Cancel</button>
+      <button class="btn btn--danger" onclick="clearEntry()">Clear</button>
+      <button class="btn btn--primary" onclick="saveEntry()">Save</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script><script src="../js/layout.js"></script>
+<script>
+let cu, classes=[], subjects=[], teachers=[], term=null, timetableData={};
+const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday'];
+const PERIODS=[
+  {n:1,t:'8:00–8:40'},{n:2,t:'8:40–9:20'},{n:3,t:'9:20–10:00'},
+  {n:4,t:'10:20–11:00'},{n:5,t:'11:00–11:40'},{n:6,t:'11:40–12:20'},
+  {n:7,t:'1:20–2:00'},{n:8,t:'2:00–2:40'},{n:9,t:'2:40–3:20'}
+];
+const COLORS=['#0a6e3f','#2563eb','#7c3aed','#d97706','#059669','#dc2626','#0891b2','#c026d3','#65a30d'];
+
+(async()=>{
+  cu=await initAdminLayout('timetable','Timetable');
+  if(!cu) return;
+  document.getElementById('topbarActions').innerHTML=`
+    <button class="btn btn--secondary no-print" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Print</button>
+    <button class="btn btn--primary no-print" id="genBtn" onclick="showGenerator()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Auto-Generate</button>`;
+  const[{data:cls},{data:t},{data:sub},{data:tchr}]=await Promise.all([
+    db.from('classes').select('id,name,level').eq('school_id',cu.school_id).order('name'),
+    db.from('terms').select('*').eq('school_id',cu.school_id).eq('is_current',true).maybeSingle(),
+    db.from('subjects').select('id,name').eq('school_id',cu.school_id).order('name'),
+    db.from('users').select('id,full_name,role').eq('school_id',cu.school_id).in('role',['teacher','vp_academic']).eq('is_active',true).order('full_name')
+  ]);
+  classes=cls||[]; term=t; subjects=sub||[]; teachers=tchr||[];
+  renderPage(); if(classes.length&&term) await loadTimetable();
+})();
+
+function renderPage(){
+  const sel=classes.length?`<select class="form-control" id="classSelect" onchange="loadTimetable()" style="max-width:200px;">${classes.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>`:'<span style="color:var(--ink-3);">No classes — add classes first</span>';
+  document.getElementById('pageBody').innerHTML=`
+    <div class="page-header"><h1>School Timetable</h1><p>${term?.name||'No current term'}</p></div>
+    <div class="filter-bar no-print">${sel}</div>
+    <div id="ttContainer"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>️</div><p>Select a class to view timetable</p></div></div>
+    <div id="genPanel" style="display:none;"></div>
+  `;
+}
+
+async function loadTimetable(){
+  const cid=document.getElementById('classSelect')?.value;
+  if(!cid||!term) return;
+  showLoader('#ttContainer','Loading timetable…');
+  const{data}=await db.from('timetable').select('id,day,period,room,subjects(id,name),users(id,full_name)')
+    .eq('class_id',cid).eq('term_id',term.id);
+  timetableData={};
+  (data||[]).forEach(r=>{
+    const k=`${r.day}::${r.period}`;
+    timetableData[k]={id:r.id,subject:r.subjects,teacher:r.users,room:r.room,day:r.day,period:r.period};
+  });
+  renderTT(cid);
+}
+
+function renderTT(cid){
+  const subColorMap={};
+  subjects.forEach((s,i)=>{subColorMap[s.id]=COLORS[i%COLORS.length];});
+  document.getElementById('ttContainer').innerHTML=`
+    <div class="tt-grid" id="ttGrid">
+      <div class="tt-cell header"></div>
+      ${DAYS.map(d=>`<div class="tt-cell header">${d}</div>`).join('')}
+      ${PERIODS.map(p=>`
+        <div class="tt-cell time-col">${p.t}</div>
+        ${DAYS.map(d=>{
+          const k=`${d}::${p.n}`;
+          const e=timetableData[k];
+          if(e&&e.subject){
+            const color=subColorMap[e.subject.id]||'#0a6e3f';
+            return `<div class="tt-cell" onclick="openEntry('${cid}','${d}',${p.n})">
+              <div class="tt-entry" style="background:${color}18;border:1.5px solid ${color}40;">
+                <div class="tt-sub" style="color:${color};">${e.subject.name}</div>
+                ${e.teacher?`<div class="tt-tchr">${e.teacher.full_name.split(' ')[0]}</div>`:''}
+                ${e.room?`<div class="tt-tchr" style="color:var(--ink-4);"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>${e.room}</div>`:''}
+              </div></div>`;
+          }
+          return `<div class="tt-cell" onclick="openEntry('${cid}','${d}',${p.n})"><div class="tt-empty">+</div></div>`;
+        }).join('')}
+      `).join('')}
+    </div>
+    <div style="margin-top:12px;font-size:12px;color:var(--ink-3);" class="no-print">Click any cell to add or edit a period.</div>
+  `;
+}
+
+function openEntry(classId,day,period){
+  const k=`${day}::${period}`;
+  const e=timetableData[k]||{};
+  document.getElementById('entryTitle').textContent=`${day} · Period ${period}`;
+  document.getElementById('entryClassId').value=classId;
+  document.getElementById('entryDay').value=day;
+  document.getElementById('entryPeriod').value=period;
+  document.getElementById('entryId').value=e.id||'';
+  document.getElementById('entryRoom').value=e.room||'';
+  document.getElementById('entrySubject').innerHTML='<option value="">— Free Period —</option>'+
+    subjects.map(s=>`<option value="${s.id}" ${e.subject?.id===s.id?'selected':''}>${s.name}</option>`).join('');
+  document.getElementById('entryTeacher').innerHTML='<option value="">— None —</option>'+
+    teachers.map(t=>`<option value="${t.id}" ${e.teacher?.id===t.id?'selected':''}>${t.full_name}</option>`).join('');
+  openModal('entryModal');
+}
+
+async function saveEntry(){
+  const classId=document.getElementById('entryClassId').value;
+  const day=document.getElementById('entryDay').value;
+  const period=parseInt(document.getElementById('entryPeriod').value);
+  const id=document.getElementById('entryId').value;
+  const subjectId=document.getElementById('entrySubject').value||null;
+  const teacherId=document.getElementById('entryTeacher').value||null;
+  const room=document.getElementById('entryRoom').value.trim()||null;
+  const payload={school_id:cu.school_id,class_id:classId,term_id:term.id,day,period,subject_id:subjectId,teacher_id:teacherId,room};
+  const{error}=id?await db.from('timetable').update(payload).eq('id',id):await db.from('timetable').insert(payload);
+  if(error){toast(error.message,'error');return;}
+  closeModal('entryModal'); toast('Saved!','success'); await loadTimetable();
+}
+
+async function clearEntry(){
+  const id=document.getElementById('entryId').value;
+  if(id){await db.from('timetable').delete().eq('id',id);}
+  closeModal('entryModal'); toast('Period cleared.','success'); await loadTimetable();
+}
+
+// ── AUTO GENERATOR ─────────────────────────────────────────────
+let genSubjects=[], genPerWeek={};
+
+function showGenerator(){
+  const panel=document.getElementById('genPanel');
+  panel.style.display='';
+  panel.innerHTML=`
+    <div class="card" style="margin-top:24px;">
+      <div class="card__header"><span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Auto-Generate Timetable</span>
+        <button class="btn btn--ghost btn--sm" onclick="document.getElementById('genPanel').style.display='none'"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> Close</button>
+      </div>
+      <div style="padding:16px;">
+        <div class="gen-step">
+          <div class="gen-num">1</div>
+          <div class="gen-body">
+            <div class="gen-title">Select Class</div>
+            <select class="form-control" id="genClass" style="max-width:240px;">
+              ${classes.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="gen-step">
+          <div class="gen-num">2</div>
+          <div class="gen-body">
+            <div class="gen-title">Add Subjects + Periods per Week + Teacher</div>
+            <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:end;margin-bottom:8px;">
+              <select class="form-control" id="genSubSel">
+                <option value="">Select subject…</option>
+                ${subjects.map(s=>`<option value="${s.id}" data-name="${s.name}">${s.name}</option>`).join('')}
+              </select>
+              <input type="number" id="genPW" class="form-control" placeholder="Periods/wk" value="4" min="1" max="9" style="width:110px;">
+              <select class="form-control" id="genTeacherSel" style="max-width:180px;">
+                <option value="">No teacher</option>
+                ${teachers.map(t=>`<option value="${t.id}" data-name="${t.full_name}">${t.full_name}</option>`).join('')}
+              </select>
+              <button class="btn btn--secondary" onclick="addGenSubject()">+ Add</button>
+            </div>
+            <div id="genSubList" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px;padding:6px 0;"></div>
+          </div>
+        </div>
+        <div class="gen-step">
+          <div class="gen-num">3</div>
+          <div class="gen-body">
+            <div class="gen-title">Schedule Options</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group" style="margin:0;">
+                <label class="form-label">Start Period</label>
+                <select id="genStartPeriod" class="form-control">
+                  ${PERIODS.map(p=>`<option value="${p.n}">${p.t}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label class="form-label">Break After Period</label>
+                <select id="genBreak" class="form-control">
+                  <option value="3">After Period 3 (10:00)</option>
+                  <option value="6">After Period 6 (12:20)</option>
+                  <option value="0">No break gaps</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:10px;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+                <input type="checkbox" id="genNoDouble" checked style="accent-color:var(--primary);">
+                Avoid same subject twice in a row
+              </label>
+            </div>
+          </div>
+        </div>
+        <div id="genConflicts" style="display:none;margin-bottom:12px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn--secondary" onclick="previewGenerate()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span> Preview</button>
+          <button class="btn btn--primary" onclick="applyGenerate()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Apply Timetable</button>
+        </div>
+        <div id="genPreview" style="margin-top:16px;display:none;overflow-x:auto;"></div>
+      </div>
+    </div>`;
+  genSubjects=[]; genPerWeek={}; document.getElementById('genSubList').innerHTML='';
+  panel.scrollIntoView({behavior:'smooth'});
+}
+
+function addGenSubject(){
+  const sel=document.getElementById('genSubSel');
+  const id=sel.value; const name=sel.options[sel.selectedIndex]?.dataset.name||sel.options[sel.selectedIndex]?.text;
+  const pw=Math.max(1,Math.min(9,parseInt(document.getElementById('genPW').value)||4));
+  const tSel=document.getElementById('genTeacherSel');
+  const tid=tSel.value; const tname=tSel.options[tSel.selectedIndex]?.dataset.name||tSel.options[tSel.selectedIndex]?.text;
+  if(!id){toast('Select a subject.','info');return;}
+  if(genSubjects.find(s=>s.id===id)){toast('Subject already added.','info');return;}
+  genSubjects.push({id,name,pw,teacher_id:tid||null,teacher_name:tname||null});
+  renderGenList();
+}
+
+function renderGenList(){
+  document.getElementById('genSubList').innerHTML=genSubjects.map(s=>`
+    <span class="subject-tag">
+      ${s.name} ×${s.pw}${s.teacher_name?' · '+s.teacher_name.split(' ')[0]:''}
+      <button onclick="removeGenSub('${s.id}')">×</button>
+    </span>`).join('');
+}
+
+function removeGenSub(id){ genSubjects=genSubjects.filter(s=>s.id!==id); renderGenList(); }
+
+function generateSchedule(){
+  // Build pool of (subject,teacher) slots for each day
+  const totalSlots=PERIODS.length*DAYS.length;
+  const breakAfter=parseInt(document.getElementById('genBreak').value)||0;
+  const noDouble=document.getElementById('genNoDouble')?.checked;
+
+  // Build flat list of assignments needed
+  let pool=[];
+  genSubjects.forEach(s=>{
+    for(let i=0;i<s.pw;i++) pool.push({subject_id:s.id,subject_name:s.name,teacher_id:s.teacher_id||null,teacher_name:s.teacher_name||null});
+  });
+
+  // Shuffle pool
+  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+
+  const schedule={}; // {day: {period: entry}}
+  const teacherBusy={}; // {teacherId: Set of "day::period"}
+  DAYS.forEach(d=>{ schedule[d]={}; });
+
+  const usableSlots=[];
+  DAYS.forEach(d=>{
+    PERIODS.forEach(p=>{
+      if(breakAfter&&(p.n===4&&breakAfter===3)) return; // skip break period 4
+      if(breakAfter&&(p.n===7&&breakAfter===6)) return; // skip break period 7
+      usableSlots.push({d,p:p.n});
+    });
+  });
+
+  let poolIdx=0;
+  const conflicts=[];
+
+  for(const slot of usableSlots){
+    if(poolIdx>=pool.length) break;
+    const entry=pool[poolIdx];
+    const {d,p}=slot;
+
+    // No-double check
+    if(noDouble&&p>1&&schedule[d][p-1]?.subject_id===entry.subject_id){
+      // Try to find a different entry later in pool
+      const swapIdx=pool.slice(poolIdx+1).findIndex(e=>e.subject_id!==schedule[d][p-1]?.subject_id);
+      if(swapIdx!==-1){[pool[poolIdx],pool[poolIdx+1+swapIdx]]=[pool[poolIdx+1+swapIdx],pool[poolIdx]];}
+    }
+
+    // Teacher conflict check
+    const tkey=`${d}::${p}`;
+    if(entry.teacher_id&&teacherBusy[entry.teacher_id]?.has(tkey)){
+      conflicts.push(`${entry.teacher_name} has a conflict on ${d} period ${p}`);
+    } else {
+      if(entry.teacher_id){
+        if(!teacherBusy[entry.teacher_id]) teacherBusy[entry.teacher_id]=new Set();
+        teacherBusy[entry.teacher_id].add(tkey);
+      }
+      schedule[d][p]=pool[poolIdx];
+      poolIdx++;
+    }
+  }
+
+  return {schedule,conflicts,assigned:poolIdx,total:pool.length};
+}
+
+function previewGenerate(){
+  if(!genSubjects.length){toast('Add at least one subject.','info');return;}
+  const{schedule,conflicts,assigned,total}=generateSchedule();
+  const prev=document.getElementById('genPreview');
+  prev.style.display='';
+  const subColorMap={};
+  subjects.forEach((s,i)=>{subColorMap[s.id]=COLORS[i%COLORS.length];});
+
+  let html=`<div style="font-size:13px;margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap;">
+    <span style="color:var(--success);font-weight:700;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${assigned}/${total} periods placed</span>
+    ${conflicts.length?`<span style="color:var(--danger);font-weight:700;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ ${conflicts.length} conflict(s)</span>`:''}
+  </div>`;
+  if(conflicts.length) html+=`<div class="conflict-badge" style="margin-bottom:10px;">${conflicts.join('<br>')}</div>`;
+
+  html+=`<div class="tt-grid">
+    <div class="tt-cell header"></div>${DAYS.map(d=>`<div class="tt-cell header">${d}</div>`).join('')}
+    ${PERIODS.map(p=>`
+      <div class="tt-cell time-col">${p.t}</div>
+      ${DAYS.map(d=>{
+        const e=schedule[d][p.n];
+        if(e){const color=subColorMap[e.subject_id]||'#0a6e3f';
+          return `<div class="tt-cell"><div class="tt-entry" style="background:${color}18;border:1.5px solid ${color}40;">
+            <div class="tt-sub" style="color:${color};">${e.subject_name}</div>
+            ${e.teacher_name?`<div class="tt-tchr">${e.teacher_name.split(' ')[0]}</div>`:''}
+          </div></div>`;}
+        return `<div class="tt-cell"><div class="tt-empty" style="cursor:default;opacity:.4;">—</div></div>`;
+      }).join('')}
+    `).join('')}
+  </div>`;
+  prev.innerHTML=html;
+  window._lastGenSchedule=schedule;
+}
+
+async function applyGenerate(){
+  if(!window._lastGenSchedule){previewGenerate();toast('Preview generated. Click Apply again to save.','info');return;}
+  const classId=document.getElementById('genClass').value;
+  if(!classId||!term){toast('Select a class.','info');return;}
+  // Delete existing
+  await db.from('timetable').delete().eq('class_id',classId).eq('term_id',term.id);
+  const rows=[];
+  DAYS.forEach(d=>{
+    PERIODS.forEach(p=>{
+      const e=window._lastGenSchedule[d][p.n];
+      if(e) rows.push({school_id:cu.school_id,class_id:classId,term_id:term.id,day:d,period:p.n,subject_id:e.subject_id,teacher_id:e.teacher_id||null});
+    });
+  });
+  if(rows.length){const{error}=await db.from('timetable').insert(rows);if(error){toast(error.message,'error');return;}}
+  toast(`<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Timetable applied! ${rows.length} periods saved.`,'success');
+  document.getElementById('genPanel').style.display='none';
+  // Switch class selector to generated class and reload
+  const sel=document.getElementById('classSelect');
+  if(sel){sel.value=classId;}
+  window._lastGenSchedule=null;
+  await loadTimetable();
+}
+</script>
+<script src="../js/pwa.js"></script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

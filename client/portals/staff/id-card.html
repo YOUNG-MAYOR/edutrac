@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — ID Card Generator</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white; margin: 0; padding: 0; }
+      .cards-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 5mm !important;
+        padding: 8mm !important;
+      }
+      .id-card { break-inside: avoid; }
+      @page { margin: 0; size: A4; }
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 18px;
+      padding: 20px 0;
+    }
+
+    /* ── ID Card Design ── */
+    .id-card {
+      width: 100%;
+      aspect-ratio: 85.6 / 54; /* ISO/IEC 7810 ID-1 credit card ratio */
+      min-height: 152px;
+      border-radius: 10px;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      box-shadow: 0 4px 20px rgba(0,0,0,.2);
+      position: relative;
+      background: var(--card-bg, #1a2e6e);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Holographic strip at top */
+    .id-holo {
+      height: 5px;
+      background: linear-gradient(90deg,
+        #ff0080, #ff4500, #ffed00, #00e676, #00bcd4, #a855f7, #ff0080);
+      background-size: 200% 100%;
+      animation: holo-shift 3s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes holo-shift {
+      0%   { background-position: 0% 50%; }
+      100% { background-position: 200% 50%; }
+    }
+
+    .id-header {
+      background: var(--card-bg, #1a2e6e);
+      padding: 6px 8px 4px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-shrink: 0;
+    }
+
+    .id-logo {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      border: 2px solid var(--card-accent, #f0c040);
+      background: white;
+      overflow: hidden;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .id-logo img { width: 100%; height: 100%; object-fit: cover; }
+
+    .id-school-info { flex: 1; min-width: 0; }
+    .id-school-name {
+      font-size: 8px; font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .3px;
+      color: white;
+      line-height: 1.2;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .id-card-type {
+      font-size: 6.5px;
+      color: var(--card-accent, #f0c040);
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-top: 1px;
+    }
+
+    /* Gold accent bar */
+    .id-accent-bar {
+      height: 3px;
+      background: linear-gradient(90deg,
+        var(--card-accent, #c8860a),
+        var(--card-accent-light, #f0c040),
+        var(--card-accent, #c8860a));
+      flex-shrink: 0;
+    }
+
+    .id-body {
+      flex: 1;
+      background: white;
+      padding: 6px 8px;
+      display: flex;
+      gap: 7px;
+      min-height: 0;
+    }
+
+    .id-photo-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .id-photo {
+      width: 50px; height: 60px;
+      border-radius: 4px;
+      border: 1.5px solid var(--card-bg, #1a2e6e);
+      object-fit: cover;
+      background: #f0f4f8;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+      overflow: hidden;
+    }
+    .id-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+    .id-qr {
+      width: 44px; height: 44px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      padding: 2px;
+      image-rendering: pixelated;
+    }
+
+    .id-info-col {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 3px;
+    }
+
+    .id-name {
+      font-size: 9.5px;
+      font-weight: 900;
+      color: #1a2e6e;
+      line-height: 1.2;
+      text-transform: uppercase;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .id-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .id-field-label {
+      font-size: 6px;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .id-field-value {
+      font-size: 8px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .id-footer {
+      background: var(--card-bg, #1a2e6e);
+      padding: 3px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .id-footer-text {
+      font-size: 6px;
+      color: rgba(255,255,255,.6);
+      font-style: italic;
+    }
+    .id-validity {
+      font-size: 6px;
+      font-weight: 700;
+      color: var(--card-accent, #f0c040);
+    }
+
+    /* Watermark diagonal */
+    .id-watermark {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: .04;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      font-weight: 900;
+      color: #1a2e6e;
+      transform: rotate(-25deg);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-family: Arial, sans-serif;
+      white-space: nowrap;
+    }
+
+    /* Controls */
+    .filter-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      margin-bottom: 10px;
+    }
+    .filter-row .form-group { margin-bottom: 0; flex: 1; min-width: 160px; }
+
+    /* Bulk selector */
+    .select-bar {
+      background: var(--primary-light);
+      border: 1px solid var(--primary);
+      border-radius: var(--radius-sm);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .select-bar span { font-size: 13px; font-weight: 600; color: var(--primary-dark); flex: 1; }
+    .id-card .select-check {
+      position: absolute;
+      top: 8px; right: 8px;
+      width: 18px; height: 18px;
+      z-index: 10;
+      cursor: pointer;
+      accent-color: var(--primary);
+    }
+    .id-card.selected {
+      outline: 3px solid var(--primary);
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<!-- Minimal QR code generator (no dependencies) -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let user, term, classes = [], students = [], schoolInfo = null, idCardConfig = null;
+let selectedIds = new Set();
+// currentStep: 1 = type selection, 2 = filters + generate
+let currentStep = 1;
+let selectedCardType = null; // 'student' | 'staff'
+
+(async () => {
+  user = await initPage(['admin','teacher','registrar'], 'ID Card Generator', 'id-card');
+  if (!user) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <button class="btn btn--secondary btn--sm no-print" onclick="selectAll()">Select All</button>
+    <button class="btn btn--secondary btn--sm no-print" onclick="clearSelection()">Clear</button>
+    <button class="btn btn--primary btn--sm no-print" id="printBtn" onclick="window.print()"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Print Selected</button>
+  `;
+
+  const ctx = await loadSchoolContext(user.school_id);
+  term = ctx.term;
+  classes = ctx.classes;
+
+  // Load school info + ID card config
+  const [{ data: school }, { data: idc }] = await Promise.all([
+    db.from('schools').select('*').eq('id', user.school_id).single(),
+    db.from('id_card_config').select('*').eq('school_id', user.school_id).maybeSingle(),
+  ]);
+  schoolInfo   = school;
+  idCardConfig = idc;
+
+  renderStep1();
+})();
+
+// ── Helper: resolve photo URL from Supabase storage path or full URL ──
+function resolvePhotoUrl(photoUrl) {
+  if (!photoUrl) return null;
+  if (photoUrl.startsWith('http')) return photoUrl; // already a full URL
+  // Assume it's a storage path — build public URL from the passports bucket
+  return `${SUPABASE_URL}/storage/v1/object/public/passports/${photoUrl}`;
+}
+
+// ── Step 1: Select Card Type ──────────────────────────────────
+function renderStep1() {
+  currentStep = 1;
+  document.getElementById('app').innerHTML = `
+    <div class="portal-layout__content">
+      <div class="page-header no-print">
+        <div>
+          <h1 class="page-title">ID Card Generator</h1>
+          <p class="page-subtitle">Generate printable student &amp; staff ID cards with QR codes</p>
+        </div>
+      </div>
+
+      <!-- Step indicator -->
+      <div class="no-print" style="display:flex;align-items:center;gap:0;margin-bottom:24px;max-width:400px;">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--primary,#1a2e6e);color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">1</div>
+        <div style="flex:1;height:3px;background:var(--border,#e5e7eb);margin:0 4px;"></div>
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--border,#e5e7eb);color:var(--ink-3,#6b7280);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">2</div>
+        <div style="flex:1;height:3px;background:var(--border,#e5e7eb);margin:0 4px;"></div>
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--border,#e5e7eb);color:var(--ink-3,#6b7280);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">3</div>
+      </div>
+
+      <div class="card no-print" style="margin-bottom:20px;max-width:600px;">
+        <div style="padding:8px 0 20px;">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:4px;">Step 1: Select ID Card Type</h3>
+          <p style="font-size:13px;color:var(--ink-3,#6b7280);">Choose whether you are generating ID cards for Students or Staff.</p>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+
+          <!-- Student card -->
+          <div onclick="selectType('student')" style="border:2px solid var(--border,#e5e7eb);border-radius:10px;padding:24px 16px;cursor:pointer;text-align:center;transition:all .2s;background:white;"
+               onmouseover="this.style.borderColor='var(--primary,#1a2e6e)';this.style.background='#f0f4ff';"
+               onmouseout="this.style.borderColor='var(--border,#e5e7eb)';this.style.background='white';">
+            <div style="font-size:40px;margin-bottom:10px;">🎓</div>
+            <div style="font-size:15px;font-weight:800;color:var(--primary,#1a2e6e);margin-bottom:4px;">Student</div>
+            <div style="font-size:12px;color:var(--ink-3,#6b7280);">Generate ID cards for enrolled students by class or session</div>
+          </div>
+
+          <!-- Staff card -->
+          <div onclick="selectType('staff')" style="border:2px solid var(--border,#e5e7eb);border-radius:10px;padding:24px 16px;cursor:pointer;text-align:center;transition:all .2s;background:white;"
+               onmouseover="this.style.borderColor='var(--primary,#1a2e6e)';this.style.background='#f0f4ff';"
+               onmouseout="this.style.borderColor='var(--border,#e5e7eb)';this.style.background='white';">
+            <div style="font-size:40px;margin-bottom:10px;">👩‍🏫</div>
+            <div style="font-size:15px;font-weight:800;color:var(--primary,#1a2e6e);margin-bottom:4px;">Staff</div>
+            <div style="font-size:12px;color:var(--ink-3,#6b7280);">Generate ID cards for all active school staff members</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function selectType(type) {
+  selectedCardType = type;
+  renderStep2();
+}
+
+// ── Step 2: Filters ────────────────────────────────────────────
+function renderStep2() {
+  currentStep = 2;
+  const cfg    = idCardConfig || {};
+  const accent = cfg.accent_color || '#f0c040';
+
+  const studentFilters = `
+    <div class="form-group">
+      <label class="form-label">Class / Students</label>
+      <select class="form-control" id="filterClass">
+        <option value="">— All Students —</option>
+        ${classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+      </select>
+    </div>`;
+
+  document.getElementById('app').innerHTML = `
+    <div class="portal-layout__content">
+      <div class="page-header no-print">
+        <div>
+          <h1 class="page-title">ID Card Generator</h1>
+          <p class="page-subtitle">Generate printable ${selectedCardType === 'staff' ? 'Staff' : 'Student'} ID cards with QR codes</p>
+        </div>
+      </div>
+
+      <!-- Step indicator -->
+      <div class="no-print" style="display:flex;align-items:center;gap:0;margin-bottom:24px;max-width:400px;">
+        <div onclick="renderStep1()" style="width:32px;height:32px;border-radius:50%;background:#e5e7eb;color:#1a2e6e;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;cursor:pointer;border:2px solid var(--primary,#1a2e6e);" title="Back to Step 1">✓</div>
+        <div style="flex:1;height:3px;background:var(--primary,#1a2e6e);margin:0 4px;"></div>
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--primary,#1a2e6e);color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">2</div>
+        <div style="flex:1;height:3px;background:var(--border,#e5e7eb);margin:0 4px;"></div>
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--border,#e5e7eb);color:var(--ink-3,#6b7280);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">3</div>
+      </div>
+
+      <div class="card no-print" style="margin-bottom:20px;">
+        <div style="padding:8px 0 16px;display:flex;align-items:center;gap:10px;">
+          <button class="btn btn--ghost btn--sm" onclick="renderStep1()">← Back</button>
+          <div>
+            <h3 style="font-size:16px;font-weight:700;margin-bottom:2px;">
+              Step 2: ${selectedCardType === 'staff' ? 'Confirm &amp; Generate Staff Cards' : 'Select Students &amp; Generate'}
+            </h3>
+            <p style="font-size:13px;color:var(--ink-3,#6b7280);margin:0;">Type: <strong>${selectedCardType === 'staff' ? '👩‍🏫 Staff' : '🎓 Student'}</strong></p>
+          </div>
+        </div>
+        <div class="filter-row">
+          ${selectedCardType === 'student' ? studentFilters : ''}
+          <div class="form-group">
+            <label class="form-label">Session</label>
+            <input class="form-control" id="sessionLabel" placeholder="e.g. 2024/2025"
+              value="${new Date().getFullYear()}/${new Date().getFullYear()+1}">
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:8px;flex-shrink:0">
+            <button class="btn btn--primary" onclick="loadAndGenerate()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><line x1="13" y1="10" x2="20" y2="10"/><line x1="13" y1="14" x2="20" y2="14"/></svg>
+              Generate ID Cards
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="selectBar" style="display:none" class="select-bar no-print">
+        <span id="selectCount">0 selected</span>
+        <button class="btn btn--sm btn--secondary" onclick="selectAll()">Select All</button>
+        <button class="btn btn--sm btn--secondary" onclick="clearSelection()">Deselect All</button>
+        <button class="btn btn--sm btn--primary" onclick="window.print()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print Selected
+        </button>
+      </div>
+
+      <div id="cardsContainer">
+        <div class="et-empty" style="padding:60px 20px">
+          <div class="et-empty__icon">🪪</div>
+          <p>Click "Generate ID Cards" to preview cards</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Step 3: Load data and render cards ────────────────────────
+async function loadAndGenerate() {
+  // Mark step 3 active
+  const stepDots = document.querySelectorAll('.no-print [style*="border-radius:50%"]');
+  if (stepDots[2]) {
+    stepDots[2].style.background = 'var(--primary,#1a2e6e)';
+    stepDots[2].style.color = 'white';
+  }
+  const stepLines = document.querySelectorAll('.no-print [style*="height:3px"]');
+  if (stepLines[1]) stepLines[1].style.background = 'var(--primary,#1a2e6e)';
+
+  const classId  = document.getElementById('filterClass')?.value;
+  const container = document.getElementById('cardsContainer');
+  if (!container) return;
+
+  showLoader(container, 'Loading…');
+
+  if (selectedCardType === 'staff') {
+    const { data } = await db.from('users')
+      .select('id,full_name,role,photo_url,email')
+      .eq('school_id', user.school_id)
+      .eq('is_active', true)
+      .order('full_name');
+    students = data || [];
+  } else {
+    let q = db.from('students')
+      .select('id,full_name,admission_no,gender,photo_url,parent_phone,qr_code_data,combination_id,class:enrollments(class_id,classes(name))')
+      .eq('school_id', user.school_id)
+      .eq('is_active', true);
+    if (classId) {
+      const { data: enroll } = await db.from('enrollments')
+        .select('student_id')
+        .eq('class_id', classId)
+        .eq('term_id', term?.id || '');
+      const ids = (enroll || []).map(e => e.student_id);
+      if (ids.length === 0) { showEmpty(container, 'No students enrolled in this class'); return; }
+      q = q.in('id', ids);
+    }
+    const { data } = await q.order('full_name');
+    students = data || [];
+  }
+
+  if (students.length === 0) {
+    showEmpty(container, 'No records found');
+    return;
+  }
+
+  renderCards();
+}
+
+async function renderCards() {
+  const container = document.getElementById('cardsContainer');
+  const cardType  = selectedCardType || 'student';
+  const session   = document.getElementById('sessionLabel')?.value || '';
+  const cfg       = idCardConfig || {};
+  const bg        = cfg.background_color || '#1a2e6e';
+  const accent    = cfg.accent_color     || '#f0c040';
+  const accentLight = lightenHex(accent, 40);
+
+  container.innerHTML = `<div class="cards-grid" id="cardsGrid"></div>`;
+  const grid = document.getElementById('cardsGrid');
+
+  for (const s of students) {
+    const div = document.createElement('div');
+    div.className = 'id-card';
+    div.dataset.id = s.id;
+    div.style.setProperty('--card-bg', bg);
+    div.style.setProperty('--card-accent', accent);
+    div.style.setProperty('--card-accent-light', accentLight);
+
+    const className = s.class?.[0]?.classes?.name || (cardType === 'staff' ? formatRole(s.role) : '—');
+    const qrData    = s.qr_code_data || `ET-${cardType.toUpperCase()}-${s.id}`;
+
+    // Resolve passport photo URL
+    const photoUrl = resolvePhotoUrl(s.photo_url);
+
+    // Photo placeholder for no-photo case
+    const noPhotoHtml = `<div style="width:100%;height:100%;background:#e8eef4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span style="font-size:5px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">No Photo</span>
+    </div>`;
+
+    div.innerHTML = `
+      <input type="checkbox" class="select-check no-print" onchange="toggleSelect('${s.id}', this)">
+      <div class="id-watermark">${schoolInfo?.name?.split(' ')[0] || 'SCHOOL'}</div>
+      <div class="id-holo"></div>
+      <div class="id-header">
+        <div class="id-logo">
+          ${schoolInfo?.logo_url
+            ? `<img src="${schoolInfo.logo_url}" alt="Logo" crossorigin="anonymous">`
+            : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>'}
+        </div>
+        <div class="id-school-info">
+          <div class="id-school-name">${escapeHtml(schoolInfo?.name || 'School Name')}</div>
+          <div class="id-card-type">${cardType === 'staff' ? 'Staff Identity Card' : 'Student Identity Card'}</div>
+        </div>
+      </div>
+      <div class="id-accent-bar"></div>
+      <div class="id-body">
+        <div class="id-photo-col">
+          <div class="id-photo" id="photo-wrap-${s.id}">
+            ${photoUrl
+              ? `<img src="${photoUrl}" alt="${escapeHtml(s.full_name)}" crossorigin="anonymous"
+                   style="width:100%;height:100%;object-fit:cover;display:block;"
+                   onerror="this.parentElement.innerHTML='${noPhotoHtml.replace(/'/g, '&#39;').replace(/\n/g,'')}'">`
+              : noPhotoHtml}
+          </div>
+          <canvas class="id-qr" id="qr-${s.id}" width="44" height="44"></canvas>
+        </div>
+        <div class="id-info-col">
+          <div class="id-name">${escapeHtml(s.full_name)}</div>
+          ${cardType !== 'staff' ? `
+          <div class="id-field">
+            <span class="id-field-label">Admission No.</span>
+            <span class="id-field-value">${s.admission_no || '—'}</span>
+          </div>` : `
+          <div class="id-field">
+            <span class="id-field-label">Staff Email</span>
+            <span class="id-field-value" style="font-size:7px;">${s.email || '—'}</span>
+          </div>`}
+          <div class="id-field">
+            <span class="id-field-label">${cardType === 'staff' ? 'Role' : 'Class'}</span>
+            <span class="id-field-value">${className}</span>
+          </div>
+          ${cardType !== 'staff' && s.parent_phone ? `
+          <div class="id-field">
+            <span class="id-field-label">Parent Phone</span>
+            <span class="id-field-value">${s.parent_phone}</span>
+          </div>` : ''}
+          <div class="id-field">
+            <span class="id-field-label">Session</span>
+            <span class="id-field-value">${session}</span>
+          </div>
+        </div>
+      </div>
+      <div class="id-footer">
+        <span class="id-footer-text">${cfg.footer_text || 'Return to school if found'}</span>
+        <span class="id-validity">${cfg.validity_text || 'Valid: ' + session}</span>
+      </div>
+    `;
+    grid.appendChild(div);
+
+    // Render QR code asynchronously
+    requestAnimationFrame(() => {
+      const canvas = document.getElementById(`qr-${s.id}`);
+      if (canvas && typeof QRCode !== 'undefined') {
+        QRCode.toCanvas(canvas, qrData, {
+          width: 44, margin: 1,
+          color: { dark: bg, light: '#ffffff' }
+        }).catch(() => {});
+      }
+    });
+  }
+}
+
+function toggleSelect(id, cb) {
+  if (cb.checked) {
+    selectedIds.add(id);
+    document.querySelector(`.id-card[data-id="${id}"]`)?.classList.add('selected');
+  } else {
+    selectedIds.delete(id);
+    document.querySelector(`.id-card[data-id="${id}"]`)?.classList.remove('selected');
+  }
+  updateSelectBar();
+}
+
+function selectAll() {
+  document.querySelectorAll('.id-card').forEach(card => {
+    card.classList.add('selected');
+    selectedIds.add(card.dataset.id);
+    const cb = card.querySelector('.select-check');
+    if (cb) cb.checked = true;
+  });
+  updateSelectBar();
+}
+
+function clearSelection() {
+  document.querySelectorAll('.id-card').forEach(card => {
+    card.classList.remove('selected');
+    const cb = card.querySelector('.select-check');
+    if (cb) cb.checked = false;
+  });
+  selectedIds.clear();
+  updateSelectBar();
+}
+
+function updateSelectBar() {
+  const bar = document.getElementById('selectBar');
+  const cnt = document.getElementById('selectCount');
+  if (bar && cnt) {
+    bar.style.display = selectedIds.size > 0 ? 'flex' : 'none';
+    cnt.textContent   = `${selectedIds.size} card${selectedIds.size !== 1 ? 's' : ''} selected`;
+  }
+}
+
+// ── Utilities ─────────────────────────────────────────────────
+function formatRole(role) {
+  const map = {
+    admin: 'Administrator', teacher: 'Teacher', parent: 'Parent/Guardian',
+    exam_officer: 'Exam Officer', vp_academic: 'VP Academic',
+    registrar: 'Registrar', bursary: 'Bursary Officer',
+  };
+  return map[role] || role;
+}
+
+function escapeHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function lightenHex(hex, amount) {
+  // Simple hex lightener for accent-light
+  try {
+    let h = hex.replace('#','');
+    if (h.length === 3) h = h.split('').map(x=>x+x).join('');
+    const r = Math.min(255, parseInt(h.slice(0,2),16) + amount);
+    const g = Math.min(255, parseInt(h.slice(2,4),16) + amount);
+    const b = Math.min(255, parseInt(h.slice(4,6),16) + amount);
+    return `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`;
+  } catch { return hex; }
+}
+</script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

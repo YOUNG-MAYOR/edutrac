@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>EduTrack NG — Report Card</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white; }
+      .report-card { box-shadow: none !important; border: 2px solid #1a2e6e; }
+    }
+
+    /* ── Shell matching academic-office/report-cards.html ── */
+    .report-card {
+      max-width: 760px; margin: 0 auto;
+      border: 2px solid #1a2e6e; border-radius: 8px;
+      overflow: hidden; font-family: 'Times New Roman', serif;
+      background: white; box-shadow: 0 4px 20px rgba(0,0,0,.1);
+    }
+
+    /* Blue gradient header */
+    .rc-header {
+      background: linear-gradient(135deg, #1a2e6e 0%, #2041a3 100%);
+      padding: 20px 24px 16px; color: white;
+      display: flex; align-items: center; gap: 16px;
+    }
+    .rc-header-logo {
+      width: 64px; height: 64px; background: white; border-radius: 50%;
+      border: 3px solid #f0c040;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 30px; flex-shrink: 0; overflow: hidden;
+    }
+    .rc-header-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .rc-header-text { flex: 1; text-align: center; }
+    .rc-school-name { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+    .rc-school-addr { font-size: 12px; color: rgba(255,255,255,.75); margin-top: 3px; }
+    .rc-card-title  { font-size: 13px; color: #f0c040; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-top: 6px; }
+
+    /* Gold divider */
+    .rc-gold-bar {
+      height: 4px;
+      background: linear-gradient(90deg, #c8860a, #f0c040, #f8d060, #f0c040, #c8860a);
+    }
+
+    /* Student info grid */
+    .rc-info-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 0; border-bottom: 2px solid #1a2e6e;
+    }
+    .rc-info-cell { padding: 10px 16px; border-right: 1px solid #ddd; }
+    .rc-info-cell:last-child { border-right: none; }
+    .rc-info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #666; }
+    .rc-info-value { font-size: 14px; font-weight: 700; color: #1a2e6e; margin-top: 2px; }
+
+    /* Section header */
+    .rc-section-header {
+      background: #1a2e6e; color: white;
+      padding: 6px 16px; font-size: 11px;
+      font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    }
+
+    /* Results table */
+    .rc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .rc-table th {
+      background: #f0f4f8; padding: 8px 12px; text-align: center;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .4px; color: #374151;
+      border-bottom: 2px solid #1a2e6e; border-right: 1px solid #ddd;
+    }
+    .rc-table th:first-child { text-align: left; }
+    .rc-table th:last-child  { border-right: none; }
+    .rc-table td {
+      padding: 7px 12px; border-bottom: 1px solid #eee;
+      border-right: 1px solid #f0f0f0; vertical-align: middle;
+    }
+    .rc-table td:last-child { border-right: none; }
+    .rc-table tr:last-child td { border-bottom: none; }
+    .rc-table tr:nth-child(even) td { background: #f9fafb; }
+    .rc-table .sub-name { font-weight: 600; color: #1a1a1a; }
+
+    .rc-grade {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 4px; font-size: 12px; font-weight: 700; text-align: center;
+    }
+    .grade-A1 { background: #dcfce7; color: #16a34a; }
+    .grade-B2, .grade-B3 { background: #dbeafe; color: #1d4ed8; }
+    .grade-C4, .grade-C5, .grade-C6 { background: #fef9c3; color: #854d0e; }
+    .grade-D7, .grade-E8 { background: #fed7aa; color: #9a3412; }
+    .grade-F9 { background: #fee2e2; color: #991b1b; }
+
+    /* Summary band */
+    .rc-summary {
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      border-top: 2px solid #1a2e6e;
+    }
+    .rc-summary-cell {
+      padding: 10px 12px; text-align: center; border-right: 1px solid #ddd;
+    }
+    .rc-summary-cell:last-child { border-right: none; }
+    .rc-summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #666; letter-spacing: .3px; }
+    .rc-summary-value { font-size: 20px; font-weight: 800; color: #1a2e6e; margin-top: 2px; }
+
+    /* Footer / signature */
+    .rc-footer {
+      display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+      padding: 16px 20px; border-top: 1px solid #ddd; background: #f9fafb;
+      gap: 8px;
+    }
+    .rc-sig { text-align: center; }
+    .rc-sig-line {
+      border-top: 1px solid #999; margin: 6px auto 6px;
+      width: 80%; min-height: 52px;
+      display: flex; align-items: flex-end; justify-content: center;
+    }
+    .rc-sig-line img {
+      max-height: 48px; max-width: 90%; object-fit: contain;
+      display: block; margin: 0 auto;
+    }
+    .rc-sig-label { font-size: 11px; color: #555; font-weight: 600; }
+    .rc-sig-sublabel { font-size: 9px; color: #999; margin-top: 1px; }
+  </style>
+</head>
+<body style="background:#f3f4f6;padding:20px 0;">
+
+<div class="no-print" style="max-width:760px;margin:0 auto 20px;display:flex;gap:8px;flex-wrap:wrap;">
+  <button class="btn btn--primary" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Print / Save PDF</button>
+  <button class="btn btn--secondary" onclick="history.back()">← Back</button>
+</div>
+
+<div id="reportContainer">
+  <div class="et-loader"><div class="et-spinner"></div><p>Loading report card…</p></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script>
+(async () => {
+  const params    = new URLSearchParams(location.search);
+  const studentId = params.get('student');
+  const termId    = params.get('term');
+
+  if (!studentId || !termId) {
+    document.getElementById('reportContainer').innerHTML =
+      '<div class="report-card" style="padding:40px;text-align:center;"><p>No student/term specified.</p></div>';
+    return;
+  }
+
+  // Allow anon access for student portal; authenticated for admin
+  const session = await getSession();
+
+  const [{ data: student }, { data: term }] = await Promise.all([
+    db.from('students').select('*, enrollments(class_id, term_id, classes(name,level,section))').eq('id', studentId).single(),
+    db.from('terms').select('*').eq('id', termId).single(),
+  ]);
+
+  const schoolId = student?.school_id;
+
+  const [{ data: school }, { data: results }, { data: attData },
+         { data: gradingScale }, { data: exams }, { data: affective }] = await Promise.all([
+    db.from('schools').select('name,logo_url,address,state,lga,motto,vp_signature_url,exam_officer_signature_url,principal_signature_url,class_teacher_signature_url').eq('id', schoolId).single(),
+    db.from('results').select('score,subject_id,exam_id,subjects(id,name,code),exams(id,name,max_score,weight)')
+      .eq('student_id', studentId).eq('term_id', termId),
+    db.from('attendance').select('status,date').eq('student_id', studentId).eq('term_id', termId),
+    db.from('grading_scales').select('*').eq('school_id', schoolId).order('min_score', { ascending: false }),
+    db.from('exams').select('*').eq('school_id', schoolId).eq('term_id', termId).order('name'),
+    db.from('affective_domain').select('*').eq('student_id', studentId).eq('term_id', termId).maybeSingle(),
+  ]);
+
+  // ── Build subject score map ────────────────────────────────
+  const subMap = {};
+  (results || []).forEach(r => {
+    const sid = r.subject_id;
+    if (!subMap[sid]) subMap[sid] = { name: r.subjects?.name || '—', rows: [] };
+    subMap[sid].rows.push(r);
+  });
+
+  const subjectRows = Object.values(subMap).map(sub => {
+    const tw = sub.rows.reduce((s, r) => s + (r.exams?.weight || 1), 0);
+    const ws = sub.rows.reduce((s, r) => s + (r.score / (r.exams?.max_score || 100)) * 100 * (r.exams?.weight || 1), 0);
+    const total = tw > 0 ? Math.round(ws / tw * 10) / 10 : null;
+    const g = gradeFromScale(total, gradingScale || []);
+    return { name: sub.name, rows: sub.rows, total, grade: g.grade, remark: g.remark };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+
+  const withScores  = subjectRows.filter(s => s.total !== null);
+  const overallAvg  = withScores.length ? Math.round(withScores.reduce((s, r) => s + r.total, 0) / withScores.length * 10) / 10 : null;
+  const passCount   = withScores.filter(s => s.total >= 40).length;
+  const failCount   = withScores.filter(s => s.total < 40).length;
+  const oGrade      = gradeFromScale(overallAvg, gradingScale || []);
+  const oColor      = overallAvg === null ? '#6b7280' : overallAvg >= 70 ? '#16a34a' : overallAvg >= 50 ? '#d97706' : '#dc2626';
+
+  // Attendance
+  const totalDays = new Set((attData || []).map(a => a.date)).size;
+  const present   = (attData || []).filter(a => a.status === 'P' || a.status === 'L').length;
+  const absent    = (attData || []).filter(a => a.status === 'A').length;
+  const attPct    = totalDays > 0 ? Math.round(present / totalDays * 100) : null;
+
+  const enrollment = (student?.enrollments || []).find(e => e.term_id === termId) || student?.enrollments?.[0];
+  const className  = enrollment?.classes?.name || '—';
+  const section    = (enrollment?.classes?.section || enrollment?.classes?.level || '').toUpperCase();
+
+  // Grade colour helper
+  function gradeClass(g) {
+    if (!g) return '';
+    if (g.startsWith('A')) return 'grade-A1';
+    if (g === 'B2') return 'grade-B2';
+    if (g === 'B3') return 'grade-B3';
+    if (g === 'C4') return 'grade-C4';
+    if (g === 'C5') return 'grade-C5';
+    if (g === 'C6') return 'grade-C6';
+    if (g === 'D7') return 'grade-D7';
+    if (g === 'E8') return 'grade-E8';
+    if (g === 'F9') return 'grade-F9';
+    return '';
+  }
+
+  const logoHtml = school?.logo_url
+    ? `<img src="${school.logo_url}" onerror="this.parentElement.innerHTML='&#127979;'">`
+    : '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>';
+
+  const examList = exams && exams.length ? exams : [...new Map((results||[]).map(r=>[r.exam_id,r.exams])).values()].filter(Boolean);
+
+  document.getElementById('reportContainer').innerHTML = `
+  <div class="report-card">
+
+    <!-- Blue gradient header -->
+    <div class="rc-header">
+      <div class="rc-header-logo">${logoHtml}</div>
+      <div class="rc-header-text">
+        <div class="rc-school-name">${school?.name || 'School Name'}</div>
+        <div class="rc-school-addr">${[school?.address, school?.lga, school?.state].filter(Boolean).join(', ')}</div>
+        <div class="rc-card-title">Student Academic Report</div>
+      </div>
+      <div class="rc-header-logo" style="visibility:hidden;">${logoHtml}</div>
+    </div>
+
+    <!-- Gold bar -->
+    <div class="rc-gold-bar"></div>
+
+    <!-- Student info -->
+    <div class="rc-info-grid">
+      <div class="rc-info-cell">
+        <div class="rc-info-label">Student Name</div>
+        <div class="rc-info-value">${student?.full_name || '—'}</div>
+      </div>
+      <div class="rc-info-cell">
+        <div class="rc-info-label">Admission No.</div>
+        <div class="rc-info-value">${student?.admission_no || '—'}</div>
+      </div>
+      <div class="rc-info-cell">
+        <div class="rc-info-label">Class</div>
+        <div class="rc-info-value">${className}</div>
+      </div>
+      <div class="rc-info-cell">
+        <div class="rc-info-label">Term</div>
+        <div class="rc-info-value">${term?.name || '—'}</div>
+      </div>
+      <div class="rc-info-cell">
+        <div class="rc-info-label">Gender</div>
+        <div class="rc-info-value">${student?.gender === 'M' ? 'Male' : student?.gender === 'F' ? 'Female' : '—'}</div>
+      </div>
+      <div class="rc-info-cell">
+        <div class="rc-info-label">Section</div>
+        <div class="rc-info-value">${section || '—'}</div>
+      </div>
+    </div>
+
+    <!-- Academic Performance section header -->
+    <div class="rc-section-header">Academic Performance</div>
+
+    <!-- Results table -->
+    <table class="rc-table">
+      <thead>
+        <tr>
+          <th style="text-align:left;">Subject</th>
+          ${examList.map(e => `<th>${e.name}<br><span style="font-weight:400;font-size:10px;">/ ${e.max_score}</span></th>`).join('')}
+          <th>Total</th>
+          <th>Grade</th>
+          <th>Remark</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${subjectRows.map(sub => `
+          <tr>
+            <td class="sub-name">${sub.name}</td>
+            ${examList.map(e => {
+              const row = sub.rows.find(r => r.exam_id === e.id);
+              return `<td style="text-align:center;">${row ? row.score : '—'}</td>`;
+            }).join('')}
+            <td style="text-align:center;font-weight:700;color:${sub.total!==null?oColor:'#6b7280'};">${sub.total !== null ? sub.total : '—'}</td>
+            <td style="text-align:center;"><span class="rc-grade ${gradeClass(sub.grade)}">${sub.grade || '—'}</span></td>
+            <td style="font-size:12px;color:#555;">${sub.remark || '—'}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+
+    <!-- Summary strip -->
+    <div class="rc-summary">
+      <div class="rc-summary-cell">
+        <div class="rc-summary-label">Average</div>
+        <div class="rc-summary-value" style="color:${oColor};">${overallAvg !== null ? overallAvg + '%' : '—'}</div>
+      </div>
+      <div class="rc-summary-cell">
+        <div class="rc-summary-label">Grade</div>
+        <div class="rc-summary-value">${oGrade.grade || '—'}</div>
+      </div>
+      <div class="rc-summary-cell">
+        <div class="rc-summary-label">Passed</div>
+        <div class="rc-summary-value" style="color:#16a34a;">${passCount}</div>
+      </div>
+      <div class="rc-summary-cell">
+        <div class="rc-summary-label">Failed</div>
+        <div class="rc-summary-value" style="color:${failCount>0?'#dc2626':'#6b7280'};">${failCount}</div>
+      </div>
+      <div class="rc-summary-cell">
+        <div class="rc-summary-label">Attendance</div>
+        <div class="rc-summary-value" style="color:${attPct!==null&&attPct<75?'#dc2626':'#1a2e6e'};">${attPct !== null ? attPct + '%' : '—'}</div>
+      </div>
+    </div>
+
+    ${affective ? `
+    <!-- Affective domain -->
+    <div class="rc-section-header">Behaviour &amp; Traits</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;padding:12px 16px;font-size:12px;">
+      ${[['punctuality','Punctuality'],['neatness','Neatness'],['conduct','Conduct'],
+         ['attentiveness','Attentiveness'],['honesty','Honesty'],['creativity','Creativity']]
+        .filter(([k]) => affective[k])
+        .map(([k,label]) => `
+          <div style="display:flex;justify-content:space-between;padding:5px 8px;border-bottom:1px solid #eee;">
+            <span>${label}</span>
+            <strong style="color:${affective[k]==='Excellent'?'#16a34a':affective[k]==='Good'?'#1d4ed8':affective[k]==='Average'?'#d97706':'#dc2626'};">${affective[k]}</strong>
+          </div>`).join('')}
+    </div>
+    ${affective.class_teacher_remark ? `
+    <div style="padding:10px 16px;font-size:12px;border-top:1px solid #eee;">
+      <span style="font-weight:700;text-transform:uppercase;color:#666;letter-spacing:.5px;font-size:10px;">Class Teacher's Remark: </span>
+      ${affective.class_teacher_remark}
+    </div>` : ''}
+    ${affective.vp_academic_remark ? `
+    <div style="padding:10px 16px;font-size:12px;border-top:1px solid #eee;background:#eff6ff;">
+      <span style="font-weight:700;text-transform:uppercase;color:#1e40af;letter-spacing:.5px;font-size:10px;">VP Academic's Remark: </span>
+      ${affective.vp_academic_remark}
+    </div>` : ''}
+    ${affective.exam_officer_remark ? `
+    <div style="padding:10px 16px;font-size:12px;border-top:1px solid #eee;background:#faf5ff;">
+      <span style="font-weight:700;text-transform:uppercase;color:#6b21a8;letter-spacing:.5px;font-size:10px;">Exam Officer's Remark: </span>
+      ${affective.exam_officer_remark}
+    </div>` : ''}
+    ${affective.principal_remark ? `
+    <div style="padding:10px 16px;font-size:12px;border-top:1px solid #eee;background:#f0fdf4;">
+      <span style="font-weight:700;text-transform:uppercase;color:#166534;letter-spacing:.5px;font-size:10px;">Principal's Remark: </span>
+      ${affective.principal_remark}
+    </div>` : ''}
+    ${affective.next_term_begins ? `
+    <div style="padding:8px 16px;font-size:12px;border-top:1px solid #eee;background:#fffbeb;">
+      <strong>Next Term Begins:</strong> ${new Date(affective.next_term_begins).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}
+    </div>` : ''}
+    ` : ''}
+
+    <!-- Grading scale -->
+    <div style="padding:8px 16px;background:#f9fafb;border-top:1px solid #ddd;font-size:11px;color:#555;">
+      <strong>Grading Scale: </strong>
+      ${(gradingScale||[]).map(g => `<span style="margin-right:10px;"><strong>${g.grade}</strong> ${g.min_score}–${g.max_score} (${g.remark})</span>`).join('')}
+    </div>
+
+    <!-- Signature footer: Class Teacher | VP Academic | Exam Officer | Principal -->
+    <div class="rc-footer">
+      <div class="rc-sig">
+        <div class="rc-sig-line">
+          ${school?.class_teacher_signature_url
+            ? `<img src="${school.class_teacher_signature_url}" alt="Class Teacher Signature" crossorigin="anonymous">`
+            : ''}
+        </div>
+        <div class="rc-sig-label">Class Teacher</div>
+        <div class="rc-sig-sublabel">Signature &amp; Stamp</div>
+      </div>
+      <div class="rc-sig">
+        <div class="rc-sig-line">
+          ${school?.vp_signature_url
+            ? `<img src="${school.vp_signature_url}" alt="VP Academic Signature" crossorigin="anonymous">`
+            : ''}
+        </div>
+        <div class="rc-sig-label">VP Academic</div>
+        <div class="rc-sig-sublabel">Signature &amp; Stamp</div>
+      </div>
+      <div class="rc-sig">
+        <div class="rc-sig-line">
+          ${school?.exam_officer_signature_url
+            ? `<img src="${school.exam_officer_signature_url}" alt="Exam Officer Signature" crossorigin="anonymous">`
+            : ''}
+        </div>
+        <div class="rc-sig-label">Exam Officer</div>
+        <div class="rc-sig-sublabel">Signature &amp; Stamp</div>
+      </div>
+      <div class="rc-sig">
+        <div class="rc-sig-line">
+          ${school?.principal_signature_url
+            ? `<img src="${school.principal_signature_url}" alt="Principal Signature" crossorigin="anonymous">`
+            : ''}
+        </div>
+        <div class="rc-sig-label">Principal</div>
+        <div class="rc-sig-sublabel">Signature &amp; Stamp</div>
+      </div>
+    </div>
+
+    <div style="padding:8px 16px;text-align:center;font-size:10px;color:#999;border-top:1px solid #eee;font-family:sans-serif;">
+      Generated by EduTrack NG · ${new Date().toLocaleDateString('en-NG')}
+    </div>
+
+  </div>`;
+})();
+
+function gradeFromScale(score, scale) {
+  if (score === null || score === undefined || !scale || !scale.length) return { grade: '—', remark: '—' };
+  const g = scale.find(s => score >= s.min_score && score <= s.max_score);
+  return g ? { grade: g.grade, remark: g.remark || '' } : { grade: '—', remark: '—' };
+}
+</script>
+<script src="../js/pwa.js"></script>
+</body>
+</html>

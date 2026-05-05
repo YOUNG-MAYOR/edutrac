@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — My Timetable</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    .notif-bar{display:flex;align-items:center;gap:12px;background:var(--primary-light);border:1.5px solid var(--primary);border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;flex-wrap:wrap;}
+    .notif-bar__icon{font-size:22px;flex-shrink:0;}
+    .notif-bar__text{flex:1;color:var(--ink-2);font-size:13px;min-width:180px;}
+    .notif-bar__text strong{color:var(--ink);display:block;margin-bottom:2px;font-size:14px;}
+    .notif-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:700;color:var(--primary);background:white;border:1.5px solid var(--primary);border-radius:100px;padding:8px 16px;transition:all .2s;flex-shrink:0;white-space:nowrap;}
+    .notif-toggle:hover{background:var(--primary);color:white;}
+    .notif-toggle.active{background:var(--primary);color:white;}
+    .tt-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:10px;display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;transition:all .3s;}
+    .tt-day{width:52px;height:52px;border-radius:12px;background:var(--primary);color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--H);flex-shrink:0;}
+    .tt-day-name{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+    .tt-day-period{font-size:18px;font-weight:900;line-height:1;}
+    .tt-subject{font-size:15px;font-weight:700;color:var(--ink);}
+    .tt-meta{font-size:13px;color:var(--ink-3);margin-top:3px;}
+    .tt-time{font-size:13px;font-weight:600;color:var(--ink-2);white-space:nowrap;text-align:right;}
+    .tt-room{font-size:12px;color:var(--ink-3);margin-top:2px;text-align:right;}
+    .today-badge{background:var(--primary-light);color:var(--primary);font-size:11px;font-weight:700;padding:2px 8px;border-radius:100px;margin-left:8px;}
+    .now-badge{background:#0a6e3f;color:white;font-size:10px;font-weight:800;padding:2px 7px;border-radius:100px;margin-left:8px;letter-spacing:.5px;vertical-align:middle;animation:pulse 1.5s infinite;}
+    .day-group{margin-bottom:20px;}
+    .day-header{font-size:13px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:1px;padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+    @keyframes slideDown{from{opacity:0;transform:translateX(-50%) translateY(-20px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+    @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.6;}}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script src="../../js/notifications.js"></script>
+<script>
+const DAYS     = ['Mon','Tue','Wed','Thu','Fri'];
+const DAY_FULL = { Mon:'Monday', Tue:'Tuesday', Wed:'Wednesday', Thu:'Thursday', Fri:'Friday' };
+const TODAY_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
+const PERIODS = [
+  {label:'Period 1', time:'8:00 - 8:45'},
+  {label:'Period 2', time:'8:45 - 9:30'},
+  {label:'Break',    time:'9:30 - 10:00'},
+  {label:'Period 3', time:'10:00 - 10:45'},
+  {label:'Period 4', time:'10:45 - 11:30'},
+  {label:'Period 5', time:'11:30 - 12:15'},
+  {label:'Lunch',    time:'12:15 - 1:00'},
+  {label:'Period 6', time:'1:00 - 1:45'},
+  {label:'Period 7', time:'1:45 - 2:30'},
+];
+
+let notifier    = null;
+let notifActive = false;
+let allEntries  = [];
+
+(async () => {
+  const user = await initPage(['teacher', 'admin'], 'My Timetable', 'timetable');
+  if (!user) return;
+
+  const { data: term } = await db.from('terms')
+    .select('*').eq('school_id', user.school_id).eq('is_current', true).maybeSingle();
+  if (!term) {
+    showEmpty('#pageBody', 'No current term set. Ask admin to set the current term.');
+    return;
+  }
+
+  const { data: entries } = await db.from('timetable')
+    .select('day,period,room,subjects(name),classes(name)')
+    .eq('school_id', user.school_id)
+    .eq('teacher_id', user.id)
+    .eq('term_id', term.id)
+    .order('period');
+
+  allEntries = entries || [];
+
+  if (!allEntries.length) {
+    document.getElementById('pageBody').innerHTML =
+      '<div class="page-header"><h1>My Timetable</h1><p>' + term.name + ' Term</p></div>' +
+      '<div class="card"><div class="et-empty"><div class="et-empty__icon">&#128197;</div>' +
+      '<p>No timetable periods assigned to you yet.<br>Ask your admin to set up the timetable.</p>' +
+      '</div></div>';
+    return;
+  }
+
+  const byDay = {};
+  DAYS.forEach(d => byDay[d] = []);
+  allEntries.forEach(e => { if (byDay[e.day]) byDay[e.day].push(e); });
+
+  const totalPeriods = allEntries.length;
+  const todayPeriods = byDay[TODAY_SHORT]?.length || 0;
+
+  let html = '';
+
+  // Notification bar
+  html += '<div class="notif-bar" id="notifBar">';
+  html += '<div class="notif-bar__icon">&#128276;</div>';
+  html += '<div class="notif-bar__text" id="notifText"><strong>Period Reminders</strong>Get notified 5 minutes before each class and when it starts.</div>';
+  html += '<button class="notif-toggle" id="notifToggleBtn" onclick="toggleNotifications()">Enable Alerts</button>';
+  html += '</div>';
+
+  // Header + stats
+  html += '<div class="page-header"><h1>My Timetable</h1><p>' + term.name + ' Term &mdash; ' + totalPeriods + ' periods/week</p></div>';
+  html += '<div class="stat-grid" style="margin-bottom:24px;">';
+  html += '<div class="stat-card"><div class="stat-card__icon">&#128197;</div><div class="stat-card__value">' + totalPeriods + '</div><div class="stat-card__label">Periods/Week</div></div>';
+  html += '<div class="stat-card"><div class="stat-card__icon">&#128197;</div><div class="stat-card__value" style="color:var(--primary);">' + todayPeriods + '</div><div class="stat-card__label">Today</div></div>';
+  html += '<div class="stat-card"><div class="stat-card__icon">&#128218;</div><div class="stat-card__value">' + new Set(allEntries.map(e => e.subjects && e.subjects.name)).size + '</div><div class="stat-card__label">Subjects</div></div>';
+  html += '</div>';
+
+  // Days
+  DAYS.forEach(function(day) {
+    const dayEntries = byDay[day];
+    const isToday = day === TODAY_SHORT;
+    if (!dayEntries.length) return;
+    html += '<div class="day-group">';
+    html += '<div class="day-header">' + DAY_FULL[day] + (isToday ? '<span class="today-badge">Today</span>' : '') + '</div>';
+    dayEntries.sort(function(a,b){ return a.period - b.period; }).forEach(function(e) {
+      const p = PERIODS[e.period] || {};
+      html += '<div class="tt-card" id="tt-card-' + e.period + '"' + (isToday ? ' style="border-color:var(--primary);"' : '') + '>';
+      html += '<div class="tt-day"' + (isToday ? '' : ' style="background:var(--surface-3);color:var(--ink-3);"') + '>';
+      html += '<div class="tt-day-name">' + day + '</div>';
+      html += '<div class="tt-day-period">P' + (e.period + 1) + '</div>';
+      html += '</div>';
+      html += '<div>';
+      html += '<div class="tt-subject" id="tt-subject-' + e.period + '">' + ((e.subjects && e.subjects.name) || '&mdash;') + '</div>';
+      html += '<div class="tt-meta">' + ((e.classes && e.classes.name) || '&mdash;') + ' &middot; ' + (p.label || '') + '</div>';
+      html += '</div>';
+      html += '<div>';
+      html += '<div class="tt-time">' + (p.time || '') + '</div>';
+      if (e.room) html += '<div class="tt-room">&#128205; ' + e.room + '</div>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+
+  document.getElementById('pageBody').innerHTML = html;
+
+  // ── Notification setup ─────────────────────────────────────
+  notifier = new PeriodNotifier();
+  if (localStorage.getItem('et_notif_enabled') === '1') startNotifications();
+
+  async function startNotifications() {
+    const result = await notifier.start(allEntries);
+    notifActive = true;
+    localStorage.setItem('et_notif_enabled', '1');
+    const count = result.periodsToday || 0;
+    const perm  = result.permissionGranted;
+    const btn   = document.getElementById('notifToggleBtn');
+    const txt   = document.getElementById('notifText');
+    if (btn) { btn.textContent = '&#128276; Alerts ON'; btn.classList.add('active'); }
+    if (txt) {
+      txt.innerHTML = '<strong>Period Reminders Active &#10003;</strong>' +
+        (count > 0 ? count + ' period(s) today &mdash; reminders set 5 min before each.' : 'No periods today &mdash; reminders ready for the next school day.') +
+        (!perm ? '<br><span style="color:#b45309;">&#9888; Allow notifications in browser for pop-up alerts.</span>' : '');
+    }
+  }
+
+  function stopNotifications() {
+    notifier.stop();
+    notifActive = false;
+    localStorage.setItem('et_notif_enabled', '0');
+    const btn = document.getElementById('notifToggleBtn');
+    const txt = document.getElementById('notifText');
+    if (btn) { btn.textContent = 'Enable Alerts'; btn.classList.remove('active'); }
+    if (txt) txt.innerHTML = '<strong>Period Reminders</strong>Get notified 5 minutes before each class and when it starts.';
+  }
+
+  window.toggleNotifications = function() {
+    if (notifActive) stopNotifications(); else startNotifications();
+  };
+
+})();
+</script>
+<script src="../../js/pwa.js"></script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EduTrack NG">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>EduTrack NG — My Child's Results</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let currentUser, children = [], currentTerm, gradingScale = [];
+
+(async () => {
+  currentUser = await initPage(['parent'], 'Results', 'results');
+  if (!currentUser) return;
+
+  const [{ data: links }, { data: term }, { data: scale }] = await Promise.all([
+    db.from('parent_students')
+      .select('students(id,full_name,admission_no,enrollments(class_id,classes(name)))')
+      .eq('parent_id', currentUser.id),
+    db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current',true).maybeSingle(),
+    db.from('grading_scales').select('*').eq('school_id', currentUser.school_id).order('min_score',{ascending:false})
+  ]);
+
+  children = (links || []).map(l => l.students).filter(Boolean);
+  currentTerm = term;
+  gradingScale = scale || [];
+
+  const preselect = new URLSearchParams(location.search).get('student') || '';
+
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header"><h1>Results</h1><p>${term?.name || 'Current Term'}</p></div>
+    <div class="filter-bar">
+      <select class="form-control" id="childSelect" onchange="loadResults()" style="max-width:280px;">
+        <option value="">Select child…</option>
+        ${children.map(c => `<option value="${c.id}" ${c.id===preselect?'selected':''}>${c.full_name}</option>`).join('')}
+      </select>
+      <select class="form-control" id="termSelect" onchange="loadResults()" style="max-width:200px;">
+        <option value="${term?.id || ''}">${term?.name || 'Current Term'}</option>
+      </select>
+    </div>
+    <div id="resultsContent">
+      <div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span></div><p>Select your child above to view their results.</p></div>
+    </div>
+  `;
+
+  // Load all terms for the dropdown
+  const { data: allTerms } = await db.from('terms').select('id,name')
+    .eq('school_id', currentUser.school_id).order('created_at', {ascending:false});
+  if (allTerms?.length) {
+    document.getElementById('termSelect').innerHTML =
+      allTerms.map(t => `<option value="${t.id}" ${t.id === term?.id ? 'selected' : ''}>${t.name}</option>`).join('');
+  }
+
+  if (preselect) loadResults();
+})();
+
+async function loadResults() {
+  const studentId = document.getElementById('childSelect').value;
+  const termId = document.getElementById('termSelect').value;
+  if (!studentId || !termId) return;
+
+  showLoader('#resultsContent', 'Loading results…');
+
+  const child = children.find(c => c.id === studentId);
+  const classId = child?.enrollments?.[0]?.class_id;
+
+  // Get all results for this student this term
+  const { data: results } = await db.from('results')
+    .select('score, subjects(id,name), exams(id,name,max_score,weight)')
+    .eq('student_id', studentId).eq('term_id', termId);
+
+  if (!results?.length) {
+    showEmpty('#resultsContent', 'No results published yet for this term.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span>'); return;
+  }
+
+  // Group by subject
+  const subjectMap = {};
+  results.forEach(r => {
+    const sn = r.subjects?.name || 'Unknown';
+    if (!subjectMap[sn]) subjectMap[sn] = { name: sn, components: [] };
+    subjectMap[sn].components.push(r);
+  });
+
+  // Compute weighted total per subject
+  const subjectRows = Object.values(subjectMap).map(sub => {
+    const totalWeight = sub.components.reduce((s, c) => s + (c.exams?.weight || 1), 0);
+    const weightedScore = sub.components.reduce((s, c) => {
+      const pct = (c.score / (c.exams?.max_score || 100)) * 100;
+      return s + pct * (c.exams?.weight || 1);
+    }, 0);
+    const total = totalWeight > 0 ? weightedScore / totalWeight : 0;
+    const grade = gradeFromScale(total, gradingScale);
+    return { name: sub.name, components: sub.components, total: total.toFixed(1), grade };
+  }).sort((a, b) => b.total - a.total);
+
+  const classAvg = subjectRows.length
+    ? (subjectRows.reduce((s, r) => s + Number(r.total), 0) / subjectRows.length).toFixed(1)
+    : 0;
+  const overallGrade = gradeFromScale(Number(classAvg), gradingScale);
+
+  // Get attendance for this term
+  const { data: attData } = await db.from('attendance')
+    .select('status, date').eq('student_id', studentId).eq('term_id', termId);
+  const totalDays = new Set((attData || []).map(a => a.date)).size;
+  const present = (attData || []).filter(a => a.status === 'P' || a.status === 'L').length;
+  const attPct = totalDays > 0 ? Math.round(present / totalDays * 100) : null;
+
+  document.getElementById('resultsContent').innerHTML = `
+    <!-- Summary card -->
+    <div class="card" style="margin-bottom:20px;background:var(--ink);color:white;border:none;">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div class="avatar avatar--lg" style="background:var(--primary);font-size:24px;">${child?.full_name?.charAt(0)}</div>
+        <div style="flex:1;">
+          <div style="font-size:20px;font-weight:800;">${child?.full_name}</div>
+          <div style="font-size:13px;color:#9ca3af;margin-top:2px;">
+            ${child?.enrollments?.[0]?.classes?.name || '—'} · ${child?.admission_no || ''}
+          </div>
+        </div>
+        <div style="text-align:center;padding:12px 20px;background:#ffffff15;border-radius:var(--radius);">
+          <div style="font-size:32px;font-weight:800;color:#fff;">${classAvg}%</div>
+          <div style="font-size:14px;color:#9ca3af;">Overall Average</div>
+          <div style="font-size:16px;font-weight:700;color:var(--accent);margin-top:2px;">${overallGrade.grade} — ${overallGrade.remark}</div>
+        </div>
+        ${attPct !== null ? `
+        <div style="text-align:center;padding:12px 20px;background:#ffffff15;border-radius:var(--radius);">
+          <div style="font-size:28px;font-weight:800;color:${attPct >= 75 ? '#4ade80' : '#f87171'};">${attPct}%</div>
+          <div style="font-size:13px;color:#9ca3af;">Attendance</div>
+          <div style="font-size:12px;color:#9ca3af;">${present}/${totalDays} days</div>
+        </div>` : ''}
+      </div>
+    </div>
+
+    <!-- Subject results -->
+    <div class="card" style="padding:0;">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
+        <span class="card__title">Subject Results</span>
+      </div>
+      <div class="table-wrap" style="border:none;">
+        <table>
+          <thead>
+            <tr>
+              <th>Subject</th>
+              <th>Components</th>
+              <th>Average</th>
+              <th>Grade</th>
+              <th>Remark</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${subjectRows.map(row => {
+              const pct = Number(row.total);
+              const barColor = pct >= 70 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+              return `
+                <tr>
+                  <td style="font-weight:600;">${row.name}</td>
+                  <td>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                      ${row.components.map(c => `
+                        <div style="text-align:center;">
+                          <div style="font-size:11px;color:var(--ink-3);">${c.exams?.name || '?'}</div>
+                          <div style="font-family:var(--mono);font-size:13px;font-weight:600;">${c.score}/${c.exams?.max_score || 100}</div>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <div class="progress-bar" style="width:80px;">
+                        <div class="progress-bar__fill" style="width:${Math.min(100,pct)}%;background:${barColor};"></div>
+                      </div>
+                      <span style="font-family:var(--mono);font-weight:700;">${row.total}%</span>
+                    </div>
+                  </td>
+                  <td><span style="font-size:16px;font-weight:800;color:var(--primary);">${row.grade.grade}</span></td>
+                  <td style="color:var(--ink-3);font-size:13px;">${row.grade.remark}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;text-align:center;">
+      <a href="../report-card/index.html?student=${studentId}&term=${termId}" target="_blank" class="btn btn--secondary">
+        <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> View Full Report Card
+      </a>
+    </div>
+  `;
+}
+</script>
+<script src="../../js/pwa.js"></script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

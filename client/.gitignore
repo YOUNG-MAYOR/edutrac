@@ -1,0 +1,28 @@
+# ============================================================
+#  EduTrack NG — .gitignore
+# ============================================================
+
+# ── SECRET CONFIG — never commit real credentials ────────────
+js/config.local.js
+.env
+.env.local
+.env.*.local
+*.secret.js
+
+# ── Node / build artifacts ───────────────────────────────────
+node_modules/
+dist/
+.cache/
+.parcel-cache/
+
+# ── OS & editor junk ────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/settings.json
+.idea/
+
+# ── Logs ────────────────────────────────────────────────────
+*.log
+npm-debug.log*

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <title>EduTrack NG — Classes</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .combo-picker { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+    .combo-opt {
+      padding:8px 16px; border-radius:8px; border:2px solid var(--border);
+      cursor:pointer; font-size:13px; font-weight:600; transition:all .15s;
+      background:white; color:var(--ink-2);
+    }
+    .combo-opt:hover { border-color:var(--primary); color:var(--primary); }
+    .combo-opt.selected { background:var(--primary); color:white; border-color:var(--primary); }
+    .combo-opt.science  { --combo-color:#2563eb; }
+    .combo-opt.science.selected  { background:#2563eb; border-color:#2563eb; }
+    .combo-opt.arts     { --combo-color:#d97706; }
+    .combo-opt.arts.selected     { background:#d97706; border-color:#d97706; }
+    .combo-opt.commercial { --combo-color:#059669; }
+    .combo-opt.commercial.selected { background:#059669; border-color:#059669; }
+    #comboSection { display:none; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<div class="modal" id="classModal">
+  <div class="modal__box" style="max-width:480px;">
+    <div class="modal__header">
+      <h2 class="modal__title" id="classModalTitle">Add Class</h2>
+      <button class="modal__close" onclick="closeModal('classModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body">
+      <input type="hidden" id="classId">
+      <div class="form-group">
+        <label class="form-label">Class Name <span class="required">*</span></label>
+        <input type="text" id="className" class="form-control" placeholder="e.g. SS 1A or JSS 2B">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Level <span class="required">*</span></label>
+        <select id="classLevel" class="form-control" onchange="onLevelChange()">
+          <option value="">— Select Level —</option>
+          <option value="Nursery">Nursery</option>
+          <option value="Primary">Primary</option>
+          <option value="Junior">Junior Secondary (JSS)</option>
+          <option value="Senior">Senior Secondary (SSS)</option>
+        </select>
+      </div>
+
+      <!-- FIX 8: Only shown when Senior is selected -->
+      <div id="comboSection" class="form-group">
+        <label class="form-label">Science / Arts / Commercial <span class="required">*</span></label>
+        <div class="form-hint" style="margin-bottom:8px;">Senior classes must be assigned to a section.</div>
+        <div class="combo-picker">
+          <div class="combo-opt science" onclick="pickCombo('Science')" id="opt-science"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v8L4.72 20.55A1 1 0 0 0 5.6 22h12.8a1 1 0 0 0 .88-1.45L14 10V2"/><line x1="8.5" y1="2" x2="15.5" y2="2"/></svg></span> Science</div>
+          <div class="combo-opt arts" onclick="pickCombo('Arts')" id="opt-arts"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></span> Arts</div>
+          <div class="combo-opt commercial" onclick="pickCombo('Commercial')" id="opt-commercial"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span> Commercial</div>
+        </div>
+        <input type="hidden" id="classCombo">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Form Teacher (Class Master)</label>
+        <select id="formTeacher" class="form-control"><option value="">— None —</option></select>
+      </div>
+      <div id="classErr" class="form-error" style="display:none;"></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('classModal')">Cancel</button>
+      <button class="btn btn--primary" onclick="saveClass()">Save Class</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, classes = [], teachers = [], currentTerm, combos = [];
+
+(async () => {
+  currentUser = await initAdminLayout('classes', 'Classes');
+  if (!currentUser) return;
+  document.getElementById('topbarActions').innerHTML =
+    `<button class="btn btn--primary" onclick="openAdd()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Add Class</button>`;
+  const [{ data: trm }, { data: tchr }, { data: cmb }] = await Promise.all([
+    db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current',true).maybeSingle(),
+    db.from('users').select('id,full_name').eq('school_id', currentUser.school_id).in('role',['teacher','vp_academic','exam_officer']).eq('is_active',true).order('full_name'),
+    db.from('subject_combinations').select('id,name,color').eq('school_id', currentUser.school_id).order('name')
+  ]);
+  currentTerm = trm; teachers = tchr || []; combos = cmb || [];
+  renderPage(); await loadClasses();
+})();
+
+function onLevelChange() {
+  const level = document.getElementById('classLevel').value;
+  const comboSection = document.getElementById('comboSection');
+  if (level === 'Senior') {
+    comboSection.style.display = '';
+  } else {
+    comboSection.style.display = 'none';
+    document.getElementById('classCombo').value = '';
+    document.querySelectorAll('.combo-opt').forEach(el => el.classList.remove('selected'));
+  }
+}
+
+function pickCombo(name) {
+  document.getElementById('classCombo').value = name;
+  document.querySelectorAll('.combo-opt').forEach(el => el.classList.remove('selected'));
+  const map = { Science:'science', Arts:'arts', Commercial:'commercial' };
+  document.getElementById(`opt-${map[name]}`).classList.add('selected');
+}
+
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header"><h1>Classes</h1><p>Manage school classes and enrollment</p></div>
+    <div class="card" style="padding:0;"><div class="table-wrap" id="classTable" style="border:none;"></div></div>
+  `;
+}
+
+async function loadClasses() {
+  showLoader('#classTable');
+  const { data, error } = await db.from('classes')
+    .select('id,name,level,teacher_id,combination_id, teacher:users!classes_teacher_id_fkey(full_name), subject_combinations!classes_combo_fk(name,color)')
+    .eq('school_id', currentUser.school_id).order('name');
+  if (error) { showError('#classTable', error.message); return; }
+  classes = data || [];
+  if (!classes.length) { showEmpty('#classTable', 'No classes yet. Add your first class!', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>️'); return; }
+
+  const counts = {};
+  if (currentTerm) {
+    const { data: enroll } = await db.from('enrollments')
+      .select('class_id').eq('term_id', currentTerm.id).eq('school_id', currentUser.school_id);
+    (enroll || []).forEach(e => counts[e.class_id] = (counts[e.class_id] || 0) + 1);
+  }
+
+  const levelBadge = { Nursery:'badge--pink', Primary:'badge--blue', Junior:'badge--teal', Senior:'badge--purple' };
+
+  document.getElementById('classTable').innerHTML = `
+    <table>
+      <thead><tr><th>Class</th><th>Level</th><th>Section</th><th>Form Teacher</th><th>Students</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${classes.map(c => `
+          <tr>
+            <td><strong>${c.name}</strong></td>
+            <td>${c.level ? `<span class="badge ${levelBadge[c.level]||'badge--gray'}">${c.level}</span>` : '—'}</td>
+            <td>${c.subject_combinations ? `<span class="badge" style="background:${c.subject_combinations.color||'#0a6e3f'}20;color:${c.subject_combinations.color||'#0a6e3f'};border:1px solid ${c.subject_combinations.color||'#0a6e3f'}40;">${c.subject_combinations.name}</span>` : '—'}</td>
+            <td>${c.teacher?.full_name || '—'}</td>
+            <td><span style="font-size:18px;font-weight:700;color:var(--primary);">${counts[c.id] || 0}</span></td>
+            <td>
+              <div class="td-action">
+                <button class="btn btn--secondary btn--sm" onclick="editClass('${c.id}')">Edit</button>
+                <button class="btn btn--danger btn--sm" onclick="deleteClass('${c.id}','${c.name.replace(/'/g,"\\'")}')">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function openAdd() {
+  document.getElementById('classModalTitle').textContent = 'Add Class';
+  document.getElementById('classId').value = '';
+  document.getElementById('className').value = '';
+  document.getElementById('classLevel').value = '';
+  document.getElementById('classCombo').value = '';
+  document.getElementById('classErr').style.display = 'none';
+  document.getElementById('comboSection').style.display = 'none';
+  document.querySelectorAll('.combo-opt').forEach(el => el.classList.remove('selected'));
+  document.getElementById('formTeacher').innerHTML = '<option value="">— None —</option>' +
+    teachers.map(t => `<option value="${t.id}">${t.full_name}</option>`).join('');
+  openModal('classModal');
+}
+
+async function editClass(id) {
+  const c = classes.find(c => c.id === id);
+  if (!c) return;
+  document.getElementById('classModalTitle').textContent = 'Edit Class';
+  document.getElementById('classId').value = c.id;
+  document.getElementById('className').value = c.name;
+  document.getElementById('classLevel').value = c.level || '';
+  document.getElementById('classErr').style.display = 'none';
+
+  // Handle combo for Senior
+  if (c.level === 'Senior') {
+    document.getElementById('comboSection').style.display = '';
+    if (c.subject_combinations?.name) {
+      pickCombo(c.subject_combinations.name);
+    }
+  } else {
+    document.getElementById('comboSection').style.display = 'none';
+  }
+
+  document.getElementById('formTeacher').innerHTML = '<option value="">— None —</option>' +
+    teachers.map(t => `<option value="${t.id}" ${c.teacher_id === t.id ? 'selected' : ''}>${t.full_name}</option>`).join('');
+  openModal('classModal');
+}
+
+async function saveClass() {
+  const name = document.getElementById('className').value.trim();
+  const level = document.getElementById('classLevel').value;
+  const comboName = document.getElementById('classCombo').value;
+  const errEl = document.getElementById('classErr');
+  errEl.style.display = 'none';
+
+  if (!name) { errEl.textContent = 'Class name is required.'; errEl.style.display = 'block'; return; }
+  if (!level) { errEl.textContent = 'Please select a level.'; errEl.style.display = 'block'; return; }
+  if (level === 'Senior' && !comboName) {
+    errEl.textContent = 'Please select a section (Science, Arts, or Commercial) for Senior classes.';
+    errEl.style.display = 'block'; return;
+  }
+
+  // Resolve combo ID
+  let combinationId = null;
+  if (level === 'Senior' && comboName) {
+    let combo = combos.find(c => c.name === comboName);
+    if (!combo) {
+      const colorMap = { Science:'#2563eb', Arts:'#d97706', Commercial:'#059669' };
+      const { data: newCombo, error: ce } = await db.from('subject_combinations')
+        .insert({ school_id: currentUser.school_id, name: comboName, color: colorMap[comboName] || '#0a6e3f' })
+        .select().single();
+      if (ce) { errEl.textContent = ce.message; errEl.style.display = 'block'; return; }
+      combo = newCombo; combos.push(combo);
+    }
+    combinationId = combo.id;
+  }
+
+  const id = document.getElementById('classId').value;
+  const payload = {
+    school_id: currentUser.school_id,
+    name, level: level || null,
+    teacher_id: document.getElementById('formTeacher').value || null,
+    combination_id: combinationId
+  };
+  const { error } = id
+    ? await db.from('classes').update(payload).eq('id', id)
+    : await db.from('classes').insert(payload);
+  if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+  toast(id ? 'Class updated!' : 'Class added!', 'success');
+  closeModal('classModal');
+  await loadClasses();
+}
+
+async function deleteClass(id, name) {
+  if (!confirm(`Delete class "${name}"?\n\nStudents will be unenrolled from this class. This cannot be undone.`)) return;
+  const { error } = await db.from('classes').delete().eq('id', id);
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  toast('Class deleted.', 'success'); await loadClasses();
+}
+</script>
+<script src="../js/pwa.js"></script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

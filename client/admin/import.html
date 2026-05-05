@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Bulk Import Students</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .drop-zone{border:2.5px dashed var(--border);border-radius:var(--radius-lg);padding:52px 24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface);}
+    .drop-zone:hover,.drop-zone.drag-over{border-color:var(--primary);background:var(--primary-light);}
+    .drop-zone svg{opacity:.4;margin:0 auto 16px;}
+    /* Step bar */
+    .step-bar{display:flex;align-items:center;margin-bottom:32px;}
+    .step-item{display:flex;align-items:center;gap:10px;flex:1;}
+    .step-num{width:34px;height:34px;border-radius:50%;background:var(--surface-3);color:var(--ink-3);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:2px solid var(--border);transition:all .25s;}
+    .step-num.active{background:var(--primary);color:white;border-color:var(--primary);}
+    .step-num.done{background:var(--success);color:white;border-color:var(--success);}
+    .step-label{font-size:13px;font-weight:600;color:var(--ink-3);transition:color .2s;}
+    .step-label.active{color:var(--primary);}
+    .step-label.done{color:var(--success);}
+    .step-divider{flex:1;height:2px;background:var(--border);max-width:60px;transition:background .25s;}
+    .step-divider.done{background:var(--success);}
+    /* Preview table */
+    .prev-table{width:100%;border-collapse:collapse;font-size:13px;}
+    .prev-table th{background:var(--surface-3);padding:9px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3);border-bottom:1px solid var(--border);}
+    .prev-table td{padding:9px 12px;border-bottom:1px solid var(--border);}
+    .prev-table tr:hover td{background:var(--surface-2);}
+    .row-ok td:nth-child(6){color:var(--success);font-weight:600;}
+    .row-warn{background:#fffbeb!important;}
+    .row-warn td:nth-child(6){color:var(--warning);font-weight:600;}
+    /* Import progress */
+    .import-stage{display:flex;align-items:flex-start;gap:14px;padding:14px;border-radius:var(--radius);background:var(--surface-2);margin-bottom:10px;transition:background .2s;}
+    .import-stage.active{background:var(--primary-light);border-left:3px solid var(--primary);}
+    .import-stage.done{background:#f0fdf4;border-left:3px solid var(--success);}
+    .import-stage.error{background:#fef2f2;border-left:3px solid var(--danger);}
+    .stage-icon{width:32px;height:32px;border-radius:50%;background:var(--surface-3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;}
+    .import-stage.active .stage-icon{background:var(--primary);color:white;}
+    .import-stage.done   .stage-icon{background:var(--success);color:white;}
+    .import-stage.error  .stage-icon{background:var(--danger);color:white;}
+    .stage-body .title{font-size:14px;font-weight:600;margin-bottom:2px;}
+    .stage-body .sub{font-size:12px;color:var(--ink-3);}
+    /* Result cards */
+    .rs-card{background:var(--surface);border-radius:var(--radius);padding:16px;text-align:center;border:1.5px solid var(--border);}
+    .rs-val{font-size:28px;font-weight:800;margin-bottom:4px;}
+    .rs-lbl{font-size:12px;color:var(--ink-3);font-weight:600;}
+    /* Warn badge */
+    .badge-warn{display:inline-block;background:#fef3c7;color:#b45309;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;}
+    .badge-ok{display:inline-block;background:var(--success-light);color:#15803d;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+<script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, classes=[], combinations=[], parsedRows=[], validRows=[], activeTerm=null;
+
+(async () => {
+  currentUser = await initAdminLayout('import', 'Bulk Import Students');
+  if (!currentUser) return;
+
+  const [{ data: cls }, { data: combo }, { data: termData }] = await Promise.all([
+    db.from('classes').select('id,name').eq('school_id', currentUser.school_id).order('name'),
+    db.from('subject_combinations').select('id,name').eq('school_id', currentUser.school_id),
+    db.from('terms').select('id,name').eq('school_id', currentUser.school_id).eq('is_current', true).maybeSingle()
+  ]);
+  classes = cls || []; combinations = combo || []; activeTerm = termData || null;
+  renderStep1();
+})();
+
+/* ─── Step bar ─────────────────────────────────────────────── */
+function buildStepBar() {
+  return `<div class="step-bar">
+    ${[['Upload File','sn1','sl1'],['Preview & Validate','sn2','sl2'],['Import Options','sn3','sl3'],['Importing','sn4','sl4']].map(([lbl,n,l],i) => `
+      ${i>0 ? `<div class="step-divider" id="sd${i}"></div>` : ''}
+      <div class="step-item">
+        <div class="step-num" id="${n}">${i+1}</div>
+        <div class="step-label" id="${l}">${lbl}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function setStep(n) {
+  [1,2,3,4].forEach(i => {
+    const num = document.getElementById('sn'+i);
+    const lbl = document.getElementById('sl'+i);
+    const div = document.getElementById('sd'+(i-1));
+    if (!num) return;
+    if (i < n) {
+      num.className = 'step-num done'; num.innerHTML = '✓';
+      if (lbl) { lbl.className = 'step-label done'; }
+      if (div) div.classList.add('done');
+    } else if (i === n) {
+      num.className = 'step-num active'; num.textContent = i;
+      if (lbl) { lbl.className = 'step-label active'; }
+    } else {
+      num.className = 'step-num'; num.textContent = i;
+      if (lbl) { lbl.className = 'step-label'; }
+    }
+  });
+}
+
+/* ─── Step 1: Upload ───────────────────────────────────────── */
+function renderStep1() {
+  document.getElementById('pageBody').innerHTML = buildStepBar() + `
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:900px;">
+    <div>
+      <div class="drop-zone" id="dz" onclick="document.getElementById('fi').click()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Drop your CSV file here</div>
+        <div style="font-size:13px;color:var(--ink-3);">or click to browse &middot; .csv files only</div>
+        <input type="file" id="fi" accept=".csv" style="display:none;" onchange="handleFile(event)">
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px;justify-content:center;">
+        <button class="btn btn--secondary btn--sm" onclick="downloadTemplate()">⬇ Download Template CSV</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card__header"><span class="card__title">📋 Required CSV Columns</span></div>
+      <div style="font-size:13px;line-height:2.2;">
+        <strong>full_name</strong> <span class="badge-warn">Required</span><br>
+        admission_no &middot; gender &middot; date_of_birth<br>
+        parent_name &middot; parent_phone &middot; parent_email<br>
+        address &middot; <strong>class_name</strong> &middot; section &middot; state_of_origin
+      </div>
+      <div style="background:var(--primary-light);border-radius:8px;padding:12px;font-size:12px;color:var(--primary);margin-top:14px;line-height:1.7;">
+        💡 <strong>class_name</strong> must match exactly e.g. <em>"JSS 1A"</em>, <em>"SS 2B"</em><br>
+        Students with a matching class will be <strong>automatically enrolled</strong> — no manual step needed.
+      </div>
+    </div>
+  </div>`;
+  setStep(1);
+  const dz = document.getElementById('dz');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); handleFile({ target: { files: e.dataTransfer.files } }); });
+}
+
+function downloadTemplate() {
+  const h = ['full_name','admission_no','gender','date_of_birth','parent_name','parent_phone','parent_email','address','class_name','section','state_of_origin'];
+  const rows = [h,
+    ['Amina Suleiman','ADM001','Female','2008-04-15','Malam Suleiman','08012345678','','12 Kano Road','JSS 1A','Science','Kano'],
+    ['Chidi Okonkwo','ADM002','Male','2007-09-22','Mr Emmanuel','08098765432','','5 Lagos St','SS 2B','Commercial','Anambra'],
+    ['Fatima Aliyu','ADM003','Female','2009-01-10','Hajiya Aliyu','07011223344','','Abuja','JSS 2A','Art','FCT']
+  ];
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'edutrack_students_template.csv'; a.click();
+}
+
+/* ─── Step 2: Preview ──────────────────────────────────────── */
+async function handleFile(e) {
+  const file = e.target.files[0]; if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.csv')) { toast('Please upload a .csv file only', 'error'); return; }
+
+  // Show loading spinner while parsing
+  document.getElementById('pageBody').innerHTML = buildStepBar() + `
+    <div class="et-loader">
+      <div class="et-spinner"></div>
+      <p>Parsing CSV file…</p>
+    </div>`;
+  setStep(2);
+  await sleep(80); // Let spinner render
+
+  const text = await file.text();
+  const lines = text.trim().split(/\r?\n|\r/).filter(l => l.trim());
+  if (lines.length < 2) { toast('CSV needs a header row and at least one data row.', 'error'); renderStep1(); return; }
+
+  const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g,'_'));
+  parsedRows = lines.slice(1).map(line => {
+    const vals = parseCSVLine(line);
+    const row = {};
+    headers.forEach((h, i) => row[h] = (vals[i] || '').trim());
+    return row;
+  }).filter(r => Object.values(r).some(v => v));
+
+  renderStep2();
+}
+
+function parseCSVLine(line) {
+  const result = []; let cur = ''; let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { inQuote = !inQuote; }
+    else if (ch === ',' && !inQuote) { result.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  result.push(cur);
+  return result;
+}
+
+function renderStep2() {
+  setStep(2);
+  validRows = parsedRows.map((row, i) => {
+    const issues = [];
+    const nameKey = ['full_name','name','student_name','fullname'].find(k => row[k]);
+    const name = nameKey ? row[nameKey] : '';
+    if (!name) issues.push('Missing name');
+    if (row.class_name && !classes.find(c => c.name.toLowerCase() === row.class_name.toLowerCase())) {
+      issues.push(`Class "${row.class_name}" not found`);
+    }
+    if (row.gender && !['male','female','m','f','boy','girl'].includes(row.gender.toLowerCase())) {
+      issues.push('Unknown gender value');
+    }
+    return { ...row, full_name: name || row.full_name || '', _issues: issues, _row: i + 2 };
+  });
+
+  const ok   = validRows.filter(r => !r._issues.length).length;
+  const warn = validRows.filter(r => r._issues.length).length;
+
+  document.getElementById('pageBody').innerHTML = buildStepBar() + `
+    <div class="card" style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+      <div style="display:flex;gap:24px;align-items:center;">
+        <div><span style="font-size:24px;font-weight:800;color:var(--success);">${ok}</span> <span style="font-size:13px;color:var(--ink-3);">ready to import</span></div>
+        ${warn ? `<div><span style="font-size:24px;font-weight:800;color:var(--warning);">${warn}</span> <span style="font-size:13px;color:var(--ink-3);">with warnings</span></div>` : ''}
+        <div><span style="font-size:24px;font-weight:800;">${parsedRows.length}</span> <span style="font-size:13px;color:var(--ink-3);">total rows</span></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn--secondary btn--sm" onclick="renderStep1()">← Re-upload</button>
+        <button class="btn btn--primary" onclick="renderStep3()">Set Options →</button>
+      </div>
+    </div>
+    ${warn ? `<div style="padding:10px 14px;background:#fef3c7;border:1px solid #fbbf24;border-radius:var(--radius);margin-bottom:14px;font-size:13px;">
+      ⚠ Rows with warnings will be imported with issues noted. You can still proceed.
+    </div>` : ''}
+    <div class="table-wrap" style="max-height:400px;overflow-y:auto;">
+      <table class="prev-table">
+        <thead><tr><th>#</th><th>Full Name</th><th>Gender</th><th>Class</th><th>Parent Phone</th><th>Status</th></tr></thead>
+        <tbody>
+          ${validRows.map(r => `<tr class="${r._issues.length ? 'row-warn' : 'row-ok'}">
+            <td style="color:var(--ink-3)">${r._row}</td>
+            <td style="font-weight:600">${r.full_name || '<em style="color:var(--danger)">Missing!</em>'}</td>
+            <td>${r.gender || '—'}</td>
+            <td>${r.class_name ? `<span style="background:var(--primary-light);color:var(--primary);font-size:12px;padding:1px 7px;border-radius:10px;">${r.class_name}</span>` : '—'}</td>
+            <td style="font-family:var(--mono);font-size:12px">${r.parent_phone || '—'}</td>
+            <td>${r._issues.length ? `<span class="badge-warn">${r._issues.join(', ')}</span>` : '<span class="badge-ok">✓ Ready</span>'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  setStep(2);
+}
+
+/* ─── Step 3: Options ──────────────────────────────────────── */
+function renderStep3() {
+  setStep(3);
+  const okCount = validRows.filter(r => !r._issues.some(i => i.includes('Missing name'))).length;
+  document.getElementById('pageBody').innerHTML = buildStepBar() + `
+    <div style="max-width:560px;">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card__header"><span class="card__title">🚀 Import Options</span></div>
+        <div class="form-group">
+          <label class="form-label">Default Class <span style="font-size:12px;color:var(--ink-3);">(for students whose class wasn't found)</span></label>
+          <select id="defClass" class="form-control">
+            <option value="">— Skip students without a valid class —</option>
+            ${classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Default Subject Combination / Section</label>
+          <select id="defCombo" class="form-control">
+            <option value="">— None —</option>
+            ${combinations.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;">
+            <input type="checkbox" id="skipDup" checked style="width:16px;height:16px;accent-color:var(--primary);">
+            Skip duplicate admission numbers
+          </label>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;">
+            <input type="checkbox" id="autoAdm" checked style="width:16px;height:16px;accent-color:var(--primary);">
+            Auto-generate missing admission numbers
+          </label>
+        </div>
+        <div style="background:var(--success-light);border-radius:8px;padding:12px;font-size:13px;color:#15803d;margin-top:4px;line-height:1.7;">
+          ✅ <strong>Auto-enrollment is ON.</strong> Students will be automatically enrolled in their class and current term — no manual step needed.
+          ${activeTerm ? `<br>Current term: <strong>${activeTerm.name}</strong>` : '<br><span style="color:var(--warning);">⚠ No active term set — enrollment will have no term assigned.</span>'}
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <button class="btn btn--secondary" onclick="renderStep2()">← Back</button>
+        <button class="btn btn--primary" onclick="startImport()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Import ${okCount} Students
+        </button>
+      </div>
+    </div>`;
+  setStep(3);
+}
+
+/* ─── Step 4: Import (the fixed version) ───────────────────── */
+async function startImport() {
+  const defClass = document.getElementById('defClass')?.value || null;
+  const defCombo = document.getElementById('defCombo')?.value || null;
+  const skipDup  = document.getElementById('skipDup')?.checked !== false;
+  const autoAdm  = document.getElementById('autoAdm')?.checked !== false;
+
+  setStep(4);
+
+  // Build stage UI immediately
+  document.getElementById('pageBody').innerHTML = buildStepBar() + `
+    <div style="max-width:600px;margin:0 auto;padding:8px 0;">
+      <div style="text-align:center;margin-bottom:24px;">
+        <h2 style="font-size:18px;font-weight:700;margin-bottom:6px;">Importing Students…</h2>
+        <p style="font-size:13px;color:var(--ink-3);">Please keep this page open. Do not close or refresh.</p>
+      </div>
+
+      <!-- Overall progress bar -->
+      <div style="margin-bottom:24px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;">
+          <span id="progLabel">Preparing…</span>
+          <span id="progPct" style="font-weight:700;color:var(--primary);">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-bar__fill" id="progBar" style="width:0%;"></div></div>
+      </div>
+
+      <!-- Stage list -->
+      <div id="stages">
+        <div class="import-stage" id="stage-check">
+          <div class="stage-icon">1</div>
+          <div class="stage-body">
+            <div class="title">Checking existing records</div>
+            <div class="sub" id="stage-check-sub">Waiting…</div>
+          </div>
+        </div>
+        <div class="import-stage" id="stage-build">
+          <div class="stage-icon">2</div>
+          <div class="stage-body">
+            <div class="title">Building student records</div>
+            <div class="sub" id="stage-build-sub">Waiting…</div>
+          </div>
+        </div>
+        <div class="import-stage" id="stage-insert">
+          <div class="stage-icon">3</div>
+          <div class="stage-body">
+            <div class="title">Inserting students into database</div>
+            <div class="sub" id="stage-insert-sub">Waiting…</div>
+          </div>
+        </div>
+        <div class="import-stage" id="stage-enroll">
+          <div class="stage-icon">4</div>
+          <div class="stage-body">
+            <div class="title">Auto-enrolling into classes &amp; term</div>
+            <div class="sub" id="stage-enroll-sub">Waiting…</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  setStep(4);
+
+  const setStage = (id, state, sub) => {
+    const el = document.getElementById('stage-'+id);
+    const subEl = document.getElementById('stage-'+id+'-sub');
+    if (!el) return;
+    el.className = 'import-stage ' + state;
+    const ico = el.querySelector('.stage-icon');
+    if (ico) {
+      if (state === 'active') ico.innerHTML = '<div class="et-spinner" style="width:14px;height:14px;border-width:2px;"></div>';
+      else if (state === 'done') ico.innerHTML = '✓';
+      else if (state === 'error') ico.innerHTML = '✗';
+    }
+    if (subEl && sub) subEl.textContent = sub;
+  };
+
+  const setProgress = (pct, label) => {
+    const bar = document.getElementById('progBar');
+    const pctEl = document.getElementById('progPct');
+    const lblEl = document.getElementById('progLabel');
+    if (bar) bar.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '%';
+    if (lblEl && label) lblEl.textContent = label;
+  };
+
+  await sleep(60);
+
+  // ── STAGE 1: Load existing admission numbers ──────────────
+  setStage('check','active','Loading existing student records…');
+  setProgress(5,'Checking existing records…');
+  const { data: existing, error: exErr } = await db.from('students').select('admission_no,id').eq('school_id', currentUser.school_id);
+  if (exErr) { setStage('check','error', exErr.message); return; }
+  const existingNos = new Set((existing || []).map(s => s.admission_no?.toLowerCase()));
+  let counter = (existing?.length || 0) + 1;
+  setStage('check','done', `Found ${existing?.length || 0} existing students`);
+  setProgress(15,'Building import list…');
+  await sleep(80);
+
+  // ── STAGE 2: Build rows ───────────────────────────────────
+  setStage('build','active','Processing CSV rows…');
+  let skipped = 0, skippedNames = [];
+  const studentRows = [], enrollmentMeta = [];
+
+  for (let i = 0; i < validRows.length; i++) {
+    const r = validRows[i];
+    if (!r.full_name) { skipped++; continue; }
+
+    let adm = r.admission_no || r.adm_no || '';
+    if (!adm && autoAdm) adm = 'ADM' + String(counter).padStart(4, '0');
+    counter++;
+
+    if (skipDup && adm && existingNos.has(adm.toLowerCase())) {
+      skipped++; skippedNames.push(r.full_name); continue;
+    }
+
+    // Resolve class
+    let classId = defClass;
+    if (r.class_name) {
+      const found = classes.find(c => c.name.toLowerCase() === r.class_name.trim().toLowerCase());
+      if (found) classId = found.id;
+    }
+
+    // Resolve combination
+    let comboId = defCombo;
+    if (r.section) {
+      const found = combinations.find(c =>
+        c.name.toLowerCase().includes(r.section.trim().toLowerCase()) ||
+        r.section.trim().toLowerCase().includes(c.name.toLowerCase())
+      );
+      if (found) comboId = found.id;
+    }
+
+    // Normalise gender
+    const gRaw = (r.gender || '').toLowerCase();
+    const gender = ['male','m','boy'].includes(gRaw) ? 'Male' : ['female','f','girl'].includes(gRaw) ? 'Female' : null;
+
+    studentRows.push({
+      school_id:       currentUser.school_id,
+      full_name:       r.full_name,
+      admission_no:    adm || null,
+      gender,
+      date_of_birth:   r.date_of_birth || null,
+      parent_name:     r.parent_name   || null,
+      parent_phone:    r.parent_phone  || null,
+      parent_email:    r.parent_email  || null,
+      address:         r.address       || null,
+      state_of_origin: r.state_of_origin || null,
+      combination_id:  comboId         || null,
+      is_active:       true
+    });
+    enrollmentMeta.push({ classId });
+    if (adm) existingNos.add(adm.toLowerCase());
+  }
+
+  setStage('build','done', `${studentRows.length} students prepared, ${skipped} skipped`);
+  setProgress(30, `Inserting ${studentRows.length} students…`);
+  await sleep(80);
+
+  if (!studentRows.length) {
+    setStage('insert','done','Nothing to insert — all rows were skipped.');
+    setProgress(100,'Done');
+    showResult(0, skipped, 0, []);
+    return;
+  }
+
+  // ── STAGE 3: Insert students ──────────────────────────────
+  setStage('insert','active',`Inserting ${studentRows.length} rows…`);
+  let imported = 0, failed = 0, errors = [];
+  let insertedRows = [];
+
+  // Try bulk first
+  const CHUNK = 200; // batch into chunks to avoid payload limits
+  const allChunks = chunk(studentRows, CHUNK);
+  const allMetaChunks = chunk(enrollmentMeta, CHUNK);
+
+  for (let ci = 0; ci < allChunks.length; ci++) {
+    const { data: ins, error: insErr } = await db.from('students').insert(allChunks[ci]).select('id,admission_no');
+    const pct = 30 + Math.round(((ci+1) / allChunks.length) * 40);
+    setProgress(pct, `Inserting batch ${ci+1}/${allChunks.length}…`);
+    if (insErr) {
+      // Fallback: row-by-row for this chunk
+      for (let j = 0; j < allChunks[ci].length; j++) {
+        const { data: s, error: sErr } = await db.from('students').insert(allChunks[ci][j]).select('id').maybeSingle();
+        if (sErr) { failed++; errors.push((allChunks[ci][j].full_name || 'Row') + ': ' + sErr.message); }
+        else if (s) { imported++; insertedRows.push({ id: s.id, metaIdx: ci * CHUNK + j }); }
+      }
+    } else {
+      imported += ins?.length || 0;
+      (ins || []).forEach((s, j) => insertedRows.push({ id: s.id, metaIdx: ci * CHUNK + j }));
+    }
+  }
+
+  setStage('insert','done', `${imported} students inserted${failed ? `, ${failed} failed` : ''}`);
+  setProgress(75, 'Enrolling in classes…');
+  await sleep(80);
+
+  // ── STAGE 4: Enroll ───────────────────────────────────────
+  setStage('enroll','active', 'Creating class enrollments…');
+  const enrollRows = insertedRows
+    .map(({ id, metaIdx }) => {
+      const meta = enrollmentMeta[metaIdx];
+      if (!meta?.classId) return null;
+      return {
+        school_id:  currentUser.school_id,
+        student_id: id,
+        class_id:   meta.classId,
+        term_id:    activeTerm?.id || null
+      };
+    })
+    .filter(Boolean);
+
+  let enrolled = 0;
+  if (enrollRows.length) {
+    // Chunk enrollments too
+    const enrollChunks = chunk(enrollRows, 200);
+    for (let ci = 0; ci < enrollChunks.length; ci++) {
+      const { data: enr, error: enrErr } = await db.from('enrollments')
+        .upsert(enrollChunks[ci], { onConflict: 'student_id,class_id,term_id', ignoreDuplicates: true })
+        .select('id');
+      if (!enrErr) enrolled += enr?.length || enrollChunks[ci].length;
+      const pct = 75 + Math.round(((ci+1) / enrollChunks.length) * 22);
+      setProgress(pct, `Enrolling batch ${ci+1}/${enrollChunks.length}…`);
+    }
+  }
+
+  setStage('enroll','done', enrolled ? `${enrolled} students enrolled in their classes` : enrollRows.length ? 'Enrolled (no new rows needed)' : 'No class assignments — skipped');
+  setProgress(100, 'Import complete!');
+  await sleep(300);
+
+  showResult(imported, skipped, failed, errors, enrolled);
+}
+
+function showResult(imported, skipped, failed, errors, enrolled = 0) {
+  document.getElementById('pageBody').innerHTML = buildStepBar() + `
+    <div style="text-align:center;padding:24px 20px;">
+      <div style="font-size:48px;margin-bottom:14px;">${failed === 0 ? '🎉' : '✅'}</div>
+      <div style="font-size:20px;font-weight:800;margin-bottom:6px;">Import Complete!</div>
+      <div style="font-size:14px;color:var(--ink-3);margin-bottom:24px;">
+        ${enrolled ? `<strong>${enrolled}</strong> students automatically enrolled in their classes.` : 'Import finished — review results below.'}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;max-width:500px;margin:0 auto 28px;">
+        <div class="rs-card"><div class="rs-val" style="color:var(--success)">${imported}</div><div class="rs-lbl">Imported</div></div>
+        <div class="rs-card"><div class="rs-val" style="color:var(--info)">${enrolled}</div><div class="rs-lbl">Enrolled</div></div>
+        <div class="rs-card"><div class="rs-val" style="color:var(--warning)">${skipped}</div><div class="rs-lbl">Skipped</div></div>
+        <div class="rs-card"><div class="rs-val" style="color:${failed ? 'var(--danger)' : 'var(--ink-3)'};">${failed}</div><div class="rs-lbl">Failed</div></div>
+      </div>
+      ${errors.length ? `<div style="text-align:left;max-width:540px;margin:0 auto 20px;padding:14px;background:#fef2f2;border-radius:var(--radius);border:1px solid #fecaca;">
+        <strong style="font-size:13px;color:var(--danger);">Errors (${errors.length}):</strong>
+        ${errors.slice(0,10).map(e => `<div style="font-size:12px;color:var(--danger);margin-top:4px;">• ${e}</div>`).join('')}
+        ${errors.length > 10 ? `<div style="font-size:12px;color:var(--ink-3);margin-top:4px;">…and ${errors.length-10} more</div>` : ''}
+      </div>` : ''}
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <a href="students.html" class="btn btn--primary">👥 View All Students</a>
+        <button class="btn btn--secondary" onclick="renderStep1()">📂 Import More</button>
+      </div>
+    </div>`;
+  setStep(4);
+  toast(`Imported ${imported} student${imported !== 1 ? 's' : ''}, enrolled ${enrolled}`, imported > 0 ? 'success' : 'error');
+}
+
+/* ─── Utilities ─────────────────────────────────────────────── */
+function chunk(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+<script src="../js/pwa.js"></script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

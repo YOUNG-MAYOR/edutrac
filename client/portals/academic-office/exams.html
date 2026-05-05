@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Exam Setup</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+</head>
+<body>
+<div id="app"></div>
+
+<div class="modal" id="examModal">
+  <div class="modal__box" style="max-width:440px;">
+    <div class="modal__header">
+      <h2 class="modal__title" id="examModalTitle">Add Exam Component</h2>
+      <button class="modal__close" onclick="closeModal('examModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body">
+      <input type="hidden" id="examId">
+      <div class="form-group">
+        <label class="form-label">Name <span class="required">*</span></label>
+        <input type="text" id="examName" class="form-control" placeholder="e.g. CA 1, Midterm, Final Exam">
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Max Score <span class="required">*</span></label>
+          <input type="number" id="examMax" class="form-control" value="100" min="1" max="100">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Weight</label>
+          <input type="number" id="examWeight" class="form-control" value="1" min="1" step="0.5">
+          <div class="form-hint">Used for weighted average calculation</div>
+        </div>
+      </div>
+      <div id="examError" class="form-error" style="display:none;"></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('examModal')">Cancel</button>
+      <button class="btn btn--primary" onclick="saveExam()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let currentUser, allExams = [];
+
+(async () => {
+  currentUser = await initPage(['exam_officer', 'vp_academic', 'admin'], 'Exam Setup', 'exams');
+  if (!currentUser) return;
+
+  document.getElementById('topbarActions').innerHTML =
+    `<button class="btn btn--primary" onclick="openAdd()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Add Component</button>`;
+
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1>Exam Components</h1>
+      <p>Configure CA, Midterm, and Final exam types with their weightings</p>
+    </div>
+    <div class="card" style="padding:0;">
+      <div class="table-wrap" id="examTable" style="border:none;"></div>
+    </div>
+    <div class="card" style="margin-top:16px;background:var(--surface-2);">
+      <div style="font-size:13px;color:var(--ink-3);">
+        <strong><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span> How it works:</strong> Each exam component (CA 1, CA 2, Final Exam) has a max score and weight.
+        The final weighted average is: <em>Σ(score × weight) / Σ(weights)</em>. 
+        Example: CA1=30pts, CA2=30pts, Exam=100pts with weights 1,1,3 → weighted average out of 100.
+      </div>
+    </div>
+  `;
+
+  await loadExams();
+})();
+
+async function loadExams() {
+  showLoader('#examTable');
+  const { data, error } = await db.from('exams').select('*')
+    .eq('school_id', currentUser.school_id).order('name');
+  if (error) { showError('#examTable', error.message); return; }
+  allExams = data || [];
+
+  if (!allExams.length) { showEmpty('#examTable', 'No exam components yet. Add one to get started.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>'); return; }
+
+  document.getElementById('examTable').innerHTML = `
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Max Score</th><th>Weight</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        ${allExams.map(e => `
+          <tr>
+            <td><strong>${e.name}</strong></td>
+            <td>${e.max_score}</td>
+            <td>${e.weight}</td>
+            <td>
+              <div class="td-action">
+                <button class="btn btn--secondary btn--sm" onclick="openEdit('${e.id}')">Edit</button>
+                <button class="btn btn--ghost btn--sm" onclick="deleteExam('${e.id}','${e.name}')">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function openAdd() {
+  document.getElementById('examModalTitle').textContent = 'Add Exam Component';
+  document.getElementById('examId').value = '';
+  document.getElementById('examName').value = '';
+  document.getElementById('examMax').value = '100';
+  document.getElementById('examWeight').value = '1';
+  document.getElementById('examError').style.display = 'none';
+  openModal('examModal');
+}
+
+function openEdit(id) {
+  const e = allExams.find(e => e.id === id);
+  if (!e) return;
+  document.getElementById('examModalTitle').textContent = 'Edit Exam Component';
+  document.getElementById('examId').value = e.id;
+  document.getElementById('examName').value = e.name;
+  document.getElementById('examMax').value = e.max_score;
+  document.getElementById('examWeight').value = e.weight;
+  document.getElementById('examError').style.display = 'none';
+  openModal('examModal');
+}
+
+async function saveExam() {
+  const id = document.getElementById('examId').value;
+  const name = document.getElementById('examName').value.trim();
+  const max_score = Number(document.getElementById('examMax').value);
+  const weight = Number(document.getElementById('examWeight').value);
+  const errEl = document.getElementById('examError');
+  if (!name) { errEl.textContent = 'Name is required.'; errEl.style.display = 'block'; return; }
+
+  if (id) {
+    const { error } = await db.from('exams').update({ name, max_score, weight }).eq('id', id);
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+  } else {
+    const { error } = await db.from('exams').insert({ school_id: currentUser.school_id, name, max_score, weight });
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+  }
+  toast('Saved!', 'success');
+  closeModal('examModal');
+  await loadExams();
+}
+
+async function deleteExam(id, name) {
+  if (!confirm(`Delete "${name}"? This will also delete all results using this exam component.`)) return;
+  const { error } = await db.from('exams').delete().eq('id', id);
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Deleted.', 'success');
+  await loadExams();
+}
+</script>
+<script src="../../js/pwa.js"></script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

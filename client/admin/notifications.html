@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <title>EduTrack NG — Notifications Centre</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .notif-compose { background:linear-gradient(135deg,#0a6e3f,#1a2e6e); border-radius:var(--radius); padding:24px; color:white; margin-bottom:24px; }
+    .notif-compose h2 { font-size:18px; font-weight:800; margin:0 0 4px; }
+    .notif-compose p  { font-size:13px; color:rgba(255,255,255,.7); margin:0 0 20px; }
+    .compose-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media(max-width:640px){ .compose-grid { grid-template-columns:1fr; } }
+    .compose-label { font-size:11px; font-weight:700; color:rgba(255,255,255,.7); text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
+    .compose-input  { width:100%; padding:9px 12px; border-radius:var(--radius-sm); border:1.5px solid rgba(255,255,255,.25); background:rgba(255,255,255,.12); color:white; font-size:13px; outline:none; }
+    .compose-input::placeholder { color:rgba(255,255,255,.4); }
+    .compose-input:focus { border-color:rgba(255,255,255,.6); background:rgba(255,255,255,.18); }
+    .compose-input option { background:#1a2e6e; color:white; }
+    .type-chips { display:flex; gap:8px; flex-wrap:wrap; }
+    .type-chip { padding:5px 14px; border-radius:100px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid rgba(255,255,255,.2); color:rgba(255,255,255,.7); background:rgba(255,255,255,.08); transition:all .15s; }
+    .type-chip:hover { border-color:rgba(255,255,255,.5); color:white; }
+    .type-chip.active { background:white; color:var(--primary-dark); border-color:white; }
+    .audience-chips { display:flex; gap:8px; flex-wrap:wrap; }
+    .audience-chip { padding:5px 14px; border-radius:100px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid rgba(255,255,255,.2); color:rgba(255,255,255,.7); background:rgba(255,255,255,.08); transition:all .15s; }
+    .audience-chip:hover { border-color:rgba(255,255,255,.5); color:white; }
+    .audience-chip.active { background:rgba(255,255,255,.22); border-color:rgba(255,255,255,.5); color:white; }
+    .char-count { font-size:11px; color:rgba(255,255,255,.5); text-align:right; margin-top:4px; }
+    /* Sent notifications list */
+    .notif-row { display:flex; gap:12px; padding:14px 18px; border-bottom:1px solid var(--border); align-items:flex-start; transition:background .1s; }
+    .notif-row:hover { background:var(--surface-2); }
+    .notif-row:last-child { border-bottom:none; }
+    .notif-row__icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+    .notif-row__body { flex:1; min-width:0; }
+    .notif-row__title { font-size:14px; font-weight:700; margin-bottom:2px; }
+    .notif-row__text  { font-size:13px; color:var(--ink-2); line-height:1.4; }
+    .notif-row__meta  { font-size:11px; color:var(--ink-3); margin-top:4px; display:flex; gap:10px; flex-wrap:wrap; }
+    .notif-type-badge { padding:2px 8px; border-radius:100px; font-size:10px; font-weight:700; text-transform:uppercase; }
+    .stats-row { display:flex; gap:16px; padding:12px 18px; background:var(--surface-2); border-bottom:1px solid var(--border); }
+    .stat-item { font-size:13px; color:var(--ink-3); }
+    .stat-item strong { color:var(--ink); }
+    .delete-btn { padding:4px 10px; border:none; border-radius:4px; background:var(--surface-3); color:var(--ink-3); font-size:12px; cursor:pointer; }
+    .delete-btn:hover { background:#fee2e2; color:#991b1b; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, allNotifications=[];
+let selectedType='info', selectedAudience=['all'];
+let allClasses=[], currentTerm=null, allStaff=[];
+
+const TYPE_OPTIONS = [
+  { key:'info',       label:'ℹ️ Info',       bg:'#dbeafe', color:'#1d4ed8' },
+  { key:'success',    label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Success',    bg:'#dcfce7', color:'#166534' },
+  { key:'warning',    label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Warning',    bg:'#fef9c3', color:'#854d0e' },
+  { key:'urgent',     label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Urgent',     bg:'#fee2e2', color:'#991b1b' },
+  { key:'result',     label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Results',    bg:'#dcfce7', color:'#166534' },
+  { key:'fee',        label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span> Fees',       bg:'#fef3c7', color:'#92400e' },
+  { key:'attendance', label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> Attendance', bg:'#ede9fe', color:'#5b21b6' },
+];
+
+const AUDIENCE_OPTIONS = [
+  { key:'all',     label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span> All Students' },
+  { key:'class',   label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>️ Specific Class' },
+  { key:'student', label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> Specific Student' },
+  { key:'staff',   label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/><line x1="14" y1="10" x2="18" y2="14"/></svg></span> Specific Staff' },
+  { key:'allstaff',label:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> All Staff' },
+];
+
+(async()=>{
+  currentUser = await initAdminLayout('notifications','Notifications Centre');
+  if(!currentUser) return;
+
+  document.getElementById('topbarActions').innerHTML=`
+    <button class="btn btn--secondary btn--sm" onclick="loadNotifications()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span> Refresh</button>
+  `;
+
+  const [termR, classR, staffR] = await Promise.all([
+    db.from('terms').select('*').eq('school_id',currentUser.school_id).eq('is_current',true).maybeSingle(),
+    db.from('classes').select('id,name').eq('school_id',currentUser.school_id).order('name'),
+    db.from('users').select('id,full_name,role').eq('school_id',currentUser.school_id).eq('is_active',true)
+      .not('role','in','(admin,parent,saas_owner)').order('full_name'),
+  ]);
+  currentTerm = termR.data;
+  allClasses  = classR.data||[];
+  allStaff    = staffR.data||[];
+
+  renderPage();
+  await loadNotifications();
+})();
+
+function renderPage(){
+  document.getElementById('pageBody').innerHTML=`
+    <div class="page-header">
+      <div><h1 class="page-title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Notifications Centre</h1>
+      <p class="page-subtitle">Compose and send notifications to students. They appear instantly in the student portal.</p></div>
+    </div>
+
+    <!-- Compose panel -->
+    <div class="notif-compose">
+      <h2><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span> Compose Notification</h2>
+      <p>Notifications are delivered instantly to the student portal and appear with an unread badge.</p>
+
+      <div class="compose-grid" style="margin-bottom:14px;">
+        <div>
+          <div class="compose-label">Type</div>
+          <div class="type-chips">
+            ${TYPE_OPTIONS.map(t=>`<div class="type-chip ${selectedType===t.key?'active':''}" onclick="setType('${t.key}')">${t.label}</div>`).join('')}
+          </div>
+        </div>
+        <div>
+          <div class="compose-label">Audience</div>
+          <div class="audience-chips">
+            ${AUDIENCE_OPTIONS.map(a=>`<div class="audience-chip ${selectedAudience.includes(a.key)?'active':''}" onclick="toggleAudience('${a.key}')">${a.label}</div>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Class / Student picker (shown conditionally) -->
+      <div id="targetPicker" style="margin-bottom:14px;display:none;">
+        <div id="classPickerWrap" style="display:none;margin-bottom:10px;">
+          <div class="compose-label">Select Class</div>
+          <select class="compose-input" id="targetClass">
+            <option value="">— All students in class —</option>
+            ${allClasses.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+          </select>
+        </div>
+        <div id="studentPickerWrap" style="display:none;">
+          <div class="compose-label">Student Admission No. / Name</div>
+          <input class="compose-input" id="targetStudentSearch" placeholder="Type name or admission no…" oninput="searchStudents(this.value)">
+          <div id="studentSearchResults" style="margin-top:6px;max-height:150px;overflow-y:auto;border-radius:var(--radius-sm);background:rgba(255,255,255,.1);"></div>
+          <input type="hidden" id="targetStudentId">
+        </div>
+        <div id="staffPickerWrap" style="display:none;">
+          <div class="compose-label">Select Staff Member</div>
+          <select class="compose-input" id="targetStaffId">
+            <option value="">— Select Staff —</option>
+            ${allStaff.map(s=>`<option value="${s.id}">${s.full_name} (${s.role.replace('_',' ')})</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <div class="compose-label">Title</div>
+        <input class="compose-input" id="notifTitle" maxlength="120" placeholder="e.g. First Term Results Published" oninput="updateCharCount('titleCount',this.value.length,120)">
+        <div class="char-count"><span id="titleCount">0</span>/120</div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <div class="compose-label">Message Body</div>
+        <textarea class="compose-input" id="notifBody" rows="4" maxlength="800"
+          placeholder="Write your message here. Students will see this in their Notifications tab…"
+          oninput="updateCharCount('bodyCount',this.value.length,800)"
+          style="resize:vertical;min-height:90px;"></textarea>
+        <div class="char-count"><span id="bodyCount">0</span>/800</div>
+      </div>
+
+      <!-- Quick templates -->
+      <div style="margin-bottom:16px;">
+        <div class="compose-label" style="margin-bottom:8px;">Quick Templates</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="type-chip" onclick="useTemplate('result')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Results Published</button>
+          <button class="type-chip" onclick="useTemplate('fee')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span> Fee Reminder</button>
+          <button class="type-chip" onclick="useTemplate('holiday')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span> Holiday Notice</button>
+          <button class="type-chip" onclick="useTemplate('exam')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span> Exam Schedule</button>
+          <button class="type-chip" onclick="useTemplate('warning')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Attendance Warning</button>
+          <button class="type-chip" onclick="useTemplate('resumption')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span> Resumption Date</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <button class="btn btn--primary" onclick="sendNotification()" id="sendBtn" style="background:white;color:var(--primary-dark);font-weight:800;">
+          <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send Notification
+        </button>
+        <button class="btn btn--ghost btn--sm" onclick="clearCompose()" style="color:rgba(255,255,255,.7);">Clear</button>
+        <span id="sendStatus" style="font-size:12px;color:rgba(255,255,255,.7);"></span>
+      </div>
+    </div>
+
+    <!-- Sent notifications -->
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:15px;font-weight:700;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span> Sent Notifications</div>
+        <div style="display:flex;gap:8px;">
+          <select class="form-control form-control--sm" id="typeFilter" onchange="filterNotifications()" style="width:140px;font-size:12px;">
+            <option value="">All Types</option>
+            ${TYPE_OPTIONS.map(t=>`<option value="${t.key}">${t.label}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div id="sentStats" class="stats-row" style="display:none;"></div>
+      <div id="notifList">
+        <div class="et-loader"><div class="et-spinner"></div><p>Loading…</p></div>
+      </div>
+    </div>
+  `;
+}
+
+function setType(type){
+  selectedType=type;
+  document.querySelectorAll('.type-chip').forEach(el=>{
+    el.classList.toggle('active', el.onclick?.toString().includes("'"+type+"'"));
+  });
+}
+
+function toggleAudience(key){
+  selectedAudience=[key]; // single select for simplicity
+  document.querySelectorAll('.audience-chip').forEach(el=>{
+    el.classList.toggle('active', el.onclick?.toString().includes("'"+key+"'"));
+  });
+  const picker=document.getElementById('targetPicker');
+  const classPicker=document.getElementById('classPickerWrap');
+  const studentPicker=document.getElementById('studentPickerWrap');
+  const staffPicker=document.getElementById('staffPickerWrap');
+  if(key==='class'){
+    picker.style.display='block';classPicker.style.display='block';studentPicker.style.display='none';if(staffPicker)staffPicker.style.display='none';
+  } else if(key==='student'){
+    picker.style.display='block';classPicker.style.display='none';studentPicker.style.display='block';if(staffPicker)staffPicker.style.display='none';
+  } else if(key==='staff'){
+    picker.style.display='block';classPicker.style.display='none';studentPicker.style.display='none';if(staffPicker)staffPicker.style.display='block';
+  } else {
+    picker.style.display='none';classPicker.style.display='none';studentPicker.style.display='none';if(staffPicker)staffPicker.style.display='none';
+  }
+}
+
+function updateCharCount(id,len,max){
+  const el=document.getElementById(id);
+  if(el){ el.textContent=len; el.style.color=len>max*0.9?'#f87171':'rgba(255,255,255,.5)'; }
+}
+
+async function searchStudents(q){
+  if(q.length<2){ document.getElementById('studentSearchResults').innerHTML=''; return; }
+  const {data} = await db.from('students').select('id,full_name,admission_no')
+    .eq('school_id',currentUser.school_id).eq('is_active',true)
+    .or('full_name.ilike.%'+q+'%,admission_no.ilike.%'+q+'%').limit(8);
+  const res=document.getElementById('studentSearchResults');
+  if(!data?.length){ res.innerHTML='<div style="padding:8px;font-size:12px;color:rgba(255,255,255,.5);">No students found</div>'; return; }
+  res.innerHTML=data.map(s=>`
+    <div onclick="selectStudent('${s.id}','${s.full_name}')"
+         style="padding:8px 12px;cursor:pointer;font-size:13px;border-radius:4px;margin-bottom:2px;background:rgba(255,255,255,.08);"
+         onmouseover="this.style.background='rgba(255,255,255,.18)'" onmouseout="this.style.background='rgba(255,255,255,.08)'">
+      <strong>${s.full_name}</strong> <span style="color:rgba(255,255,255,.5);font-size:11px;">${s.admission_no||''}</span>
+    </div>`).join('');
+}
+
+function selectStudent(id,name){
+  document.getElementById('targetStudentId').value=id;
+  document.getElementById('targetStudentSearch').value=name;
+  document.getElementById('studentSearchResults').innerHTML='';
+}
+
+const TEMPLATES = {
+  result:     { type:'result',  title:'First Term Results Published',  body:'Dear student, your First Term results have been published. Please log in to the student portal to view your scores, grades and class position.' },
+  fee:        { type:'fee',     title:'School Fee Payment Reminder',   body:'This is a reminder that school fees for this term are due. Please ensure payment is made to avoid any disruption to your studies. Contact the bursary office if you need assistance.' },
+  holiday:    { type:'success', title:'Holiday Notice',                body:'We wish all our students a restful and productive holiday. School resumes on the date to be communicated. Stay safe and keep reading!' },
+  exam:       { type:'info',    title:'End of Term Examination Notice', body:'End of term examinations begin soon. Please review your timetable on the portal and prepare adequately. Ensure you arrive on time with your materials.' },
+  warning:    { type:'warning', title:'Attendance Warning',            body:'Your attendance record for this term is below the required 75% minimum. Continued absence may affect your results. Please see your class teacher immediately.' },
+  resumption: { type:'info',    title:'Resumption Date Announcement',  body:'This is to inform all students that the new term begins on the announced date. Please ensure you resume on time with all required materials and fees.' },
+};
+
+function useTemplate(key){
+  const t=TEMPLATES[key];
+  if(!t) return;
+  document.getElementById('notifTitle').value=t.title;
+  document.getElementById('notifBody').value=t.body;
+  updateCharCount('titleCount',t.title.length,120);
+  updateCharCount('bodyCount',t.body.length,800);
+  setType(t.type);
+}
+
+function clearCompose(){
+  document.getElementById('notifTitle').value='';
+  document.getElementById('notifBody').value='';
+  updateCharCount('titleCount',0,120);
+  updateCharCount('bodyCount',0,800);
+  document.getElementById('sendStatus').textContent='';
+}
+
+async function sendNotification(){
+  const title=(document.getElementById('notifTitle')?.value||'').trim();
+  const body=(document.getElementById('notifBody')?.value||'').trim();
+  if(!title){ toast('Please enter a notification title.','error'); return; }
+  if(!body)  { toast('Please enter a message body.','error'); return; }
+
+  const btn=document.getElementById('sendBtn');
+  const status=document.getElementById('sendStatus');
+  btn.disabled=true; btn.textContent='Sending…';
+
+  // Determine recipients
+  let rows=[];
+  const audience=selectedAudience[0]||'all';
+
+  if(audience==='all'){
+    // Broadcast: both user_id and student_id are null — visible to everyone in school
+    rows=[{ school_id:currentUser.school_id, user_id:null, student_id:null, title, body, type:selectedType, sender_role:'admin', sender_name:currentUser.full_name }];
+  } else if(audience==='class'){
+    const classId=document.getElementById('targetClass')?.value;
+    if(!currentTerm){
+      toast('No active term. Please set a current term first.','error');
+      btn.disabled=false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send Notification'; return;
+    }
+    let enrollQ = db.from('enrollments').select('student_id').eq('term_id',currentTerm.id);
+    if(classId) enrollQ = enrollQ.eq('class_id', classId);
+    const {data:enroll} = await enrollQ;
+    if(!enroll?.length){
+      toast('No students found in this class/term.','error');
+      btn.disabled=false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send Notification'; return;
+    }
+    rows=(enroll).map(e=>({
+      school_id: currentUser.school_id,
+      user_id:   null,
+      student_id: e.student_id,
+      title, body, type: selectedType, sender_role:'admin', sender_name:currentUser.full_name
+    }));
+  } else if(audience==='student'){
+    const studentId=document.getElementById('targetStudentId')?.value;
+    if(!studentId){ toast('Please search and select a student.','error'); btn.disabled=false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send Notification'; return; }
+    rows=[{ school_id:currentUser.school_id, user_id:null, student_id:studentId, title, body, type:selectedType, sender_role:'admin', sender_name:currentUser.full_name }];
+  } else if(audience==='staff'){
+    // Send to a specific staff member's dashboard
+    const staffId=document.getElementById('targetStaffId')?.value;
+    if(!staffId){ toast('Please select a staff member.','error'); btn.disabled=false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send Notification'; return; }
+    rows=[{ school_id:currentUser.school_id, user_id:staffId, staff_id:staffId, student_id:null, title, body, type:selectedType, sender_role:'admin', sender_name:currentUser.full_name }];
+  } else if(audience==='allstaff'){
+    // Send to ALL active staff (excluding admin, parent)
+    rows=allStaff.map(s=>({
+      school_id: currentUser.school_id, user_id:s.id, staff_id:s.id, student_id:null,
+      title, body, type:selectedType, sender_role:'admin', sender_name:currentUser.full_name
+    }));
+    if(!rows.length){ toast('No active staff found.','error'); btn.disabled=false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send Notification'; return; }
+  }
+
+  if(!rows.length){ toast('No recipients found.','error'); btn.disabled=false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send Notification'; return; }
+
+  // Insert in batches of 200
+  let totalSent=0, error=null;
+  for(let i=0;i<rows.length;i+=200){
+    const {error:e} = await db.from('notifications').insert(rows.slice(i,i+200));
+    if(e){ error=e; break; }
+    totalSent+=rows.slice(i,i+200).length;
+  }
+
+  btn.disabled=false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send Notification';
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  const recipientLabel=audience==='all'?'all students':audience==='class'?totalSent+' students in class':document.getElementById('targetStudentSearch')?.value||'student';
+  status.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Sent to '+recipientLabel;
+  toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Notification sent to '+totalSent+(totalSent===1?' recipient':' recipients'),'success');
+  clearCompose();
+  await loadNotifications();
+}
+
+async function loadNotifications(){
+  const {data,error} = await db.from('notifications')
+    .select('id,title,body,type,is_read,user_id,created_at')
+    .eq('school_id',currentUser.school_id)
+    .order('created_at',{ascending:false})
+    .limit(100);
+
+  allNotifications = data||[];
+  renderSentList(allNotifications);
+}
+
+function filterNotifications(){
+  const type=document.getElementById('typeFilter')?.value||'';
+  const filtered=type?allNotifications.filter(n=>n.type===type):allNotifications;
+  renderSentList(filtered);
+}
+
+function renderSentList(list){
+  // Stats
+  const total=list.length, unread=list.filter(n=>!n.is_read).length;
+  const broadcasts=list.filter(n=>!n.user_id).length;
+  const statsEl=document.getElementById('sentStats');
+  if(statsEl&&list.length>0){
+    statsEl.style.display='flex';
+    statsEl.innerHTML=`
+      <div class="stat-item">Total: <strong>${total}</strong></div>
+      <div class="stat-item">Unread: <strong style="color:var(--primary);">${unread}</strong></div>
+      <div class="stat-item">Broadcasts: <strong>${broadcasts}</strong></div>
+      <div class="stat-item">Individual: <strong>${total-broadcasts}</strong></div>`;
+  }
+
+  if(!list.length){
+    document.getElementById('notifList').innerHTML='<div class="et-empty" style="padding:40px 0;"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span></div><p>No notifications sent yet. Use the composer above to send one.</p></div>';
+    return;
+  }
+
+  const typeMap={
+    info:{bg:'#dbeafe',color:'#1d4ed8',icon:'ℹ️'},
+    success:{bg:'#dcfce7',color:'#166534',icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>'},
+    warning:{bg:'#fef9c3',color:'#854d0e',icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️'},
+    urgent:{bg:'#fee2e2',color:'#991b1b',icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>'},
+    result:{bg:'#dcfce7',color:'#166534',icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span>'},
+    fee:{bg:'#fef3c7',color:'#92400e',icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>'},
+    attendance:{bg:'#ede9fe',color:'#5b21b6',icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span>'},
+  };
+
+  document.getElementById('notifList').innerHTML=list.map(n=>{
+    const s=typeMap[n.type]||{bg:'#f3f4f6',color:'#374151',icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>'};
+    return `
+      <div class="notif-row">
+        <div class="notif-row__icon" style="background:${s.bg};">${s.icon}</div>
+        <div class="notif-row__body">
+          <div class="notif-row__title">${escHtml(n.title)}</div>
+          <div class="notif-row__text">${escHtml((n.body||'').substring(0,120))}${n.body?.length>120?'…':''}</div>
+          <div class="notif-row__meta">
+            <span class="notif-type-badge" style="background:${s.bg};color:${s.color};">${n.type}</span>
+            <span>${n.user_id?'Individual':'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span> Broadcast'}</span>
+            <span>${!n.is_read?'<span style="color:var(--primary);font-weight:700;">● Unread</span>':'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Read'}</span>
+            <span>${timeAgo(n.created_at)}</span>
+          </div>
+        </div>
+        <button class="delete-btn" onclick="deleteNotif('${n.id}')">Delete</button>
+      </div>`;
+  }).join('');
+}
+
+async function deleteNotif(id){
+  if(!confirm('Delete this notification?')) return;
+  const {error} = await db.from('notifications').delete().eq('id',id);
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  allNotifications=allNotifications.filter(n=>n.id!==id);
+  renderSentList(allNotifications);
+  toast('Notification deleted.','info');
+}
+
+function timeAgo(d){
+  const diff=Date.now()-new Date(d).getTime(), m=Math.floor(diff/60000);
+  if(m<1)return'Just now';if(m<60)return m+'m ago';
+  const h=Math.floor(m/60);if(h<24)return h+'h ago';
+  const dy=Math.floor(h/24);if(dy<7)return dy+'d ago';
+  return new Date(d).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'});
+}
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+<script src="../js/pwa.js"></script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

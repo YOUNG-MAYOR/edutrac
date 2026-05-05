@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <title>EduTrack NG — Daily Activities</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    .child-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;}
+    .child-tab{padding:8px 16px;border-radius:100px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--ink-3);transition:var(--transition);}
+    .child-tab.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+    .filter-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+    .filter-tab{padding:5px 12px;border-radius:100px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--ink-3);transition:var(--transition);}
+    .filter-tab.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+    .att-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
+    .att-cell{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;}
+    .att-cell__val{font-size:22px;font-weight:900;line-height:1;}
+    .att-cell__label{font-size:11px;color:var(--ink-3);margin-top:3px;font-weight:600;}
+    @media(max-width:500px){.att-summary{grid-template-columns:repeat(2,1fr);}}
+    .day-group{margin-bottom:20px;}
+    .day-header{font-size:13px;font-weight:700;color:var(--ink-2);padding:6px 0;margin-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+    .day-att-badge{padding:2px 10px;border-radius:100px;font-size:11px;font-weight:700;}
+    .att-P{background:#dcfce7;color:#15803d;}
+    .att-A{background:#fee2e2;color:#dc2626;}
+    .att-L{background:#fef9c3;color:#a16207;}
+    .att-E{background:#dbeafe;color:#1d4ed8;}
+    .activity-card{border:1px solid var(--border);border-radius:var(--radius);padding:14px;background:var(--surface);margin-bottom:10px;display:flex;gap:12px;align-items:flex-start;}
+    .activity-card__icon{font-size:24px;flex-shrink:0;margin-top:2px;}
+    .activity-card__body{flex:1;}
+    .activity-card__type{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-4);}
+    .activity-card__title{font-size:14px;font-weight:700;color:var(--ink);margin:3px 0;}
+    .activity-card__desc{font-size:13px;color:var(--ink-3);line-height:1.45;}
+    .activity-card__subject{display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700;background:var(--primary-light);color:var(--primary);margin-top:6px;}
+    .activity-card__due{display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700;background:#fff7ed;color:#c2410c;margin-left:6px;margin-top:6px;}
+    .activity-card__teacher{font-size:11px;color:var(--ink-4);margin-top:4px;}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let user, children = [], activeChild = null, activityFilter = 'all';
+let activitiesData = [], attendanceData = [];
+
+const ACT_TYPES = {
+  lesson:       { icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>', label:'Lesson' },
+  assignment:   { icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>', label:'Assignment' },
+  homework:     { icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>', label:'Homework' },
+  quiz:         { icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.98-3 2.5 2.5 0 0 1-1.32-4.24 3 3 0 0 1 .34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.98-3 2.5 2.5 0 0 0 1.32-4.24 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2"/></svg></span>', label:'Quiz' },
+  announcement: { icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>', label:'Announcement' },
+  note:         { icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span>', label:'Note' },
+  event:        { icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>', label:'Event' },
+};
+const ATT_LABELS = { P:'Present', A:'Absent', L:'Late', E:'Excused' };
+
+(async () => {
+  user = await initPage(['parent'], 'Daily Activities', 'activities');
+  if (!user) return;
+
+  document.getElementById('topbarActions').innerHTML =
+    '<a href="complaints.html" class="btn btn--primary btn--sm"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span>️ Send Message</a>';
+
+  const { data: links } = await db.from('parent_students')
+    .select('relationship, students(id,full_name,admission_no)')
+    .eq('parent_id', user.id);
+
+  children = (links || []).map(l => ({ ...(l.students||{}), relationship: l.relationship })).filter(c => c.id);
+
+  if (!children.length) {
+    document.getElementById('pageBody').innerHTML =
+      '<div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span></div><p>No children linked to your account.<br>Contact the school admin.</p></div>';
+    return;
+  }
+
+  activeChild = children[0].id;
+  await loadActivities();
+})();
+
+async function loadActivities() {
+  if (!activeChild) return;
+  showLoader('#pageBody', 'Loading activities…');
+
+  const { data, error } = await db.rpc('get_parent_daily_activities', {
+    p_student_id: activeChild,
+    p_school_id:  user.school_id,
+    p_days:       21
+  });
+
+  if (error || !data || !data.ok) {
+    showError('#pageBody', 'Could not load activities: ' + (error?.message || 'unknown error'));
+    return;
+  }
+
+  activitiesData = data.activities || [];
+  attendanceData = data.attendance || [];
+  renderPage();
+}
+
+function renderPage() {
+  const body = document.getElementById('pageBody');
+  if (!body) return;
+
+  const attCounts = { P:0, A:0, L:0, E:0 };
+  attendanceData.forEach(a => { if (attCounts[a.status] !== undefined) attCounts[a.status]++; });
+  const total = attendanceData.length;
+
+  const filtered = activityFilter === 'all'
+    ? activitiesData
+    : activitiesData.filter(a => a.activity_type === activityFilter);
+
+  const byDate = {};
+  filtered.forEach(a => {
+    if (!byDate[a.activity_date]) byDate[a.activity_date] = [];
+    byDate[a.activity_date].push(a);
+  });
+  const attByDate = {};
+  attendanceData.forEach(a => { attByDate[a.date] = a.status; });
+  const dates = Object.keys(byDate).sort().reverse();
+
+  const childName = children.find(c => c.id === activeChild)?.full_name || '';
+
+  body.innerHTML =
+    '<div class="page-header">' +
+      '<h1><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span> Daily Activities</h1>' +
+      '<p>Track your child\'s lessons, assignments and school activities</p>' +
+    '</div>' +
+
+    (children.length > 1 ?
+      '<div class="child-tabs">' +
+        children.map(c =>
+          '<div class="child-tab ' + (c.id===activeChild?'active':'') + '" onclick="switchChild(\'' + c.id + '\')">' +
+            escHtml(c.full_name.split(' ')[0]) +
+          '</div>'
+        ).join('') +
+      '</div>'
+    : '<div style="font-size:13px;font-weight:700;color:var(--ink-2);margin-bottom:12px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> ' + escHtml(childName) + '</div>') +
+
+    '<div class="att-summary">' +
+      '<div class="att-cell"><div class="att-cell__val" style="color:#15803d;">' + attCounts.P + '</div><div class="att-cell__label">Present</div></div>' +
+      '<div class="att-cell"><div class="att-cell__val" style="color:#dc2626;">' + attCounts.A + '</div><div class="att-cell__label">Absent</div></div>' +
+      '<div class="att-cell"><div class="att-cell__val" style="color:#a16207;">' + attCounts.L + '</div><div class="att-cell__label">Late</div></div>' +
+      '<div class="att-cell"><div class="att-cell__val" style="color:#1d4ed8;">' + attCounts.E + '</div><div class="att-cell__label">Excused</div></div>' +
+    '</div>' +
+    '<p style="font-size:12px;color:var(--ink-4);text-align:center;margin:-14px 0 20px;">Last ' + total + ' school days recorded</p>' +
+
+    '<div class="filter-tabs">' +
+      ['all','lesson','assignment','homework','quiz','announcement','event'].map(f =>
+        '<div class="filter-tab ' + (f===activityFilter?'active':'') + '" onclick="setFilter(\'' + f + '\')">' +
+          f.charAt(0).toUpperCase() + f.slice(1) +
+        '</div>'
+      ).join('') +
+    '</div>' +
+
+    (dates.length === 0
+      ? '<div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span></div><p>No activities in the last 3 weeks.</p></div>'
+      : dates.map(date => {
+          const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long' });
+          const att = attByDate[date];
+          return '<div class="day-group">' +
+            '<div class="day-header"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span> ' + dateLabel +
+              (att ? ' <span class="day-att-badge att-' + att + '">' + (ATT_LABELS[att]||att) + '</span>' : '') +
+            '</div>' +
+            byDate[date].map(a => {
+              const t = ACT_TYPES[a.activity_type] || { icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>', label: a.activity_type };
+              return '<div class="activity-card">' +
+                '<div class="activity-card__icon">' + t.icon + '</div>' +
+                '<div class="activity-card__body">' +
+                  '<div class="activity-card__type">' + t.label + '</div>' +
+                  '<div class="activity-card__title">' + escHtml(a.title) + '</div>' +
+                  (a.description ? '<div class="activity-card__desc">' + escHtml(a.description) + '</div>' : '') +
+                  '<div>' +
+                    (a.subject_name ? '<span class="activity-card__subject"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> ' + escHtml(a.subject_name) + '</span>' : '') +
+                    (a.due_date ? '<span class="activity-card__due">⏰ Due: ' + formatDate(a.due_date) + '</span>' : '') +
+                  '</div>' +
+                  (a.created_by_name ? '<div class="activity-card__teacher">Posted by ' + escHtml(a.created_by_name) + '</div>' : '') +
+                '</div>' +
+              '</div>';
+            }).join('') +
+          '</div>';
+        }).join('')
+    ) +
+    '<div style="height:80px;"></div>';
+}
+
+async function switchChild(id) {
+  activeChild = id;
+  activityFilter = 'all';
+  await loadActivities();
+}
+
+function setFilter(f) {
+  activityFilter = f;
+  renderPage();
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+<script src="../../js/pwa.js"></script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

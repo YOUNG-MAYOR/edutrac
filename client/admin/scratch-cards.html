@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <title>EduTrack NG — Scratch Cards</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    @media print {
+      .no-print{display:none!important;}
+      body{background:white;padding:8mm;}
+      .cards-grid{grid-template-columns:repeat(3,1fr)!important;gap:6px!important;}
+      @page{margin:8mm;size:A4;}
+    }
+    .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;margin-top:20px;}
+    .scratch-card{width:100%;font-family:Arial,sans-serif;border:2px solid #1a2e6e;border-radius:6px;overflow:hidden;background:white;position:relative;break-inside:avoid;box-shadow:0 2px 8px rgba(0,0,0,.12);transition:outline .12s,opacity .12s;}
+    .sc-hdr{background:linear-gradient(135deg,#1a2e6e,#2041a3);padding:8px 10px;display:flex;align-items:center;gap:8px;}
+    .sc-logo{width:34px;height:34px;background:white;border-radius:50%;border:1.5px solid #f0c040;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;overflow:hidden;}
+    .sc-logo img{width:100%;height:100%;object-fit:cover;}
+    .sc-hdr-text{flex:1;text-align:center;color:white;}
+    .sc-school{font-size:8.5px;font-weight:900;text-transform:uppercase;letter-spacing:.3px;line-height:1.2;}
+    .sc-subtitle{font-size:7px;color:rgba(255,255,255,.7);margin-top:1px;}
+    .sc-title-bar{background:linear-gradient(90deg,#c8860a,#f0c040,#c8860a);text-align:center;padding:3px;font-size:8px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#1a1a00;}
+    .sc-body{padding:8px 10px;}
+    .sc-label{font-size:7.5px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;}
+    .sc-pin-box{background:#f5f5dc;border:1.5px solid #c8860a;border-radius:4px;padding:6px 8px;text-align:center;margin:4px 0 6px;}
+    .sc-pin{font-family:"Courier New",monospace;font-size:18px;font-weight:900;letter-spacing:4px;color:#1a2e6e;}
+    .sc-scratch-area{background:repeating-linear-gradient(45deg,#c0c0c0,#c0c0c0 2px,#a8a8a8 2px,#a8a8a8 4px);border-radius:3px;padding:5px 8px;text-align:center;font-size:8px;font-weight:700;color:#555;margin-bottom:6px;letter-spacing:.5px;}
+    .sc-instructions{font-size:7.5px;color:#444;line-height:1.5;text-align:center;border-top:1px dashed #ccc;padding-top:5px;}
+    .sc-footer{background:#f0f4f8;padding:4px 8px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #ddd;}
+    .sc-batch{font-size:7px;color:#888;font-style:italic;}
+    .sc-num{font-size:8px;font-weight:700;color:#1a2e6e;}
+    .sc-holo{height:4px;background:linear-gradient(90deg,#ff0080,#ff8c00,#ffed00,#00ff80,#00c8ff,#a855f7,#ff0080);}
+    .scratch-card--used{opacity:.45;}
+    .scratch-card--used::after{content:'EXPIRED';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#dc2626;opacity:.5;transform:rotate(-15deg);pointer-events:none;}
+    .scratch-card--partial{border-color:#f59e0b!important;}
+    .scratch-card--partial::after{content:'IN USE';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#d97706;opacity:.25;transform:rotate(-15deg);pointer-events:none;}
+    .batch-group{margin-bottom:28px;}
+    .batch-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;flex-wrap:wrap;gap:8px;}
+    .batch-title{font-size:14px;font-weight:700;}
+    .batch-stats{display:flex;gap:10px;font-size:12px;align-items:center;flex-wrap:wrap;}
+    /* Selection */
+    .sc-checkbox-wrap{position:absolute;top:5px;right:5px;z-index:10;}
+    .sc-checkbox-wrap input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:var(--primary);}
+    .scratch-card.is-selected{outline:3px solid var(--primary);outline-offset:-2px;}
+    /* Sticky selection bar */
+    #selectionBar{position:sticky;top:64px;z-index:40;background:var(--primary);color:#fff;padding:10px 18px;display:none;align-items:center;gap:12px;border-radius:var(--radius);margin-bottom:16px;box-shadow:var(--shadow-lg);flex-wrap:wrap;}
+    #selectionBar.active{display:flex;}
+    /* Delete modal */
+    .del-overlay{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.5);align-items:center;justify-content:center;padding:20px;}
+    .del-overlay.active{display:flex;}
+    .del-box{background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:460px;padding:28px;box-shadow:var(--shadow-lg);animation:modalIn .2s ease;}
+    .del-box h3{font-size:18px;font-weight:700;color:var(--danger);margin-bottom:8px;}
+    .del-box p{font-size:14px;color:var(--ink-2);margin-bottom:20px;line-height:1.6;}
+    .del-box .acts{display:flex;gap:10px;justify-content:flex-end;}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="del-overlay" id="delModal">
+  <div class="del-box">
+    <h3>⚠ Confirm Deletion</h3>
+    <p id="delMsg"></p>
+    <div class="acts">
+      <button class="btn btn--secondary" onclick="closeDelModal()">Cancel</button>
+      <button class="btn btn--danger" id="delConfirmBtn" onclick="executeDelete()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+        Delete Cards
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+<script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, schoolInfo = {};
+let allCards = [];
+let selectedIds = new Set();
+let pendingDeleteIds = [];
+
+(async () => {
+  currentUser = await initAdminLayout('scratch-cards', 'Scratch Cards');
+  if (!currentUser) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <button class="btn btn--secondary no-print" onclick="window.print()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print Cards
+    </button>`;
+
+  const { data: school } = await db.from('schools').select('name,lga,state,logo_url').eq('id', currentUser.school_id).single();
+  schoolInfo = school || {};
+  renderPage();
+  await loadCards();
+})();
+
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:6px;"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+        Scratch Cards
+      </h1>
+      <p>Result checker &amp; registration PINs issued to your school</p>
+    </div>
+
+    <!-- Stats row -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;" class="no-print">
+      <div class="card" style="text-align:center;padding:18px 12px;">
+        <div style="font-size:26px;font-weight:800;color:var(--primary);" id="stTotal">—</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:3px;">Total Cards</div>
+      </div>
+      <div class="card" style="text-align:center;padding:18px 12px;">
+        <div style="font-size:26px;font-weight:800;color:var(--success);" id="stAvail">—</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:3px;">Unused</div>
+      </div>
+      <div class="card" style="text-align:center;padding:18px 12px;">
+        <div style="font-size:26px;font-weight:800;color:var(--info);" id="stPartial">—</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:3px;">In Use</div>
+      </div>
+      <div class="card" style="text-align:center;padding:18px 12px;">
+        <div style="font-size:26px;font-weight:800;color:var(--warning);" id="stUsed">—</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:3px;">Expired</div>
+      </div>
+    </div>
+
+    <!-- Filters + bulk actions -->
+    <div class="filter-bar no-print" style="margin-bottom:12px;">
+      <select class="form-control" id="filterBatch" onchange="onFilterChange()" style="max-width:230px;">
+        <option value="">All Batches</option>
+      </select>
+      <select class="form-control" id="filterStatus" onchange="onFilterChange()" style="max-width:155px;">
+        <option value="">All Status</option>
+        <option value="unused">Unused</option>
+        <option value="partial">In Use</option>
+        <option value="used">Expired</option>
+      </select>
+      <div style="flex:1;"></div>
+      <div class="btn-group">
+        <button class="btn btn--ghost btn--sm" onclick="selectByStatus('unused')">Select Unused</button>
+        <button class="btn btn--ghost btn--sm" onclick="selectByStatus('partial')">Select In Use</button>
+        <button class="btn btn--ghost btn--sm" onclick="selectByStatus('used')">Select Expired</button>
+        <button class="btn btn--ghost btn--sm" onclick="clearSelection()">Clear</button>
+      </div>
+      <span id="cardCount" style="font-size:13px;color:var(--ink-3);white-space:nowrap;"></span>
+    </div>
+
+    <!-- Selection action bar -->
+    <div id="selectionBar" class="no-print">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <strong id="selCount">0 selected</strong>
+      <button class="btn btn--danger btn--sm" onclick="requestDeleteSelected()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+        Delete Selected
+      </button>
+      <button class="btn btn--sm" style="background:#ffffff22;color:#fff;" onclick="clearSelection()">✕ Cancel</button>
+    </div>
+
+    <div id="cardsArea">
+      <div class="et-loader"><div class="et-spinner"></div><p>Loading cards…</p></div>
+    </div>
+
+    <div style="margin-top:28px;padding:16px;background:#fef3c7;border:1px solid #fbbf24;border-radius:var(--radius);" class="no-print">
+      <strong>📢 Need more scratch cards?</strong>
+      <p style="margin:6px 0 0;font-size:13px;color:#78350f;">
+        Contact the EduTrack NG platform team to generate and assign a new batch. Check <strong>Notifications</strong> for newly assigned batches.
+      </p>
+    </div>`;
+}
+
+async function loadCards() {
+  const { data, error } = await db.from('scratch_cards')
+    .select('id,pin,batch_id,card_type,is_used,used_at,student_id,uses_count,max_uses,created_at')
+    .eq('school_id', currentUser.school_id)
+    .order('created_at', { ascending: false });
+
+  if (error) { showError('#cardsArea', error.message); return; }
+  allCards = data || [];
+  updateStats();
+
+  const batches = [...new Set(allCards.map(c => c.batch_id).filter(Boolean))];
+  const sel = document.getElementById('filterBatch');
+  while (sel.options.length > 1) sel.remove(1);
+  batches.forEach(b => { const o = document.createElement('option'); o.value = b; o.textContent = b; sel.appendChild(o); });
+
+  renderBatches();
+}
+
+function updateStats() {
+  const total   = allCards.length;
+  const expired = allCards.filter(c => c.is_used || (c.uses_count ?? 0) >= (c.max_uses ?? 3)).length;
+  const partial = allCards.filter(c => { const exp = c.is_used || (c.uses_count ?? 0) >= (c.max_uses ?? 3); return !exp && (c.uses_count ?? 0) > 0; }).length;
+  const avail   = total - expired - partial;
+  document.getElementById('stTotal').textContent   = total;
+  document.getElementById('stAvail').textContent   = avail;
+  document.getElementById('stPartial').textContent = partial;
+  document.getElementById('stUsed').textContent    = expired;
+}
+
+function getStatus(card) {
+  const maxU = card.max_uses ?? (card.card_type === 'result' ? 3 : 1);
+  const usedU = card.uses_count ?? 0;
+  if (card.is_used || usedU >= maxU) return 'used';
+  if (usedU > 0) return 'partial';
+  return 'unused';
+}
+
+function getFilteredCards() {
+  const bf = document.getElementById('filterBatch').value;
+  const sf = document.getElementById('filterStatus').value;
+  let cards = allCards;
+  if (bf) cards = cards.filter(c => c.batch_id === bf);
+  if (sf) cards = cards.filter(c => getStatus(c) === sf);
+  return cards;
+}
+
+function onFilterChange() { clearSelection(); renderBatches(); }
+
+function renderBatches() {
+  const cards = getFilteredCards();
+  document.getElementById('cardCount').textContent = `${cards.length} card${cards.length !== 1 ? 's' : ''}`;
+  if (!cards.length) { showEmpty('#cardsArea', 'No cards match this filter.'); return; }
+
+  const logoHtml = schoolInfo.logo_url ? `<div class="sc-logo"><img src="${schoolInfo.logo_url}" onerror="this.parentElement.textContent='🏫'"></div>` : `<div class="sc-logo">🏫</div>`;
+  const schoolName = schoolInfo.name || 'School';
+  const schoolAddr = [schoolInfo.lga, schoolInfo.state].filter(Boolean).join(', ') || 'Nigeria';
+
+  const groups = {};
+  cards.forEach(c => { const k = c.batch_id || 'Ungrouped'; if (!groups[k]) groups[k] = []; groups[k].push(c); });
+
+  document.getElementById('cardsArea').innerHTML = Object.entries(groups).map(([batch, bCards]) => {
+    const bUsed    = bCards.filter(c => getStatus(c) === 'used').length;
+    const bPartial = bCards.filter(c => getStatus(c) === 'partial').length;
+    const bAvail   = bCards.filter(c => getStatus(c) === 'unused').length;
+    const bSafe    = sanitizeId(batch);
+    return `
+      <div class="batch-group">
+        <div class="batch-header no-print">
+          <div>
+            <div class="batch-title">📦 ${batch}</div>
+            <div style="font-size:12px;color:var(--ink-3);">${bCards.length} cards · ${timeAgo(bCards[bCards.length-1]?.created_at)}</div>
+          </div>
+          <div class="batch-stats">
+            <span style="color:var(--success);font-weight:700;">✓ ${bAvail}</span>
+            <span style="color:var(--info);font-weight:700;">↻ ${bPartial}</span>
+            <span style="color:var(--warning);font-weight:700;">🔒 ${bUsed}</span>
+            <button class="btn btn--ghost btn--sm" onclick="selectBatch('${esc(batch)}')">☑ Select All</button>
+            <button class="btn btn--ghost btn--sm" onclick="printBatch('${esc(batch)}')">🖨 Print</button>
+            <button class="btn btn--sm" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;" onclick="requestDeleteBatch('${esc(batch)}')">🗑 Delete Batch</button>
+          </div>
+        </div>
+        <div class="cards-grid" id="batch-${bSafe}">
+          ${bCards.map((card, i) => buildCardHtml(card, i, batch, logoHtml, schoolName, schoolAddr)).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function buildCardHtml(card, i, batch, logoHtml, schoolName, schoolAddr) {
+  const status    = getStatus(card);
+  const isResult  = (card.card_type || 'result') === 'result';
+  const maxU      = card.max_uses ?? (isResult ? 3 : 1);
+  const usedU     = card.uses_count ?? 0;
+  const isChecked = selectedIds.has(card.id);
+  const statusClass = status === 'used' ? 'scratch-card--used' : status === 'partial' ? 'scratch-card--partial' : '';
+  const typeBadge = isResult
+    ? `<span style="font-size:9px;font-weight:700;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;">RESULT CHECKING</span>`
+    : `<span style="font-size:9px;font-weight:700;background:#fef9c3;color:#854d0e;padding:2px 6px;border-radius:4px;">REGISTRATION</span>`;
+  const usageDots = Array.from({length: maxU}, (_,k) =>
+    `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 1px;background:${k < usedU ? '#dc2626' : '#d1d5db'};"></span>`
+  ).join('');
+  const usageLabel = status === 'used'
+    ? `<span style="font-size:7px;font-weight:800;color:#dc2626;text-transform:uppercase;">EXPIRED</span>`
+    : `<span style="font-size:7px;color:#555;">${usedU}/${maxU} used</span>`;
+  const instructions = isResult
+    ? `1. Visit school result portal<br>2. Enter Admission No. &amp; this PIN<br>3. <strong>Valid for ${maxU} checks</strong>`
+    : `1. Visit school registration portal<br>2. Enter PIN to register your ward<br>3. <strong>Single use only</strong>`;
+
+  return `
+    <div class="scratch-card ${statusClass}${isChecked ? ' is-selected' : ''}"
+         id="sc-${card.id}" onclick="toggleCard('${card.id}', event)">
+      <div class="sc-checkbox-wrap no-print" onclick="event.stopPropagation()">
+        <input type="checkbox" id="chk-${card.id}" ${isChecked ? 'checked' : ''} onchange="toggleCard('${card.id}', event)">
+      </div>
+      <div class="sc-hdr">${logoHtml}<div class="sc-hdr-text"><div class="sc-school">${schoolName}</div><div class="sc-subtitle">${schoolAddr}</div></div></div>
+      <div class="sc-title-bar" style="${isResult ? '' : 'background:#854d0e;'}">${isResult ? 'RESULT CHECKING CARD' : 'REGISTRATION CARD'}</div>
+      <div class="sc-body">
+        <div style="text-align:center;margin-bottom:6px;">${typeBadge}</div>
+        <div class="sc-scratch-area">★ SCRATCH TO REVEAL PIN ★</div>
+        <div class="sc-label">PIN / Access Code</div>
+        <div class="sc-pin-box"><div class="sc-pin">${formatPin(card.pin)}</div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;"><span>${usageDots}</span>${usageLabel}</div>
+        <div class="sc-instructions">${instructions}</div>
+      </div>
+      <div class="sc-footer"><span class="sc-batch">${batch}</span><span class="sc-num">#${String(i+1).padStart(3,'0')}</span></div>
+      <div class="sc-holo"></div>
+    </div>`;
+}
+
+/* ── Selection ── */
+function toggleCard(id, event) {
+  if (event?.target?.tagName === 'INPUT') {
+    if (event.target.checked) selectedIds.add(id); else selectedIds.delete(id);
+  } else {
+    if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+  }
+  const card = document.getElementById(`sc-${id}`);
+  const chk  = document.getElementById(`chk-${id}`);
+  if (card) card.classList.toggle('is-selected', selectedIds.has(id));
+  if (chk)  chk.checked = selectedIds.has(id);
+  updateBar();
+}
+function selectByStatus(status) {
+  getFilteredCards().forEach(c => { if (getStatus(c) === status) selectedIds.add(c.id); });
+  refreshVisuals(); updateBar();
+}
+function selectBatch(batchId) {
+  allCards.filter(c => (c.batch_id || 'Ungrouped') === batchId).forEach(c => selectedIds.add(c.id));
+  refreshVisuals(); updateBar();
+}
+function clearSelection() { selectedIds.clear(); refreshVisuals(); updateBar(); }
+function refreshVisuals() {
+  document.querySelectorAll('.scratch-card[id^="sc-"]').forEach(el => {
+    const id = el.id.replace('sc-','');
+    el.classList.toggle('is-selected', selectedIds.has(id));
+    const chk = document.getElementById(`chk-${id}`);
+    if (chk) chk.checked = selectedIds.has(id);
+  });
+}
+function updateBar() {
+  const bar = document.getElementById('selectionBar');
+  const n = selectedIds.size;
+  bar.classList.toggle('active', n > 0);
+  document.getElementById('selCount').textContent = `${n} card${n !== 1 ? 's' : ''} selected`;
+}
+
+/* ── Delete ── */
+function requestDeleteSelected() {
+  if (!selectedIds.size) return;
+  pendingDeleteIds = [...selectedIds];
+  showDelModal(`You are about to permanently delete <strong>${pendingDeleteIds.length} scratch card${pendingDeleteIds.length !== 1 ? 's' : ''}</strong>.<br><br>⚠ This <strong>cannot be undone</strong>. These PINs will stop working immediately.`);
+}
+function requestDeleteBatch(batchId) {
+  pendingDeleteIds = allCards.filter(c => (c.batch_id || 'Ungrouped') === batchId).map(c => c.id);
+  if (!pendingDeleteIds.length) return;
+  showDelModal(`Delete all <strong>${pendingDeleteIds.length} cards</strong> in batch <strong>"${batchId}"</strong>?<br><br>⚠ This <strong>cannot be undone</strong>. All PINs in this batch will stop working.`);
+}
+function showDelModal(msg) { document.getElementById('delMsg').innerHTML = msg; document.getElementById('delModal').classList.add('active'); }
+function closeDelModal() { document.getElementById('delModal').classList.remove('active'); pendingDeleteIds = []; }
+document.getElementById('delModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeDelModal(); });
+
+async function executeDelete() {
+  if (!pendingDeleteIds.length) return;
+  const btn = document.getElementById('delConfirmBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="et-spinner" style="width:13px;height:13px;border-width:2px;display:inline-block;margin-right:6px;"></div>Deleting…';
+  try {
+    const { error } = await db.from('scratch_cards').delete().in('id', pendingDeleteIds);
+    if (error) throw error;
+    const n = pendingDeleteIds.length;
+    allCards = allCards.filter(c => !pendingDeleteIds.includes(c.id));
+    pendingDeleteIds.forEach(id => selectedIds.delete(id));
+    closeDelModal(); clearSelection(); updateStats(); renderBatches();
+    toast(`${n} card${n !== 1 ? 's' : ''} deleted successfully`, 'success');
+    pendingDeleteIds = [];
+  } catch (err) {
+    toast('Delete failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🗑 Delete Cards';
+  }
+}
+
+/* ── Print ── */
+function printBatch(batchId) {
+  const cards = allCards.filter(c => (c.batch_id || 'Ungrouped') === batchId);
+  if (!cards.length) return;
+  const lh = schoolInfo.logo_url ? `<div class="sc-logo"><img src="${schoolInfo.logo_url}"></div>` : `<div class="sc-logo">🏫</div>`;
+  const sn = schoolInfo.name || 'School';
+  const sa = [schoolInfo.lga, schoolInfo.state].filter(Boolean).join(', ') || 'Nigeria';
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+    body{margin:0;padding:8mm;background:white;font-family:Arial,sans-serif;}
+    .cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+    .scratch-card{border:2px solid #1a2e6e;border-radius:6px;overflow:hidden;break-inside:avoid;page-break-inside:avoid;}
+    .sc-hdr{background:linear-gradient(135deg,#1a2e6e,#2041a3);padding:8px 10px;display:flex;align-items:center;gap:8px;}
+    .sc-logo{width:34px;height:34px;background:white;border-radius:50%;border:1.5px solid #f0c040;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;overflow:hidden;}
+    .sc-logo img{width:100%;height:100%;object-fit:cover;}
+    .sc-hdr-text{flex:1;text-align:center;color:white;}
+    .sc-school{font-size:8.5px;font-weight:900;text-transform:uppercase;line-height:1.2;}
+    .sc-subtitle{font-size:7px;color:rgba(255,255,255,.7);margin-top:1px;}
+    .sc-title-bar{background:linear-gradient(90deg,#c8860a,#f0c040,#c8860a);text-align:center;padding:3px;font-size:8px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#1a1a00;}
+    .sc-body{padding:8px 10px;}
+    .sc-pin-box{background:#f5f5dc;border:1.5px solid #c8860a;border-radius:4px;padding:6px 8px;text-align:center;margin:4px 0 6px;}
+    .sc-pin{font-family:'Courier New',monospace;font-size:18px;font-weight:900;letter-spacing:4px;color:#1a2e6e;}
+    .sc-scratch-area{background:repeating-linear-gradient(45deg,#c0c0c0,#c0c0c0 2px,#a8a8a8 2px,#a8a8a8 4px);border-radius:3px;padding:5px 8px;text-align:center;font-size:8px;font-weight:700;color:#555;margin-bottom:6px;}
+    .sc-instructions{font-size:7.5px;color:#444;line-height:1.5;text-align:center;border-top:1px dashed #ccc;padding-top:5px;}
+    .sc-footer{background:#f0f4f8;padding:4px 8px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #ddd;}
+    .sc-batch{font-size:7px;color:#888;font-style:italic;}
+    .sc-num{font-size:8px;font-weight:700;color:#1a2e6e;}
+    .sc-holo{height:4px;background:linear-gradient(90deg,#ff0080,#ff8c00,#ffed00,#00ff80,#00c8ff,#a855f7,#ff0080);}
+    @page{margin:8mm;size:A4;}
+  </style></head><body><div class="cards-grid">
+  ${cards.map((c,i) => `<div class="scratch-card">
+    <div class="sc-hdr">${lh}<div class="sc-hdr-text"><div class="sc-school">${sn}</div><div class="sc-subtitle">${sa}</div></div></div>
+    <div class="sc-title-bar">RESULT CHECKER CARD</div>
+    <div class="sc-body">
+      <div class="sc-scratch-area">★ SCRATCH TO REVEAL PIN ★</div>
+      <div class="sc-pin-box"><div class="sc-pin">${formatPin(c.pin)}</div></div>
+      <div class="sc-instructions">1. Visit school result portal<br>2. Enter Admission No. &amp; this PIN<br>3. <strong>Valid for 3 checks</strong></div>
+    </div>
+    <div class="sc-footer"><span class="sc-batch">${batchId}</span><span class="sc-num">#${String(i+1).padStart(3,'0')}</span></div>
+    <div class="sc-holo"></div>
+  </div>`).join('')}
+  </div>
+<script src="../js/ai-assistant.js" defer></script>
+</body></html>`;
+  const w = window.open(URL.createObjectURL(new Blob([html], {type:'text/html'})), '_blank', 'width=900,height=700');
+  setTimeout(() => { if (w) { w.focus(); w.print(); } }, 700);
+}
+
+/* ── Utils ── */
+function formatPin(pin) {
+  if (!pin) return '—';
+  return pin.length === 10 ? pin.slice(0,4)+' '+pin.slice(4,7)+' '+pin.slice(7) : pin.match(/.{1,4}/g).join(' ');
+}
+function sanitizeId(s) { return s.replace(/[^a-z0-9]/gi,'_'); }
+function esc(s) { return s.replace(/'/g,"\\'"); }
+function timeAgo(d) {
+  if (!d) return '—';
+  const diff = (Date.now() - new Date(d)) / 1000;
+  if (diff < 86400) return 'today';
+  if (diff < 604800) return Math.floor(diff/86400)+'d ago';
+  return new Date(d).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'});
+}
+</script>
+<script src="../js/pwa.js"></script>
+</body>
+</html>

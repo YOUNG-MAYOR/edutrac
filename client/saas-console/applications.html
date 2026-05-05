@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — School Applications</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    :root { --primary: #6d28d9; --primary-light: #ede9fe; --primary-dark: #5b21b6; }
+
+    /* Status badges */
+    .badge { display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px; }
+    .badge-pending  { background:#fef3c7;color:#92400e; }
+    .badge-approved { background:#d1fae5;color:#065f46; }
+    .badge-rejected { background:#fee2e2;color:#991b1b; }
+    .badge-dot { width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0; }
+
+    /* Application type tags */
+    .type-tag { padding:2px 9px;border-radius:5px;font-size:11px;font-weight:700;background:#ede9fe;color:#6d28d9; }
+
+    /* Table */
+    .filter-bar { display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center; }
+    .filter-bar input, .filter-bar select { font-size:14px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:white;color:var(--ink); }
+    .filter-bar input { flex:1;min-width:200px; }
+    .app-avatar { width:36px;height:36px;border-radius:9px;background:#6d28d9;color:white;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0; }
+    .row-btn { background:none;border:none;color:#6d28d9;cursor:pointer;font-weight:700;text-align:left;font-size:14px;padding:0; }
+    .row-btn:hover { text-decoration:underline; }
+    .action-btn { padding:5px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;border:none;transition:all .15s; }
+    .btn-approve { background:#d1fae5;color:#065f46; }
+    .btn-approve:hover { background:#a7f3d0; }
+    .btn-reject  { background:#fee2e2;color:#991b1b; }
+    .btn-reject:hover  { background:#fecaca; }
+    .btn-view    { background:#ede9fe;color:#6d28d9; }
+    .btn-view:hover    { background:#ddd6fe; }
+
+    /* Tabs */
+    .tabs { display:flex;gap:4px;margin-bottom:24px;border-bottom:2px solid var(--border);padding-bottom:0; }
+    .tab { padding:9px 18px;font-size:13px;font-weight:700;color:var(--ink-3);cursor:pointer;border-radius:8px 8px 0 0;transition:all .15s;border-bottom:2px solid transparent;margin-bottom:-2px; }
+    .tab:hover { color:var(--ink);background:var(--bg); }
+    .tab.active { color:#6d28d9;border-bottom-color:#6d28d9;background:transparent; }
+    .tab-count { font-size:11px;padding:1px 7px;border-radius:20px;margin-left:6px;background:#ede9fe;color:#6d28d9;font-weight:800; }
+
+    /* Detail panel */
+    .detail-panel { position:fixed;top:0;right:-500px;width:500px;max-width:100vw;height:100vh;background:white;box-shadow:-4px 0 24px rgba(0,0,0,.13);z-index:1000;transition:right .3s ease;overflow-y:auto;display:flex;flex-direction:column; }
+    .detail-panel.open { right:0; }
+    .panel-overlay { position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:999;display:none; }
+    .panel-overlay.active { display:block; }
+    .panel-hd { padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-shrink:0; }
+    .panel-body { padding:24px;flex:1;overflow-y:auto; }
+    .panel-section { margin-bottom:24px; }
+    .panel-section-title { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-3);margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--bg); }
+    .info-row { display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bg);font-size:13px;gap:12px; }
+    .info-row:last-child { border-bottom:none; }
+    .info-label { color:var(--ink-3);flex-shrink:0; }
+    .info-val { color:var(--ink);font-weight:600;text-align:right;word-break:break-all; }
+    .action-group { display:flex;flex-direction:column;gap:10px; }
+    .action-lg { padding:12px 20px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;border:none;transition:all .2s;text-align:center; }
+    .action-approve-lg { background:#059669;color:white; }
+    .action-approve-lg:hover { background:#047857;transform:translateY(-1px); }
+    .action-reject-lg  { background:white;color:#dc2626;border:2px solid #dc2626; }
+    .action-reject-lg:hover  { background:#fee2e2; }
+    .note-area { width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);font-size:13px;resize:vertical;font-family:inherit;color:var(--ink);background:var(--bg);outline:none; }
+    .note-area:focus { border-color:#6d28d9;background:white; }
+
+    /* Stats strip */
+    .stat-strip { display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px; }
+    @media(max-width:600px){.stat-strip{grid-template-columns:repeat(2,1fr)}}
+    .stat-box { background:white;border:1px solid var(--border);border-radius:10px;padding:14px 16px; }
+    .stat-box__val { font-size:24px;font-weight:800;color:var(--ink); }
+    .stat-box__val.pending  { color:#d97706; }
+    .stat-box__val.approved { color:#059669; }
+    .stat-box__val.rejected { color:#dc2626; }
+    .stat-box__lbl { font-size:11px;color:var(--ink-3);margin-top:2px; }
+
+    /* Empty state */
+    .empty-state { text-align:center;padding:60px 20px;color:var(--ink-3); }
+    .empty-state__icon { font-size:40px;margin-bottom:12px; }
+    .empty-state__h { font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px; }
+    .empty-state__p { font-size:13px; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- Detail Panel -->
+<div class="panel-overlay" id="panelOverlay" onclick="closePanel()"></div>
+<div class="detail-panel" id="detailPanel">
+  <div class="panel-hd">
+    <div class="app-avatar" id="pdAvatar">—</div>
+    <div style="flex:1">
+      <div style="font-size:16px;font-weight:800;color:var(--ink)" id="pdName">—</div>
+      <div style="font-size:12px;color:var(--ink-3)" id="pdSub">—</div>
+    </div>
+    <button onclick="closePanel()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-3);padding:4px">✕</button>
+  </div>
+  <div class="panel-body" id="pdBody">Loading…</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+<script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let allApplications = [];
+let activeTab = 'pending';
+let currentApp = null;
+
+const typeLabels = {
+  primary:'Primary School', secondary:'Secondary School', both:'Primary & Secondary',
+  islamiyya:'Islamiyya / Tahfeez', vocational:'Vocational / Technical', other:'Other / Institute'
+};
+
+(async () => {
+  const user = await initSaasLayout('applications', 'School Applications');
+  if (!user) return;
+  const body = document.getElementById('pageBody');
+
+  body.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+      <div>
+        <h1>School Applications</h1>
+        <p style="color:var(--ink-3);margin:4px 0 0">Review and approve school onboarding requests</p>
+      </div>
+      <button class="btn" onclick="refreshApplications()" style="background:#6d28d9;color:white;border:none">⟳ Refresh</button>
+    </div>
+
+    <div class="stat-strip" id="statStrip">
+      <div class="stat-box"><div class="stat-box__val" id="statTotal">—</div><div class="stat-box__lbl">Total Applications</div></div>
+      <div class="stat-box"><div class="stat-box__val pending" id="statPending">—</div><div class="stat-box__lbl">Pending Review</div></div>
+      <div class="stat-box"><div class="stat-box__val approved" id="statApproved">—</div><div class="stat-box__lbl">Approved</div></div>
+      <div class="stat-box"><div class="stat-box__val rejected" id="statRejected">—</div><div class="stat-box__lbl">Rejected</div></div>
+    </div>
+
+    <div class="tabs" id="tabBar">
+      <div class="tab active" data-tab="pending"  onclick="switchTab('pending')">Pending <span class="tab-count" id="tabPendingCount">0</span></div>
+      <div class="tab"        data-tab="approved" onclick="switchTab('approved')">Approved</div>
+      <div class="tab"        data-tab="rejected" onclick="switchTab('rejected')">Rejected</div>
+      <div class="tab"        data-tab="all"      onclick="switchTab('all')">All</div>
+    </div>
+
+    <div class="filter-bar">
+      <input type="search" id="searchInput" placeholder="🔍  Search by school name, admin, state…" oninput="renderTable()">
+      <select id="typeFilter" onchange="renderTable()">
+        <option value="">All Types</option>
+        <option value="primary">Primary</option>
+        <option value="secondary">Secondary</option>
+        <option value="both">Primary & Secondary</option>
+        <option value="islamiyya">Islamiyya / Tahfeez</option>
+        <option value="vocational">Vocational</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div class="table-wrap">
+      <table id="appTable">
+        <thead><tr>
+          <th>School</th>
+          <th>Admin</th>
+          <th>Type</th>
+          <th>State</th>
+          <th>Students</th>
+          <th>Submitted</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr></thead>
+        <tbody id="tableBody"><tr><td colspan="8" style="text-align:center;padding:40px;color:var(--ink-3)">Loading applications…</td></tr></tbody>
+      </table>
+    </div>
+  `;
+
+  await refreshApplications();
+})();
+
+async function refreshApplications(){
+  const { data, error } = await db.from('school_applications')
+    .select('*')
+    .order('submitted_at', { ascending: false });
+  allApplications = data || [];
+  updateStats();
+  renderTable();
+}
+
+function updateStats(){
+  const pending  = allApplications.filter(a=>a.status==='pending').length;
+  const approved = allApplications.filter(a=>a.status==='approved').length;
+  const rejected = allApplications.filter(a=>a.status==='rejected').length;
+  document.getElementById('statTotal').textContent    = allApplications.length;
+  document.getElementById('statPending').textContent  = pending;
+  document.getElementById('statApproved').textContent = approved;
+  document.getElementById('statRejected').textContent = rejected;
+  document.getElementById('tabPendingCount').textContent = pending;
+}
+
+function switchTab(tab){
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
+  renderTable();
+}
+
+function renderTable(){
+  const q    = (document.getElementById('searchInput')?.value||'').toLowerCase();
+  const type = document.getElementById('typeFilter')?.value||'';
+  const tbody = document.getElementById('tableBody');
+
+  let apps = allApplications.filter(a => {
+    if(activeTab !== 'all' && a.status !== activeTab) return false;
+    if(type && a.school_type !== type) return false;
+    if(q){
+      const hay = `${a.school_name} ${a.admin_first_name} ${a.admin_last_name} ${a.admin_email} ${a.school_state} ${a.school_city}`.toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if(!apps.length){
+    tbody.innerHTML = `<tr><td colspan="8">
+      <div class="empty-state">
+        <div class="empty-state__icon">📋</div>
+        <div class="empty-state__h">No applications found</div>
+        <div class="empty-state__p">No ${activeTab === 'all' ? '' : activeTab} applications match your filters</div>
+      </div>
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = apps.map(a => {
+    const init = (a.school_name||'?')[0].toUpperCase();
+    const statusBadge = a.status === 'pending'
+      ? `<span class="badge badge-pending"><span class="badge-dot"></span>Pending</span>`
+      : a.status === 'approved'
+      ? `<span class="badge badge-approved"><span class="badge-dot"></span>Approved</span>`
+      : `<span class="badge badge-rejected"><span class="badge-dot"></span>Rejected</span>`;
+    const date = a.submitted_at ? new Date(a.submitted_at).toLocaleDateString('en-NG',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+    const actionBtns = a.status === 'pending'
+      ? `<button class="action-btn btn-approve" onclick="event.stopPropagation();quickApprove('${a.id}')">✓ Approve</button>
+         <button class="action-btn btn-reject"  onclick="event.stopPropagation();quickReject('${a.id}')">✕</button>`
+      : `<button class="action-btn btn-view" onclick="openPanel('${a.id}')">View</button>`;
+
+    return `
+      <tr style="cursor:pointer" onclick="openPanel('${a.id}')">
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="app-avatar" style="width:32px;height:32px;font-size:13px">${init}</div>
+            <div>
+              <button class="row-btn">${a.school_name||'—'}</button>
+              <div style="font-size:11px;color:var(--ink-3)">${a.school_city||''}, ${a.school_state||''}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div style="font-size:13px;font-weight:600">${a.admin_first_name||''} ${a.admin_last_name||''}</div>
+          <div style="font-size:11px;color:var(--ink-3)">${a.admin_email||''}</div>
+        </td>
+        <td><span class="type-tag">${typeLabels[a.school_type]||a.school_type||'—'}</span></td>
+        <td style="font-size:13px">${a.school_state||'—'}</td>
+        <td style="font-size:13px">${a.school_size||'—'}</td>
+        <td style="font-size:12px;color:var(--ink-3)">${date}</td>
+        <td>${statusBadge}</td>
+        <td><div style="display:flex;gap:6px;align-items:center">${actionBtns}</div></td>
+      </tr>`;
+  }).join('');
+}
+
+async function quickApprove(id){
+  await approveAndProvision(id, '');
+}
+async function quickReject(id){
+  if(!confirm('Reject this application?')) return;
+  await updateStatus(id, 'rejected', '');
+}
+
+async function approveAndProvision(id, adminNote) {
+  const a = allApplications.find(x => x.id === id);
+  if (!a) return;
+
+  const btn = document.querySelector(`[onclick*="${id}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Provisioning…'; }
+
+  try {
+    const res = await fetch('/api/provision-school', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ application_id: id, admin_note: adminNote }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'Provisioning failed');
+    }
+
+    // Show credentials to SaaS owner
+    const msg = `✅ School Approved & Activated!\n\n` +
+      `School: ${a.school_name}\n` +
+      `Login Email: ${data.login_email}\n` +
+      `Temporary Password: ${data.temp_password}\n\n` +
+      `The admin must change their password on first login.\n` +
+      `Please share these credentials with them securely.`;
+    alert(msg);
+
+    toast('School provisioned successfully', 'success');
+    await refreshApplications();
+    closePanel();
+
+  } catch (err) {
+    alert('❌ Error: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Approve'; }
+  }
+}
+
+async function updateStatus(id, status, adminNote=''){
+  const { error } = await db.from('school_applications').update({
+    status,
+    admin_note: adminNote,
+    reviewed_at: new Date().toISOString()
+  }).eq('id', id);
+  if(error){ alert('Error: '+error.message); return; }
+  toast('Application ' + status, 'success');
+  await refreshApplications();
+  if(currentApp?.id === id){ closePanel(); }
+}
+
+function openPanel(id){
+  currentApp = allApplications.find(a=>a.id===id);
+  if(!currentApp) return;
+  const a = currentApp;
+  document.getElementById('pdAvatar').textContent = (a.school_name||'?')[0].toUpperCase();
+  document.getElementById('pdName').textContent   = a.school_name||'—';
+  document.getElementById('pdSub').textContent    = `${typeLabels[a.school_type]||a.school_type||'—'} · ${a.school_state||'—'}`;
+
+  const statusBadge = a.status === 'pending'
+    ? `<span class="badge badge-pending"><span class="badge-dot"></span>Pending Review</span>`
+    : a.status === 'approved'
+    ? `<span class="badge badge-approved"><span class="badge-dot"></span>Approved</span>`
+    : `<span class="badge badge-rejected"><span class="badge-dot"></span>Rejected</span>`;
+
+  const submitted = a.submitted_at ? new Date(a.submitted_at).toLocaleString('en-NG') : '—';
+  const reviewed  = a.reviewed_at  ? new Date(a.reviewed_at).toLocaleString('en-NG')  : '—';
+
+  document.getElementById('pdBody').innerHTML = `
+    <div class="panel-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="panel-section-title" style="margin:0;border:none">Status</div>
+        ${statusBadge}
+      </div>
+      <div class="info-row"><span class="info-label">Ref ID</span><span class="info-val">${a.ref_id||a.id}</span></div>
+      <div class="info-row"><span class="info-label">Submitted</span><span class="info-val">${submitted}</span></div>
+      ${a.reviewed_at ? `<div class="info-row"><span class="info-label">Reviewed</span><span class="info-val">${reviewed}</span></div>` : ''}
+      ${a.admin_note  ? `<div class="info-row"><span class="info-label">Note</span><span class="info-val">${a.admin_note}</span></div>` : ''}
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section-title">School Information</div>
+      <div class="info-row"><span class="info-label">School Name</span><span class="info-val">${a.school_name||'—'}</span></div>
+      <div class="info-row"><span class="info-label">Type</span><span class="info-val">${typeLabels[a.school_type]||a.school_type||'—'}</span></div>
+      <div class="info-row"><span class="info-label">Ownership</span><span class="info-val">${a.school_ownership||'—'}</span></div>
+      <div class="info-row"><span class="info-label">No. of Students</span><span class="info-val">${a.school_size||'—'}</span></div>
+      ${a.school_year  ? `<div class="info-row"><span class="info-label">Year Est.</span><span class="info-val">${a.school_year}</span></div>` : ''}
+      ${a.school_email ? `<div class="info-row"><span class="info-label">School Email</span><span class="info-val">${a.school_email}</span></div>` : ''}
+      ${a.school_website ? `<div class="info-row"><span class="info-label">Website</span><span class="info-val"><a href="${a.school_website}" target="_blank" style="color:#6d28d9">${a.school_website}</a></span></div>` : ''}
+      ${a.school_desc  ? `<div class="info-row" style="flex-direction:column;gap:4px"><span class="info-label">Description</span><span class="info-val" style="text-align:left;font-weight:400;color:var(--ink)">${a.school_desc}</span></div>` : ''}
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section-title">Admin / Contact</div>
+      <div class="info-row"><span class="info-label">Name</span><span class="info-val">${a.admin_first_name||''} ${a.admin_last_name||''}</span></div>
+      <div class="info-row"><span class="info-label">Role</span><span class="info-val">${a.admin_role||'—'}</span></div>
+      <div class="info-row"><span class="info-label">Email</span><span class="info-val">${a.admin_email||'—'}</span></div>
+      <div class="info-row"><span class="info-label">Phone</span><span class="info-val">${a.admin_phone||'—'}</span></div>
+      ${a.admin_whatsapp ? `<div class="info-row"><span class="info-label">WhatsApp</span><span class="info-val">${a.admin_whatsapp}</span></div>` : ''}
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section-title">Location</div>
+      <div class="info-row"><span class="info-label">Address</span><span class="info-val">${a.school_address||'—'}</span></div>
+      <div class="info-row"><span class="info-label">City</span><span class="info-val">${a.school_city||'—'}</span></div>
+      <div class="info-row"><span class="info-label">LGA</span><span class="info-val">${a.school_lga||'—'}</span></div>
+      <div class="info-row"><span class="info-label">State</span><span class="info-val">${a.school_state||'—'}</span></div>
+      ${a.school_postal ? `<div class="info-row"><span class="info-label">Postal</span><span class="info-val">${a.school_postal}</span></div>` : ''}
+    </div>
+
+    ${a.additional_notes ? `
+    <div class="panel-section">
+      <div class="panel-section-title">Additional Notes</div>
+      <p style="font-size:13px;color:var(--ink);line-height:1.6">${a.additional_notes}</p>
+    </div>` : ''}
+
+    ${a.status === 'pending' ? `
+    <div class="panel-section">
+      <div class="panel-section-title">Decision</div>
+      <div class="action-group">
+        <textarea id="decisionNote" class="note-area" rows="2" placeholder="Optional: add a note (sent to admin via email)…"></textarea>
+        <button class="action-lg action-approve-lg" onclick="approveAndProvision('${a.id}', document.getElementById('decisionNote')?.value?.trim()||'')">✓ Approve &amp; Activate School</button>
+        <button class="action-lg action-reject-lg"  onclick="rejectWithNote('${a.id}')">✕ Reject Application</button>
+      </div>
+    </div>` : ''}
+  `;
+
+  document.getElementById('detailPanel').classList.add('open');
+  document.getElementById('panelOverlay').classList.add('active');
+}
+
+async function rejectWithNote(id){
+  const note = document.getElementById('decisionNote')?.value?.trim()||'';
+  if(!note){ alert('Please add a rejection reason before rejecting.'); return; }
+  await updateStatus(id,'rejected',note);
+}
+
+function closePanel(){
+  currentApp = null;
+  document.getElementById('detailPanel').classList.remove('open');
+  document.getElementById('panelOverlay').classList.remove('active');
+}
+</script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

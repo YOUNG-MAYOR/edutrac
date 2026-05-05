@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Scratch Card Generator</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white; margin: 0; padding: 10mm; }
+      .cards-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 6px !important; }
+      @page { margin: 10mm; size: A4; }
+    }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+    /* Nigerian school scratch card — matches physical card design */
+    .scratch-card {
+      width: 100%; font-family: Arial, sans-serif;
+      border: 2px solid #1a2e6e; border-radius: 6px;
+      overflow: hidden; background: white;
+      position: relative; break-inside: avoid;
+      box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+    .sc-hdr {
+      background: linear-gradient(135deg, #1a2e6e, #2041a3);
+      padding: 8px 10px; display: flex; align-items: center; gap: 8px;
+    }
+    .sc-logo {
+      width: 34px; height: 34px; background: white; border-radius: 50%;
+      border: 1.5px solid #f0c040; display: flex; align-items: center;
+      justify-content: center; font-size: 18px; flex-shrink: 0; overflow: hidden;
+    }
+    .sc-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .sc-hdr-text { flex: 1; text-align: center; color: white; }
+    .sc-school { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .3px; line-height: 1.2; }
+    .sc-subtitle { font-size: 7.5px; color: rgba(255,255,255,.7); margin-top: 1px; }
+    /* Gold title bar */
+    .sc-title-bar {
+      background: linear-gradient(90deg, #c8860a, #f0c040, #c8860a);
+      text-align: center; padding: 3px;
+      font-size: 8px; font-weight: 900; letter-spacing: 1.5px;
+      text-transform: uppercase; color: #1a1a00;
+    }
+    .sc-body { padding: 8px 10px; }
+    .sc-label { font-size: 7.5px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
+    .sc-pin-box {
+      background: #f5f5dc; border: 1.5px solid #c8860a;
+      border-radius: 4px; padding: 6px 8px; text-align: center;
+      margin: 4px 0 6px;
+    }
+    .sc-pin {
+      font-family: "Courier New", monospace;
+      font-size: 18px; font-weight: 900; letter-spacing: 4px;
+      color: #1a2e6e;
+    }
+    .sc-scratch-area {
+      background: repeating-linear-gradient(45deg, #c0c0c0, #c0c0c0 2px, #a8a8a8 2px, #a8a8a8 4px);
+      border-radius: 3px; padding: 5px 8px; text-align: center;
+      font-size: 8px; font-weight: 700; color: #555; margin-bottom: 6px;
+      letter-spacing: .5px;
+    }
+    .sc-instructions { font-size: 7.5px; color: #444; line-height: 1.5; text-align: center; border-top: 1px dashed #ccc; padding-top: 5px; }
+    .sc-footer {
+      background: #f0f4f8; padding: 4px 8px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-top: 1px solid #ddd;
+    }
+    .sc-batch { font-size: 7px; color: #888; font-style: italic; }
+    .sc-num { font-size: 8px; font-weight: 700; color: #1a2e6e; }
+    .sc-holo { height: 4px; background: linear-gradient(90deg, #ff0080, #ff8c00, #ffed00, #00ff80, #00c8ff, #a855f7, #ff0080); }
+    .scratch-card--used { opacity: 0.45; }
+    .scratch-card--used::after {
+      content: 'EXPIRED'; position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 900; color: #dc2626; opacity: .5;
+      transform: rotate(-15deg);
+    }
+    .scratch-card--partial { border-color: #f59e0b !important; }
+    .scratch-card--partial::after {
+      content: 'IN USE'; position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 900; color: #d97706; opacity: .25;
+      transform: rotate(-15deg);
+    }
+    .stats-bar {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      background: var(--surface-3); padding: 16px; border-radius: var(--radius);
+      margin-bottom: 20px;
+    }
+    .stats-bar__item { text-align: center; flex: 1; min-width: 80px; }
+    .stats-bar__value { font-size: 24px; font-weight: 800; color: var(--primary); }
+    .stats-bar__label { font-size: 11px; color: var(--ink-3); font-weight: 600; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+<script src="../api/database.js"></script>
+<script src="../api/auth.js"></script>
+<script src="../api/calculations.js"></script>
+<script src="../assets/js/sidebar.js"></script>
+<script>
+let user, schools = [], selectedSchool = '', generatedPins = [], existingCards = [];
+
+(async () => {
+  user = await initPage(['saas_owner'], 'Scratch Card Generator', 'scratch-cards');
+  if (!user) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <button class="btn btn--secondary no-print" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Print Cards</button>
+  `;
+
+  const { data: schoolList } = await db.from('schools').select('id,name').eq('is_active', true).order('name');
+  schools = schoolList || [];
+
+  renderPage();
+})();
+
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><line x1="9" y1="12" x2="15" y2="12"/></svg></span> Scratch Card Generator</h1>
+      <p>Generate 10-digit scratch card PINs for schools</p>
+    </div>
+
+    <div class="card no-print" style="margin-bottom:24px;">
+      <div class="card__header"><span class="card__title">Generate New Batch</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">School</label>
+          <select class="form-control" id="schoolSelect" onchange="loadExistingCards()">
+            <option value="">Select school…</option>
+            ${schools.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Card Type</label>
+          <select class="form-control" id="cardType" onchange="updateMaxUsesHint()">
+            <option value="result"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Result Checking (3 uses)</option>
+            <option value="registration"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> Registration (1 use)</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Quantity (max 200)</label>
+          <input type="number" class="form-control" id="pinQty" value="50" min="1" max="200">
+        </div>
+        <button class="btn btn--primary" onclick="generatePins()" style="height:42px;">
+          <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M8 8h.01M16 8h.01M8 16h.01M16 16h.01M12 12h.01"/></svg></span> Generate
+        </button>
+      </div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+          <label class="form-label">Batch Label (optional)</label>
+          <input type="text" class="form-control" id="batchLabel" placeholder="e.g. Second Term 2025/2026 — Batch A">
+        </div>
+        <div>
+          <label class="form-label">Expires At (optional)</label>
+          <input type="date" class="form-control" id="expiresAt">
+        </div>
+      </div>
+      <div id="cardTypeHint" style="margin-top:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;font-size:13px;color:#166534;">
+        <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> <strong>Result Checking cards</strong> — Each card allows up to <strong>3 result checks</strong>, locked to 1 student and 1 term after first use.
+      </div>
+    </div>
+
+    <div id="statsBar" style="display:none;" class="stats-bar no-print">
+      <div class="stats-bar__item"><div class="stats-bar__value" id="statTotal">0</div><div class="stats-bar__label">Total Generated</div></div>
+      <div class="stats-bar__item"><div class="stats-bar__value" id="statUnused" style="color:var(--success);">0</div><div class="stats-bar__label">Unused</div></div>
+      <div class="stats-bar__item"><div class="stats-bar__value" id="statPartial" style="color:var(--info);">0</div><div class="stats-bar__label">In Use</div></div>
+      <div class="stats-bar__item"><div class="stats-bar__value" id="statExpired" style="color:var(--warning);">0</div><div class="stats-bar__label">Expired</div></div>
+    </div>
+
+    <div id="cardsContainer">
+      <div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><line x1="9" y1="12" x2="15" y2="12"/></svg></span></div><p>Select a school and generate PINs to see them here.</p></div>
+    </div>
+  `;
+}
+
+async function loadExistingCards() {
+  const schoolId = document.getElementById('schoolSelect').value;
+  if (!schoolId) return;
+
+  const { data } = await db.from('scratch_cards')
+    .select('*').eq('school_id', schoolId).order('created_at', {ascending:false}).limit(500);
+  existingCards = data || [];
+  renderCardStats(existingCards);
+}
+
+function updateMaxUsesHint() {
+  const type = document.getElementById('cardType').value;
+  const hint = document.getElementById('cardTypeHint');
+  if (type === 'registration') {
+    hint.style.background = '#fffbeb'; hint.style.borderColor = '#fbbf24'; hint.style.color = '#78350f';
+    hint.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> <strong>Registration cards</strong> — Each card allows <strong>1 use only</strong> for student registration. Cannot be used for result checking.';
+  } else {
+    hint.style.background = '#f0fdf4'; hint.style.borderColor = '#86efac'; hint.style.color = '#166534';
+    hint.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> <strong>Result Checking cards</strong> — Each card allows up to <strong>3 result checks</strong>, locked to 1 student and 1 term after first use.';
+  }
+}
+
+async function generatePins() {
+  const schoolId   = document.getElementById('schoolSelect').value;
+  const cardType   = document.getElementById('cardType').value;
+  const qty        = Math.min(200, Math.max(1, parseInt(document.getElementById('pinQty').value) || 50));
+  const batchLabel = document.getElementById('batchLabel').value.trim() || `${cardType.toUpperCase()}_${Date.now()}`;
+  const expiresAt  = document.getElementById('expiresAt').value || null;
+  const maxUses    = cardType === 'registration' ? 1 : 3;
+
+  if (!schoolId) { toast('Select a school first.', 'error'); return; }
+
+  const pins = generateScratchPins(qty);
+  const rows = pins.map(pin => ({
+    school_id:  schoolId,
+    pin,
+    batch_id:   batchLabel,
+    card_type:  cardType,
+    is_used:    false,
+    uses_count: 0,
+    max_uses:   maxUses,
+    expires_at: expiresAt ? new Date(expiresAt).toISOString() : null
+  }));
+
+  const { data, error } = await db.from('scratch_cards').insert(rows).select();
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+
+  generatedPins = data || [];
+  toast(`<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${qty} ${cardType === 'registration' ? 'Registration' : 'Result Checking'} PINs generated!`, 'success');
+
+  await loadExistingCards();
+  renderCards(generatedPins, schoolId, batchLabel);
+}
+
+function renderCardStats(cards) {
+  const total   = cards.length;
+  const expired = cards.filter(c => c.is_used || (c.uses_count ?? 0) >= (c.max_uses ?? 5)).length;
+  const partial = cards.filter(c => !c.is_used && (c.uses_count ?? 0) > 0 && (c.uses_count ?? 0) < (c.max_uses ?? 5)).length;
+  const unused  = total - expired - partial;
+  document.getElementById('statsBar').style.display = 'flex';
+  document.getElementById('statTotal').textContent   = total;
+  document.getElementById('statUnused').textContent  = unused;
+  document.getElementById('statPartial').textContent = partial;
+  document.getElementById('statExpired').textContent = expired;
+}
+
+function renderCards(cards, schoolId, batchLabel = '') {
+  const school = schools.find(s => s.id === schoolId);
+  const schoolName = school?.name || 'EduTrack NG School';
+  const schoolAddr = [school?.lga, school?.state].filter(Boolean).join(', ') || 'Nigeria';
+  const logoHtml = school?.logo_url
+    ? `<div class="sc-logo"><img src="${school.logo_url}"></div>`
+    : `<div class="sc-logo"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span></div>`;
+
+  document.getElementById('cardsContainer').innerHTML = `
+    <div class="no-print" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:14px;font-weight:700;">${cards.length} cards — ${batchLabel || 'Batch'}</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn--secondary btn--sm" onclick="loadExistingCards().then(() => renderAllCards('${schoolId}'))"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> All Batches</button>
+        <button class="btn btn--ghost btn--sm" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Print Batch</button>
+      </div>
+    </div>
+    <div class="cards-grid">
+      ${cards.map((card, i) => {
+        const cType    = card.card_type || cardType || 'result';
+        const isResult = cType === 'result';
+        const maxU     = card.max_uses ?? (isResult ? 3 : 1);
+        const usedU    = card.uses_count ?? 0;
+        const expired  = card.is_used || usedU >= maxU;
+        const partial  = !expired && usedU > 0;
+        const statusClass = expired ? 'scratch-card--used' : partial ? 'scratch-card--partial' : '';
+
+        const typeBadge = isResult
+          ? `<span style="font-size:9px;font-weight:700;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;letter-spacing:.04em;">RESULT CHECKING</span>`
+          : `<span style="font-size:9px;font-weight:700;background:#fef9c3;color:#854d0e;padding:2px 6px;border-radius:4px;letter-spacing:.04em;">REGISTRATION</span>`;
+
+        const cardTitle = isResult ? 'RESULT CHECKING CARD' : 'REGISTRATION CARD';
+
+        const dots = Array.from({length: maxU}, (_, k) =>
+          `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 1px;background:${k < usedU ? '#dc2626' : '#d1d5db'};"></span>`
+        ).join('');
+        const usageLabel = expired
+          ? `<span style="font-size:7px;font-weight:800;color:#dc2626;text-transform:uppercase;">EXPIRED</span>`
+          : `<span style="font-size:7px;color:#555;">${usedU}/${maxU} used</span>`;
+
+        const instructions = isResult
+          ? `1. Visit the school result portal<br>2. Enter your Admission No. &amp; this PIN<br>3. <strong>Valid for ${maxU} checks — one student &amp; term only</strong>`
+          : `1. Visit the school registration portal<br>2. Enter this PIN to register your ward<br>3. <strong>Single use — cannot be reused</strong>`;
+
+        return `
+        <div class="scratch-card ${statusClass}" style="${partial ? 'opacity:.75;border-color:#f59e0b;' : ''}">
+          <div class="sc-hdr">
+            ${logoHtml}
+            <div class="sc-hdr-text">
+              <div class="sc-school">${schoolName}</div>
+              <div class="sc-subtitle">${schoolAddr}</div>
+            </div>
+          </div>
+          <div class="sc-title-bar" style="${isResult ? '' : 'background:#854d0e;'}">${cardTitle}</div>
+          <div class="sc-body">
+            <div style="text-align:center;margin-bottom:6px;">${typeBadge}</div>
+            <div class="sc-scratch-area"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span> SCRATCH TO REVEAL PIN <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span></div>
+            <div class="sc-label">PIN / Access Code</div>
+            <div class="sc-pin-box">
+              <div class="sc-pin">${formatPin(card.pin)}</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+              ${dots}
+              ${usageLabel}
+            </div>
+            <div class="sc-instructions">${instructions}</div>
+          </div>
+          <div class="sc-footer">
+            <span class="sc-batch">${batchLabel || ''}</span>
+            <span class="sc-num">#${String(i + 1).padStart(3,'0')}</span>
+          </div>
+          <div class="sc-holo"></div>
+        </div>
+      `}).join('')}
+    </div>
+  `;
+}
+
+async function renderAllCards(schoolId) {
+  const school = schools.find(s => s.id === schoolId);
+  renderCards(existingCards, schoolId, `All Batches (${existingCards.length} total)`);
+}
+</script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

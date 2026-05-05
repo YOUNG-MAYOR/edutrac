@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Cumulative Result Builder</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    @media print { .no-print { display:none!important; } body { background:white; } }
+    .term-col { text-align:center; min-width:80px; }
+    .annual-col { text-align:center; min-width:90px; font-weight:800; background:var(--primary-light); }
+    .pos-badge { display:inline-block; background:var(--primary); color:white; padding:2px 8px; border-radius:20px; font-size:12px; font-weight:700; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let user, academicYears = [], classes = [], grading = [];
+
+(async () => {
+  user = await initPage(['admin','exam_officer','vp_academic'], 'Cumulative Result Builder', 'result-builder');
+  if (!user) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <button class="btn btn--ghost btn--sm no-print" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Print</button>
+  `;
+
+  const [{ data: ay }, ctx] = await Promise.all([
+    db.from('academic_years').select('*').eq('school_id', user.school_id).order('label', {ascending:false}),
+    loadSchoolContext(user.school_id)
+  ]);
+  academicYears = ay || [];
+  classes = ctx.classes;
+  grading = ctx.grading;
+
+  renderPage();
+})();
+
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span> Cumulative Result Builder</h1>
+      <p>Annual average across all three terms — the standard for Nigerian private schools</p>
+    </div>
+
+    <div class="card no-print" style="margin-bottom:24px;">
+      <div class="card__header"><span class="card__title">Select Report Parameters</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Academic Year</label>
+          <select class="form-control" id="yearSelect" onchange="updateTermOptions()">
+            <option value="">Choose academic year…</option>
+            ${academicYears.map(y => `<option value="${y.id}" ${y.is_current?'selected':''}>${y.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Class</label>
+          <select class="form-control" id="classSelect">
+            <option value="">Choose class…</option>
+            ${classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <button class="btn btn--primary" onclick="buildCumulative()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span> Build Cumulative Report</button>
+      </div>
+    </div>
+
+    <div id="resultContainer">
+      <div class="et-empty">
+        <div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span></div>
+        <p>Select an academic year and class, then click<br><strong>Build Cumulative Report</strong>.</p>
+        <p style="font-size:12px;color:var(--ink-4);margin-top:8px;">
+          Formula: (Term1 Avg + Term2 Avg + Term3 Avg) ÷ Number of completed terms
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+async function buildCumulative() {
+  const yearId  = document.getElementById('yearSelect').value;
+  const classId = document.getElementById('classSelect').value;
+  if (!yearId || !classId) { toast('Select both academic year and class.', 'error'); return; }
+
+  const container = document.getElementById('resultContainer');
+  showLoader(container, 'Calculating cumulative results…');
+
+  // Get all terms for this academic year
+  const { data: terms } = await db.from('terms')
+    .select('*').eq('school_id', user.school_id).eq('academic_year_id', yearId)
+    .order('term_number');
+  if (!terms?.length) { showEmpty(container, 'No terms found for this academic year. Set up terms in Settings.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>'); return; }
+
+  // Get students enrolled in this class for ANY term in this year
+  const termIds = terms.map(t => t.id);
+  const { data: enrollments } = await db.from('enrollments')
+    .select('student_id, term_id, students(id,full_name,admission_no,gender)')
+    .eq('class_id', classId).eq('school_id', user.school_id)
+    .in('term_id', termIds);
+
+  // Unique students
+  const studentMap = {};
+  (enrollments || []).forEach(e => {
+    if (e.students && !studentMap[e.student_id]) studentMap[e.student_id] = e.students;
+  });
+  const students = Object.values(studentMap);
+
+  if (!students.length) { showEmpty(container, 'No students found in this class for this academic year.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>'); return; }
+
+  // Get all results for these students across all terms
+  const studentIds = students.map(s => s.id);
+  const { data: allResults } = await db.from('results')
+    .select('student_id,subject_id,exam_id,score,term_id,subjects(id,name,code),exams(id,name,max_score,weight)')
+    .eq('school_id', user.school_id)
+    .in('student_id', studentIds)
+    .in('term_id', termIds);
+
+  const gs = grading;
+
+  // Build per-student cumulative summaries
+  const studentCumulatives = students.map(student => {
+    const termSummaries = terms.map(term => {
+      const termResults = (allResults || []).filter(r => r.student_id === student.id && r.term_id === term.id);
+      return termResults.length ? buildTermSummary(termResults, gs) : null;
+    });
+    const cumulative = buildCumulativeSummary(termSummaries.filter(Boolean));
+    return { student, termSummaries, cumulative };
+  });
+
+  // Assign annual positions
+  const annualPositions = assignPositions(
+    studentCumulatives.map(s => ({ studentId: s.student.id, overall: s.cumulative?.annualAvg ?? null }))
+  );
+
+  // Get unique subjects across all terms
+  const allSubjectNames = [...new Set((allResults || []).map(r => r.subjects?.name).filter(Boolean))].sort();
+  const cls = classes.find(c => c.id === classId);
+  const year = academicYears.find(y => y.id === yearId);
+
+  container.innerHTML = `
+    <div class="card" style="padding:0;margin-bottom:20px;">
+      <div style="background:var(--ink);color:white;padding:16px 20px;border-radius:var(--radius) var(--radius) 0 0;">
+        <div style="font-size:16px;font-weight:800;">${cls?.name || 'Class'} — ${year?.label || 'Academic Year'} — Cumulative Results</div>
+        <div style="font-size:12px;color:#9ca3af;margin-top:4px;">${students.length} students · ${terms.length} term(s) · Formula: (T1 + T2 + T3) ÷ ${terms.length}</div>
+      </div>
+
+      <!-- Term headers -->
+      <div style="overflow-x:auto;">
+        <table style="font-size:13px;min-width:600px;">
+          <thead>
+            <tr style="background:var(--surface-3);">
+              <th style="min-width:180px;">Student</th>
+              <th>Adm No</th>
+              ${terms.map(t => `<th class="term-col">${t.name}<br><span style="font-size:10px;font-weight:400;color:var(--ink-3);">Average</span></th>`).join('')}
+              <th class="annual-col">Annual<br>Average</th>
+              <th class="term-col">Annual<br>Position</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${studentCumulatives
+              .sort((a,b) => (b.cumulative?.annualAvg||0) - (a.cumulative?.annualAvg||0))
+              .map(s => {
+                const pos = annualPositions[s.student.id];
+                return `
+                  <tr>
+                    <td><strong>${s.student.full_name}</strong></td>
+                    <td style="color:var(--ink-3);font-size:11px;">${s.student.admission_no || '—'}</td>
+                    ${s.termSummaries.map(ts => {
+                      const avg = ts?.overall ?? null;
+                      const color = avg === null ? 'var(--ink-4)' : avg >= 70 ? 'var(--success)' : avg >= 50 ? 'var(--warning)' : 'var(--danger)';
+                      return `<td class="term-col" style="color:${color};font-weight:700;">${avg !== null ? avg + '%' : '—'}</td>`;
+                    }).join('')}
+                    <td class="annual-col" style="color:${(s.cumulative?.annualAvg||0) >= 70 ? 'var(--success)' : (s.cumulative?.annualAvg||0) >= 50 ? 'var(--warning)' : 'var(--danger)'};">
+                      ${s.cumulative?.annualAvg !== null && s.cumulative?.annualAvg !== undefined ? s.cumulative.annualAvg + '%' : '—'}
+                    </td>
+                    <td class="term-col">
+                      ${pos ? `<span class="pos-badge">${pos.suffix}</span><br><span style="font-size:10px;color:var(--ink-3);">of ${pos.outOf}</span>` : '—'}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Per-subject cumulative breakdown -->
+    <div class="card no-print">
+      <div class="card__header"><span class="card__title">Subject Cumulative Averages</span></div>
+      <div style="overflow-x:auto;">
+        <table style="font-size:13px;">
+          <thead>
+            <tr>
+              <th style="min-width:180px;">Student</th>
+              ${allSubjectNames.map(s => `<th style="text-align:center;min-width:80px;">${s}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${studentCumulatives
+              .sort((a,b) => (b.cumulative?.annualAvg||0) - (a.cumulative?.annualAvg||0))
+              .map(s => `
+                <tr>
+                  <td><strong>${s.student.full_name}</strong></td>
+                  ${allSubjectNames.map(subName => {
+                    const subData = s.cumulative?.subjectCumulative ? Object.values(s.cumulative.subjectCumulative).find(x => x.name === subName) : null;
+                    const avg = subData?.avg ?? null;
+                    const color = avg === null ? '' : avg >= 70 ? 'var(--success)' : avg >= 50 ? 'var(--warning)' : 'var(--danger)';
+                    return `<td style="text-align:center;color:${color};font-weight:${avg!==null?'700':'400'};">${avg !== null ? avg + '%' : '—'}</td>`;
+                  }).join('')}
+                </tr>
+              `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Individual printable report cards button -->
+    <div class="no-print" style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap;">
+      <a href="report-cards.html?year=${yearId}&class=${classId}" class="btn btn--primary">
+        <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Generate Individual Report Cards
+      </a>
+    </div>
+  `;
+}
+</script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

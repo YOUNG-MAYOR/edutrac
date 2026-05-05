@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Offline</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      background: #0d1117; color: white;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 24px; text-align: center;
+    }
+    .card {
+      background: #1a2332; border-radius: 20px;
+      padding: 48px 36px; max-width: 400px; width: 100%;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .icon { font-size: 64px; margin-bottom: 24px; }
+    h1 { font-size: 24px; font-weight: 800; margin-bottom: 10px; }
+    p { font-size: 15px; color: #64748b; line-height: 1.7; margin-bottom: 24px; }
+    .tip {
+      background: rgba(10,110,63,0.15); border: 1px solid rgba(10,110,63,0.3);
+      border-radius: 10px; padding: 14px 16px; font-size: 13px;
+      color: #4ade80; text-align: left; margin-bottom: 24px;
+    }
+    .tip strong { display: block; margin-bottom: 4px; }
+    button {
+      width: 100%; padding: 13px; border-radius: 10px;
+      background: #0a6e3f; color: white; border: none;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      font-family: inherit; transition: background 0.2s;
+    }
+    button:hover { background: #065530; }
+    .status { margin-top: 16px; font-size: 13px; color: #475569; }
+    .dot {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; background: #dc2626;
+      margin-right: 6px; animation: blink 1.5s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg></span></div>
+    <h1>You're Offline</h1>
+    <p>EduTrack NG needs an internet connection to load for the first time. Once loaded, it works offline.</p>
+    <div class="tip">
+      <strong><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span> Tip for next time:</strong>
+      Open the app while connected to internet at least once. After that, it will load instantly even without internet.
+    </div>
+    <button onclick="tryReconnect()">↺ Try Again</button>
+    <div class="status">
+      <span class="dot"></span>
+      <span id="statusText">No internet connection</span>
+    </div>
+  </div>
+
+  <script>
+    function tryReconnect() {
+      if (navigator.onLine) {
+        window.location.reload();
+      } else {
+        document.getElementById('statusText').textContent = 'Still offline. Please check your data connection.';
+      }
+    }
+
+    // Auto-retry when connection returns
+    window.addEventListener('online', () => {
+      document.getElementById('statusText').textContent = 'Connection restored! Reloading…';
+      setTimeout(() => window.location.reload(), 1000);
+    });
+  </script>
+</body>
+</html>

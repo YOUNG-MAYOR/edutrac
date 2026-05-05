@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EduTrack NG">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>EduTrack NG — Fees</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .receipt { font-family: 'Courier New', monospace; }
+    .receipt h3 { text-align: center; font-size: 16px; margin-bottom: 4px; }
+    .receipt .r-school { text-align: center; font-size: 12px; color: var(--ink-3); margin-bottom: 16px; }
+    .receipt .r-line { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+    .receipt .r-divider { border-top: 1px dashed var(--border); margin: 8px 0; }
+    .receipt .r-total { font-weight: 700; font-size: 15px; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- Record Payment Modal -->
+<div class="modal" id="paymentModal">
+  <div class="modal__box">
+    <div class="modal__header">
+      <h2 class="modal__title">Record Payment</h2>
+      <button class="modal__close" onclick="closeModal('paymentModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body">
+      <form id="paymentForm">
+        <div class="form-group">
+          <label class="form-label">Student <span class="required">*</span></label>
+          <input type="text" id="studentSearch2" class="form-control" placeholder="Type student name…" oninput="searchStudents2()" autocomplete="off">
+          <div id="studentSuggest" style="position:relative;"></div>
+          <input type="hidden" id="payStudentId">
+        </div>
+        <div id="studentFeeInfo" style="display:none;margin-bottom:12px;background:var(--surface-2);border-radius:var(--radius-sm);padding:12px;">
+          <div style="font-size:13px;font-weight:600;" id="feeStudentName"></div>
+          <div style="font-size:12px;color:var(--ink-3);" id="feeStudentClass"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fee Type <span class="required">*</span></label>
+          <select id="feeTypeSelect" class="form-control" required><option value="">Select…</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Amount Paid (₦) <span class="required">*</span></label>
+          <input type="number" id="amountPaid" class="form-control" placeholder="0" min="0" required>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Payment Method</label>
+            <select id="payMethod" class="form-control">
+              <option value="cash">Cash</option>
+              <option value="transfer">Bank Transfer</option>
+              <option value="pos">POS</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Reference / Receipt No.</label>
+            <input type="text" id="payRef" class="form-control" placeholder="Optional">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes</label>
+          <input type="text" id="payNotes" class="form-control" placeholder="Optional note">
+        </div>
+        <div id="payError" class="form-error" style="display:none;"></div>
+      </form>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('paymentModal')">Cancel</button>
+      <button class="btn btn--primary" id="savePayBtn" onclick="savePayment()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Record Payment</button>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt Modal -->
+<div class="modal" id="receiptModal">
+  <div class="modal__box" style="max-width:380px;">
+    <div class="modal__header">
+      <h2 class="modal__title">Payment Receipt</h2>
+      <button class="modal__close" onclick="closeModal('receiptModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body receipt" id="receiptBody"></div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('receiptModal')">Close</button>
+      <button class="btn btn--primary" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Print</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fee Types Modal -->
+<div class="modal" id="feeTypeModal">
+  <div class="modal__box" style="max-width:440px;">
+    <div class="modal__header">
+      <h2 class="modal__title">Fee Types</h2>
+      <button class="modal__close" onclick="closeModal('feeTypeModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body">
+      <div id="feeTypeList" style="margin-bottom:16px;"></div>
+      <div style="border-top:1px solid var(--border);padding-top:16px;">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Fee Name</label>
+            <input type="text" id="newFeeName" class="form-control" placeholder="e.g. Tuition">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Amount (₦)</label>
+            <input type="number" id="newFeeAmount" class="form-control" placeholder="0">
+          </div>
+        </div>
+        <button class="btn btn--primary btn--sm" onclick="addFeeType()">+ Add Fee Type</button>
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--primary" onclick="closeModal('feeTypeModal')">Done</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, currentTerm, feeTypes = [], allPayments = [], allStudents = [], classes = [];
+
+(async () => {
+  currentUser = await initAdminLayout('fees', 'Fees & Payments');
+  if (!currentUser) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <button class="btn btn--secondary btn--sm" onclick="openFeeTypes()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>️ Fee Types</button>
+    <button class="btn btn--primary" onclick="openPaymentModal()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span> Record Payment</button>
+  `;
+
+  const [{ data: term }, { data: students }, { data: cls }] = await Promise.all([
+    db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current',true).maybeSingle(),
+    db.from('students').select('id,full_name,admission_no,enrollments(class_id,classes(name))')
+      .eq('school_id', currentUser.school_id).eq('is_active',true).order('full_name'),
+    db.from('classes').select('id,name').eq('school_id', currentUser.school_id).order('name')
+  ]);
+  currentTerm = term; allStudents = students || []; classes = cls || [];
+
+  await loadFeeTypes();
+  renderPage();
+  await loadPayments();
+})();
+
+async function loadFeeTypes() {
+  const { data } = await db.from('fee_types').select('*')
+    .eq('school_id', currentUser.school_id).order('name');
+  feeTypes = data || [];
+}
+
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1>Fees & Payments</h1>
+      <p>${currentTerm ? currentTerm.name + ' Term' : '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ No current term set'}</p>
+    </div>
+    <div class="stat-grid" id="feeStats" style="margin-bottom:24px;">
+      <div class="stat-card"><div class="et-spinner" style="margin:auto"></div></div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" id="tabPayments" onclick="switchFeeTab('payments')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span> Payment History</button>
+      <button class="tab" id="tabOutstanding" onclick="switchFeeTab('outstanding')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Outstanding</button>
+    </div>
+    <div id="paymentsPanel">
+      <div class="filter-bar">
+        <div class="search-box" style="flex:1;max-width:280px;">
+          <input type="text" class="form-control" id="paySearch" placeholder="Search student…" oninput="filterPayments()">
+        </div>
+        <select class="form-control" id="feeTypeFilter" onchange="filterPayments()" style="max-width:180px;">
+          <option value="">All Fee Types</option>
+          ${feeTypes.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
+        </select>
+        <button class="btn btn--secondary btn--sm" onclick="exportPaymentsCSV()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Export</button>
+      </div>
+      <div class="card" style="padding:0;">
+        <div class="table-wrap" id="payTable" style="border:none;"></div>
+      </div>
+    </div>
+    <div id="outstandingPanel" style="display:none;">
+      <div class="card" style="padding:0;">
+        <div class="table-wrap" id="outTable" style="border:none;"></div>
+      </div>
+    </div>
+  `;
+}
+
+function switchFeeTab(tab) {
+  document.getElementById('tabPayments').classList.toggle('active', tab === 'payments');
+  document.getElementById('tabOutstanding').classList.toggle('active', tab === 'outstanding');
+  document.getElementById('paymentsPanel').style.display = tab === 'payments' ? '' : 'none';
+  document.getElementById('outstandingPanel').style.display = tab === 'outstanding' ? '' : 'none';
+  if (tab === 'outstanding') renderOutstanding();
+}
+
+async function loadPayments() {
+  showLoader('#payTable', 'Loading payments…');
+  const { data, error } = await db.from('payments')
+    .select(`id, amount_paid, payment_method, reference, paid_at, notes,
+             students(full_name, admission_no),
+             fee_types(name, amount),
+             users(full_name)`)
+    .eq('school_id', currentUser.school_id)
+    .order('paid_at', { ascending: false });
+
+  if (error) { showError('#payTable', error.message); return; }
+  allPayments = data || [];
+
+  const total = allPayments.reduce((s, p) => s + Number(p.amount_paid), 0);
+  const termTotal = feeTypes.reduce((s, f) => s + Number(f.amount), 0) * allStudents.length;
+
+  document.getElementById('feeStats').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span></div>
+      <div class="stat-card__value" style="color:var(--success);font-size:20px;">${formatMoney(total)}</div>
+      <div class="stat-card__label">Total Collected</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span></div>
+      <div class="stat-card__value">${allPayments.length}</div>
+      <div class="stat-card__label">Transactions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️</div>
+      <div class="stat-card__value" style="color:var(--danger);font-size:20px;">${formatMoney(Math.max(0, termTotal - total))}</div>
+      <div class="stat-card__label">Outstanding</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span></div>
+      <div class="stat-card__value" style="color:var(--primary);">${termTotal > 0 ? Math.round(total/termTotal*100) : 0}%</div>
+      <div class="stat-card__label">Collection Rate</div>
+    </div>
+  `;
+  filterPayments();
+}
+
+function filterPayments() {
+  const q = (document.getElementById('paySearch')?.value || '').toLowerCase();
+  const ft = document.getElementById('feeTypeFilter')?.value || '';
+  const filtered = allPayments.filter(p =>
+    (!q || p.students?.full_name?.toLowerCase().includes(q) || p.students?.admission_no?.toLowerCase().includes(q)) &&
+    (!ft || p.fee_types?.id === ft || p.fee_types?.name === ft)
+  );
+  renderPayTable(filtered);
+}
+
+function renderPayTable(payments) {
+  if (!payments.length) { showEmpty('#payTable', 'No payments found', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>'); return; }
+  document.getElementById('payTable').innerHTML = `
+    <table>
+      <thead><tr><th>Student</th><th>Fee Type</th><th>Amount</th><th>Method</th><th>Date</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${payments.map(p => `
+          <tr>
+            <td>
+              <div class="student-cell">
+                <div class="avatar avatar--sm">${p.students?.full_name?.charAt(0) || '?'}</div>
+                <div class="info">
+                  <div class="name">${p.students?.full_name || '—'}</div>
+                  <div class="sub">${p.students?.admission_no || ''}</div>
+                </div>
+              </div>
+            </td>
+            <td>${p.fee_types?.name || '—'}</td>
+            <td><strong style="color:var(--success);">${formatMoney(p.amount_paid)}</strong></td>
+            <td><span class="chip">${p.payment_method || '—'}</span></td>
+            <td style="font-size:13px;color:var(--ink-3);">${formatDate(p.paid_at)}</td>
+            <td>
+              <button class="btn btn--ghost btn--sm" onclick="showReceipt('${p.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Receipt</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderOutstanding() {
+  if (!currentTerm || !feeTypes.length) {
+    showEmpty('#outTable', 'Set fee types first in Fee Types settings.'); return;
+  }
+  const totalExpected = feeTypes.reduce((s, f) => s + Number(f.amount), 0);
+
+  // Map student → total paid
+  const paidMap = {};
+  allPayments.forEach(p => {
+    if (!paidMap[p.students?.full_name]) paidMap[p.students?.full_name] = 0;
+    paidMap[p.students?.full_name] += Number(p.amount_paid);
+  });
+
+  // Build outstanding list from all students
+  const outstanding = allStudents.map(s => {
+    const paid = allPayments
+      .filter(p => p.students?.full_name === s.full_name)
+      .reduce((sum, p) => sum + Number(p.amount_paid), 0);
+    const balance = totalExpected - paid;
+    return { ...s, paid, balance };
+  }).filter(s => s.balance > 0).sort((a, b) => b.balance - a.balance);
+
+  if (!outstanding.length) {
+    document.getElementById('outTable').innerHTML = `
+      <div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span></div><p>All students are fully paid!</p></div>
+    `; return;
+  }
+
+  document.getElementById('outTable').innerHTML = `
+    <table>
+      <thead><tr><th>Student</th><th>Class</th><th>Expected</th><th>Paid</th><th>Balance</th><th>Action</th></tr></thead>
+      <tbody>
+        ${outstanding.map(s => `
+          <tr>
+            <td>
+              <div class="student-cell">
+                <div class="avatar avatar--sm" style="background:var(--danger)">${s.full_name.charAt(0)}</div>
+                <div class="info"><div class="name">${s.full_name}</div><div class="sub">${s.admission_no || ''}</div></div>
+              </div>
+            </td>
+            <td><span class="chip">${s.enrollments?.[0]?.classes?.name || '—'}</span></td>
+            <td>${formatMoney(totalExpected)}</td>
+            <td style="color:var(--success);">${formatMoney(s.paid)}</td>
+            <td><strong style="color:var(--danger);">${formatMoney(s.balance)}</strong></td>
+            <td>
+              <button class="btn btn--primary btn--sm" onclick="openPayForStudent('${s.id}','${s.full_name}')">Pay Now</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ── Payment Modal ─────────────────────────────────────────────
+
+function openPaymentModal() {
+  document.getElementById('paymentForm').reset();
+  document.getElementById('payStudentId').value = '';
+  document.getElementById('studentFeeInfo').style.display = 'none';
+  document.getElementById('payError').style.display = 'none';
+  document.getElementById('feeTypeSelect').innerHTML = `<option value="">Select…</option>` +
+    feeTypes.map(f => `<option value="${f.id}" data-amount="${f.amount}">${f.name} — ${formatMoney(f.amount)}</option>`).join('');
+  openModal('paymentModal');
+}
+
+function openPayForStudent(studentId, name) {
+  openPaymentModal();
+  document.getElementById('studentSearch2').value = name;
+  document.getElementById('payStudentId').value = studentId;
+  const s = allStudents.find(s => s.id === studentId);
+  if (s) {
+    document.getElementById('studentFeeInfo').style.display = 'block';
+    document.getElementById('feeStudentName').textContent = s.full_name;
+    document.getElementById('feeStudentClass').textContent = s.enrollments?.[0]?.classes?.name || '';
+  }
+}
+
+let suggestTimeout;
+function searchStudents2() {
+  clearTimeout(suggestTimeout);
+  suggestTimeout = setTimeout(() => {
+    const q = document.getElementById('studentSearch2').value.toLowerCase();
+    if (!q) { document.getElementById('studentSuggest').innerHTML = ''; return; }
+    const matches = allStudents.filter(s => s.full_name.toLowerCase().includes(q)).slice(0, 6);
+    document.getElementById('studentSuggest').innerHTML = matches.length ? `
+      <div style="position:absolute;left:0;right:0;z-index:10;background:white;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow);top:2px;">
+        ${matches.map(s => `
+          <div onclick="selectStudent2('${s.id}','${s.full_name.replace(/'/g,"\\'")}','${s.enrollments?.[0]?.classes?.name || ''}')"
+            style="padding:10px 14px;cursor:pointer;font-size:14px;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+            <strong>${s.full_name}</strong>
+            <span style="color:var(--ink-3);font-size:12px;margin-left:6px;">${s.enrollments?.[0]?.classes?.name || ''}</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : '';
+  }, 200);
+}
+
+function selectStudent2(id, name, className) {
+  document.getElementById('studentSearch2').value = name;
+  document.getElementById('payStudentId').value = id;
+  document.getElementById('studentSuggest').innerHTML = '';
+  document.getElementById('studentFeeInfo').style.display = 'block';
+  document.getElementById('feeStudentName').textContent = name;
+  document.getElementById('feeStudentClass').textContent = className;
+}
+
+// Auto-fill amount when fee type selected
+document.addEventListener('change', e => {
+  if (e.target.id === 'feeTypeSelect') {
+    const opt = e.target.selectedOptions[0];
+    if (opt?.dataset.amount) document.getElementById('amountPaid').value = opt.dataset.amount;
+  }
+});
+
+async function savePayment() {
+  const btn = document.getElementById('savePayBtn');
+  const errEl = document.getElementById('payError');
+  errEl.style.display = 'none';
+  const studentId = document.getElementById('payStudentId').value;
+  const feeTypeId = document.getElementById('feeTypeSelect').value;
+  const amount = Number(document.getElementById('amountPaid').value);
+
+  if (!studentId) { errEl.textContent = 'Select a student.'; errEl.style.display='block'; return; }
+  if (!feeTypeId) { errEl.textContent = 'Select a fee type.'; errEl.style.display='block'; return; }
+  if (!amount || amount <= 0) { errEl.textContent = 'Enter a valid amount.'; errEl.style.display='block'; return; }
+  if (!currentTerm) { errEl.textContent = 'No current term set.'; errEl.style.display='block'; return; }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    // Guard: warn if a payment for this student+fee+term already exists
+    const { data: existing } = await db.from('payments')
+      .select('id, amount_paid')
+      .eq('student_id', studentId)
+      .eq('fee_type_id', feeTypeId)
+      .eq('term_id', currentTerm.id)
+      .maybeSingle();
+    if (existing) {
+      const proceed = confirm(
+        `A payment of ${formatMoney(existing.amount_paid)} already exists for this fee this term.\n\nRecord an additional payment anyway?`
+      );
+      if (!proceed) { btn.disabled = false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Record Payment'; return; }
+    }
+
+    const { data, error } = await db.from('payments').insert({
+      school_id: currentUser.school_id,
+      student_id: studentId,
+      fee_type_id: feeTypeId,
+      term_id: currentTerm.id,
+      amount_paid: amount,
+      payment_method: document.getElementById('payMethod').value,
+      reference: document.getElementById('payRef').value || null,
+      notes: document.getElementById('payNotes').value || null,
+      received_by: currentUser.id
+    }).select(`*, students(full_name), fee_types(name), schools(name)`).single();
+    if (error) throw error;
+
+    toast('Payment recorded!', 'success');
+    closeModal('paymentModal');
+    await loadPayments();
+    showReceipt(data.id, data);
+  } catch (err) {
+    errEl.textContent = err.message; errEl.style.display = 'block';
+  } finally { btn.disabled = false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Record Payment'; }
+}
+
+function showReceipt(paymentId, payData) {
+  const p = payData || allPayments.find(p => p.id === paymentId);
+  if (!p) return;
+  document.getElementById('receiptBody').innerHTML = `
+    <div class="receipt">
+      <h3><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span> PAYMENT RECEIPT</h3>
+      <div class="r-school">${currentUser.schools?.name || 'School'}</div>
+      <div class="r-divider"></div>
+      <div class="r-line"><span>Receipt No:</span><span>${p.reference || paymentId?.slice(-8).toUpperCase()}</span></div>
+      <div class="r-line"><span>Date:</span><span>${formatDate(p.paid_at || new Date())}</span></div>
+      <div class="r-divider"></div>
+      <div class="r-line"><span>Student:</span><span>${p.students?.full_name || '—'}</span></div>
+      <div class="r-line"><span>Fee Type:</span><span>${p.fee_types?.name || '—'}</span></div>
+      <div class="r-line"><span>Method:</span><span>${p.payment_method || '—'}</span></div>
+      <div class="r-divider"></div>
+      <div class="r-line r-total"><span>AMOUNT PAID:</span><span>${formatMoney(p.amount_paid)}</span></div>
+      <div class="r-divider"></div>
+      <div style="text-align:center;font-size:12px;color:var(--ink-3);margin-top:12px;">
+        Thank you for your payment.<br>Keep this receipt for your records.
+      </div>
+    </div>
+  `;
+  openModal('receiptModal');
+}
+
+// ── Fee Types Manager ─────────────────────────────────────────
+
+async function openFeeTypes() {
+  renderFeeTypeList();
+  openModal('feeTypeModal');
+}
+
+function renderFeeTypeList() {
+  document.getElementById('feeTypeList').innerHTML = feeTypes.length ? `
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Current Fee Types (${currentTerm?.name || 'all terms'}):</div>
+    ${feeTypes.map(f => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+        <div>
+          <span style="font-weight:600;">${f.name}</span>
+          <span style="color:var(--success);margin-left:12px;font-weight:700;">${formatMoney(f.amount)}</span>
+        </div>
+        <button class="btn btn--ghost btn--sm" onclick="deleteFeeType('${f.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span></button>
+      </div>
+    `).join('')}
+  ` : '<p style="color:var(--ink-3);font-size:14px;">No fee types yet.</p>';
+}
+
+async function addFeeType() {
+  const name = document.getElementById('newFeeName').value.trim();
+  const amount = Number(document.getElementById('newFeeAmount').value);
+  if (!name || !amount) { toast('Enter name and amount.', 'error'); return; }
+  const { error } = await db.from('fee_types').insert({
+    school_id: currentUser.school_id, name, amount,
+    term_id: currentTerm?.id || null
+  });
+  if (error) { toast(error.message, 'error'); return; }
+  document.getElementById('newFeeName').value = '';
+  document.getElementById('newFeeAmount').value = '';
+  await loadFeeTypes();
+  renderFeeTypeList();
+  // Refresh filter
+  document.getElementById('feeTypeSelect').innerHTML = `<option value="">Select…</option>` +
+    feeTypes.map(f => `<option value="${f.id}" data-amount="${f.amount}">${f.name} — ${formatMoney(f.amount)}</option>`).join('');
+  toast('Fee type added!', 'success');
+}
+
+async function deleteFeeType(id) {
+  if (!confirm('Delete this fee type?')) return;
+  const { error } = await db.from('fee_types').delete().eq('id', id);
+  if (error) { toast(error.message, 'error'); return; }
+  await loadFeeTypes(); renderFeeTypeList(); toast('Deleted.', 'success');
+}
+
+function exportPaymentsCSV() {
+  const headers = ['Student', 'Admission No', 'Fee Type', 'Amount', 'Method', 'Reference', 'Date'];
+  const rows = allPayments.map(p => [
+    p.students?.full_name || '', p.students?.admission_no || '',
+    p.fee_types?.name || '', p.amount_paid, p.payment_method || '',
+    p.reference || '', formatDate(p.paid_at)
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'payments.csv'; a.click();
+}
+</script>
+<script src="../js/pwa.js"></script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

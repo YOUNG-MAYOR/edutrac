@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Announcements</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    :root { --primary: #6d28d9; --primary-light: #ede9fe; --primary-dark: #5b21b6; }
+    .btn--purple { background:#6d28d9;color:white;border:none; }
+    .btn--purple:hover { background:#5b21b6; }
+
+    /* Announcement card */
+    .ann-card { border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;margin-bottom:16px;position:relative;transition:box-shadow .15s; }
+    .ann-card:hover { box-shadow:0 4px 12px rgba(0,0,0,.07); }
+    .ann-card.pinned { border-left:4px solid #f59e0b;background:#fffbeb; }
+    .ann-card.draft  { border-style:dashed;opacity:.75; }
+    .ann-type-chip { padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase; }
+    .ann-type-chip.info    { background:#dbeafe;color:#1e40af; }
+    .ann-type-chip.warning { background:#fef3c7;color:#92400e; }
+    .ann-type-chip.update  { background:#dcfce7;color:#166534; }
+    .ann-type-chip.urgent  { background:#fee2e2;color:#991b1b; }
+    .ann-meta { font-size:12px;color:var(--ink-3);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap; }
+    .ann-body { font-size:14px;color:var(--ink-2);margin-top:10px;line-height:1.6; }
+    .ann-actions { display:flex;gap:8px;margin-top:14px; }
+    .ann-audience { display:inline-flex;align-items:center;gap:5px;background:var(--bg);padding:3px 10px;border-radius:12px;font-size:11px;color:var(--ink-3); }
+    .pin-badge { background:#f59e0b;color:white;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;margin-left:8px; }
+    .draft-badge { background:#94a3b8;color:white;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;margin-left:8px; }
+
+    /* Stats bar */
+    .ann-stats { display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px; }
+    .ann-stat { background:white;border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 18px;flex:1;min-width:120px; }
+    .ann-stat__val { font-size:24px;font-weight:800;color:#6d28d9; }
+    .ann-stat__lbl { font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.4px;margin-top:2px; }
+
+    /* Filter tabs */
+    .filter-tabs { display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid var(--border); }
+    .ftab { padding:8px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-2px; }
+    .ftab.active { color:#6d28d9;border-bottom-color:#6d28d9; }
+
+    /* Compose form */
+    .compose-section { background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:28px; }
+    .compose-section__title { font-size:14px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px; }
+    .audience-checkboxes { display:flex;gap:16px;flex-wrap:wrap; }
+    .audience-cb { display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer; }
+    .audience-cb input { width:16px;height:16px;accent-color:#6d28d9;cursor:pointer; }
+    textarea.form-input { resize:vertical;font-family:inherit; }
+    .char-count { font-size:11px;color:var(--ink-3);text-align:right;margin-top:4px; }
+    .preview-box { background:white;border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-top:12px;display:none; }
+    .preview-box.show { display:block; }
+    .preview-label { font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let allAnnouncements = [];
+let currentTab = 'published';
+let editingId = null;
+
+(async () => {
+  const user = await initSaasLayout('announcements', 'Announcements');
+  if (!user) return;
+  const body = document.getElementById('pageBody');
+
+  body.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+      <div>
+        <h1>Platform Announcements</h1>
+        <p style="color:var(--ink-3);margin:4px 0 0">Broadcast notices to all schools or target specific groups</p>
+      </div>
+      <button class="btn btn--purple" onclick="toggleCompose()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>️ New Announcement</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="ann-stats" id="annStats">
+      <div class="ann-stat"><div class="et-spinner" style="margin:auto"></div></div>
+    </div>
+
+    <!-- Compose panel -->
+    <div class="compose-section" id="composeSection" style="display:none">
+      <div class="compose-section__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>️ <span id="composeTitle">New Announcement</span></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Title *</label>
+          <input class="form-input" id="annTitle" placeholder="e.g. New Result Export Feature" maxlength="120" oninput="updatePreview()">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Type</label>
+          <select class="form-input" id="annType" onchange="updatePreview()">
+            <option value="info">ℹ️ Info</option>
+            <option value="update"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Update / New Feature</option>
+            <option value="warning"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Warning / Action Required</option>
+            <option value="urgent"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Urgent</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:8px">
+        <label class="form-label">Message *</label>
+        <textarea class="form-input" id="annBody" rows="4" maxlength="1000" placeholder="Write your announcement here…" oninput="updatePreview()"></textarea>
+        <div class="char-count"><span id="charCount">0</span> / 1000</div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px">
+        <label class="form-label">Audience</label>
+        <div class="audience-checkboxes">
+          <label class="audience-cb"><input type="checkbox" id="aud_all" checked onchange="audienceAllChanged(this)"> All Schools</label>
+          <label class="audience-cb"><input type="checkbox" id="aud_pro" disabled> Pro Plan Only</label>
+          <label class="audience-cb"><input type="checkbox" id="aud_basic" disabled> Basic Plan</label>
+          <label class="audience-cb"><input type="checkbox" id="aud_free" disabled> Free Plan</label>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+        <label class="audience-cb">
+          <input type="checkbox" id="annPinned"> <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span> Pin to top of dashboard
+        </label>
+        <label class="audience-cb">
+          <input type="checkbox" id="annSaveDraft"> <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save as Draft
+        </label>
+      </div>
+
+      <div class="preview-box" id="previewBox">
+        <div class="preview-label">Preview</div>
+        <div id="previewContent"></div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn--ghost" onclick="cancelCompose()">Cancel</button>
+        <button class="btn btn--secondary" onclick="previewAnn()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span> Preview</button>
+        <button class="btn btn--purple" id="annSubmitBtn" onclick="publishAnn()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span> Publish</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="filter-tabs">
+      <button class="ftab active" onclick="switchTab('published', this)">Published</button>
+      <button class="ftab"        onclick="switchTab('draft', this)">Drafts</button>
+      <button class="ftab"        onclick="switchTab('pinned', this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span> Pinned</button>
+      <button class="ftab"        onclick="switchTab('all', this)">All</button>
+    </div>
+
+    <div id="annList">
+      <div class="et-loader"><div class="et-spinner"></div></div>
+    </div>
+  `;
+
+  await loadAnnouncements();
+})();
+
+async function loadAnnouncements() {
+  const { data, error } = await db
+    .from('platform_announcements')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error && error.code === '42P01') {
+    // Table doesn't exist yet
+    document.getElementById('annList').innerHTML = `
+      <div class="et-empty">
+        <div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span></div>
+        <p>Run <strong>migration_saas_owner.sql</strong> first to create the announcements table, then refresh.</p>
+      </div>
+    `;
+    updateStats([]);
+    return;
+  }
+
+  allAnnouncements = data || [];
+  updateStats(allAnnouncements);
+  renderList();
+}
+
+function updateStats(anns) {
+  const published = anns.filter(a => !a.is_draft).length;
+  const pinned    = anns.filter(a => a.is_pinned).length;
+  const drafts    = anns.filter(a => a.is_draft).length;
+  document.getElementById('annStats').innerHTML = `
+    <div class="ann-stat"><div class="ann-stat__val">${published}</div><div class="ann-stat__lbl">Published</div></div>
+    <div class="ann-stat"><div class="ann-stat__val">${pinned}</div><div class="ann-stat__lbl">Pinned</div></div>
+    <div class="ann-stat"><div class="ann-stat__val">${drafts}</div><div class="ann-stat__lbl">Drafts</div></div>
+    <div class="ann-stat"><div class="ann-stat__val">${anns.length}</div><div class="ann-stat__lbl">Total</div></div>
+  `;
+}
+
+function switchTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderList();
+}
+
+function renderList() {
+  let filtered = allAnnouncements;
+  if (currentTab === 'published') filtered = allAnnouncements.filter(a => !a.is_draft);
+  if (currentTab === 'draft')     filtered = allAnnouncements.filter(a => a.is_draft);
+  if (currentTab === 'pinned')    filtered = allAnnouncements.filter(a => a.is_pinned && !a.is_draft);
+
+  const list = document.getElementById('annList');
+  if (!filtered.length) {
+    list.innerHTML = `<div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span></div><p>No ${currentTab === 'all' ? '' : currentTab + ' '}announcements yet</p></div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(a => renderCard(a)).join('');
+}
+
+const TYPE_ICONS  = { info: 'ℹ️', warning: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️', update: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>', urgent: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>' };
+const AUD_LABELS  = { all: 'All Schools', pro: 'Pro Plan Only', basic: 'Basic Plan', free: 'Free Plan Only' };
+
+function renderCard(a) {
+  const icon = TYPE_ICONS[a.type] || '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>';
+  return `
+    <div class="ann-card ${a.is_pinned && !a.is_draft ? 'pinned' : ''} ${a.is_draft ? 'draft' : ''}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:18px">${icon}</span>
+          <span style="font-size:15px;font-weight:700">${a.title}</span>
+          <span class="ann-type-chip ${a.type}">${a.type}</span>
+          ${a.is_pinned && !a.is_draft ? '<span class="pin-badge"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span> Pinned</span>' : ''}
+          ${a.is_draft ? '<span class="draft-badge">Draft</span>' : ''}
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn--ghost btn--sm" onclick="editAnn('${a.id}')">Edit</button>
+          ${a.is_draft
+            ? `<button class="btn btn--sm btn--success btn--ghost" onclick="publishDraft('${a.id}')">Publish</button>`
+            : `<button class="btn btn--sm btn--secondary btn--ghost" onclick="archiveAnn('${a.id}')">Archive</button>`
+          }
+          <button class="btn btn--sm btn--danger btn--ghost" onclick="deleteAnn('${a.id}')">Delete</button>
+        </div>
+      </div>
+      <div class="ann-body">${a.body}</div>
+      <div class="ann-meta">
+        <span>${formatDate(a.created_at)}</span>
+        <span class="ann-audience"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> ${AUD_LABELS[a.audience] || a.audience}</span>
+        ${a.is_pinned ? '<span class="ann-audience"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span> Pinned</span>' : ''}
+      </div>
+    </div>
+  `;
+}
+
+function toggleCompose() {
+  const sec = document.getElementById('composeSection');
+  const isOpen = sec.style.display !== 'none';
+  if (isOpen) { cancelCompose(); } else { sec.style.display = 'block'; sec.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+}
+
+function cancelCompose() {
+  editingId = null;
+  document.getElementById('composeSection').style.display = 'none';
+  document.getElementById('annTitle').value = '';
+  document.getElementById('annBody').value  = '';
+  document.getElementById('annType').value  = 'info';
+  document.getElementById('annPinned').checked = false;
+  document.getElementById('annSaveDraft').checked = false;
+  document.getElementById('aud_all').checked = true;
+  document.getElementById('charCount').textContent = '0';
+  document.getElementById('previewBox').classList.remove('show');
+  document.getElementById('composeTitle').textContent = 'New Announcement';
+  document.getElementById('annSubmitBtn').innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span> Publish';
+}
+
+function audienceAllChanged(el) {
+  const specific = ['aud_pro','aud_basic','aud_free'];
+  specific.forEach(id => {
+    const cb = document.getElementById(id);
+    cb.disabled = el.checked;
+    if (el.checked) cb.checked = false;
+  });
+}
+
+function updatePreview() {
+  const body = document.getElementById('annBody');
+  document.getElementById('charCount').textContent = body.value.length;
+}
+
+function previewAnn() {
+  const title = document.getElementById('annTitle').value.trim();
+  const body  = document.getElementById('annBody').value.trim();
+  const type  = document.getElementById('annType').value;
+  if (!title && !body) { toast('Fill in title and message first', 'error'); return; }
+  const box = document.getElementById('previewBox');
+  box.classList.add('show');
+  document.getElementById('previewContent').innerHTML = `
+    <div class="ann-card" style="margin:0;border:none;padding:0">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span>${TYPE_ICONS[type]}</span>
+        <span style="font-weight:700">${title || '(no title)'}</span>
+        <span class="ann-type-chip ${type}">${type}</span>
+      </div>
+      <div class="ann-body">${body || '(no message)'}</div>
+      <div class="ann-meta"><span>Just now</span></div>
+    </div>
+  `;
+}
+
+async function publishAnn() {
+  const title    = document.getElementById('annTitle').value.trim();
+  const body     = document.getElementById('annBody').value.trim();
+  const type     = document.getElementById('annType').value;
+  const pinned   = document.getElementById('annPinned').checked;
+  const isDraft  = document.getElementById('annSaveDraft').checked;
+
+  let audience = 'all';
+  if (!document.getElementById('aud_all').checked) {
+    if (document.getElementById('aud_pro').checked)   audience = 'pro';
+    else if (document.getElementById('aud_basic').checked) audience = 'basic';
+    else if (document.getElementById('aud_free').checked)  audience = 'free';
+  }
+
+  if (!title) { toast('Title is required', 'error'); return; }
+  if (!body)  { toast('Message body is required', 'error'); return; }
+
+  const btn = document.getElementById('annSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = editingId ? 'Saving…' : (isDraft ? 'Saving draft…' : 'Publishing…');
+
+  const payload = { title, body, type, is_pinned: pinned, is_draft: isDraft, audience };
+
+  let error;
+  if (editingId) {
+    const res = await db.from('platform_announcements').update(payload).eq('id', editingId);
+    error = res.error;
+    if (!error) {
+      const idx = allAnnouncements.findIndex(a => a.id === editingId);
+      if (idx !== -1) allAnnouncements[idx] = { ...allAnnouncements[idx], ...payload };
+    }
+  } else {
+    const res = await db.from('platform_announcements').insert(payload).select().single();
+    error = res.error;
+    if (!error && res.data) allAnnouncements.unshift(res.data);
+  }
+
+  btn.disabled = false;
+  if (error) {
+    toast('Error: ' + error.message, 'error');
+    btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span> Publish';
+    return;
+  }
+
+  toast(isDraft ? '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Draft saved' : '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span> Announcement published!');
+  updateStats(allAnnouncements);
+  cancelCompose();
+  renderList();
+}
+
+function editAnn(id) {
+  const ann = allAnnouncements.find(a => a.id === id);
+  if (!ann) return;
+  editingId = id;
+  document.getElementById('annTitle').value  = ann.title;
+  document.getElementById('annBody').value   = ann.body;
+  document.getElementById('annType').value   = ann.type;
+  document.getElementById('annPinned').checked    = ann.is_pinned;
+  document.getElementById('annSaveDraft').checked = ann.is_draft;
+  document.getElementById('charCount').textContent = ann.body.length;
+  document.getElementById('composeTitle').textContent = 'Edit Announcement';
+  document.getElementById('annSubmitBtn').innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save Changes';
+  const sec = document.getElementById('composeSection');
+  sec.style.display = 'block';
+  sec.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+async function publishDraft(id) {
+  const { error } = await db.from('platform_announcements').update({ is_draft: false }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  const ann = allAnnouncements.find(a => a.id === id);
+  if (ann) ann.is_draft = false;
+  toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Draft published!');
+  updateStats(allAnnouncements);
+  renderList();
+}
+
+async function archiveAnn(id) {
+  if (!confirm('Archive this announcement? It will no longer be visible to schools.')) return;
+  const { error } = await db.from('platform_announcements').update({ is_draft: true }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  const ann = allAnnouncements.find(a => a.id === id);
+  if (ann) ann.is_draft = true;
+  toast('Announcement archived');
+  updateStats(allAnnouncements);
+  renderList();
+}
+
+async function deleteAnn(id) {
+  if (!confirm('Permanently delete this announcement?')) return;
+  const { error } = await db.from('platform_announcements').delete().eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  allAnnouncements = allAnnouncements.filter(a => a.id !== id);
+  toast('Deleted');
+  updateStats(allAnnouncements);
+  renderList();
+}
+</script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

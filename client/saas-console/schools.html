@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — All Schools</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    :root { --primary: #6d28d9; --primary-light: #ede9fe; --primary-dark: #5b21b6; }
+    .plan-chip { padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase; }
+    .plan-chip.free    { background:#f1f5f9;color:#64748b; }
+    .plan-chip.basic   { background:#dbeafe;color:#1d4ed8; }
+    .plan-chip.pro     { background:#ede9fe;color:#6d28d9; }
+    .status-dot { width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px; }
+    .status-dot.active   { background:#10b981; }
+    .status-dot.inactive { background:#ef4444; }
+    .school-detail-panel {
+      position:fixed;top:0;right:-420px;width:420px;max-width:100vw;height:100vh;
+      background:white;box-shadow:-4px 0 20px rgba(0,0,0,.12);z-index:1000;
+      transition:right .3s ease;overflow-y:auto;
+    }
+    .school-detail-panel.open { right:0; }
+    .panel-overlay { position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:999;display:none; }
+    .panel-overlay.active { display:block; }
+    .panel-header { padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px; }
+    .panel-body { padding:24px; }
+    .panel-section { margin-bottom:24px; }
+    .panel-section__title { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-3);margin-bottom:12px; }
+    .info-row { display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bg);font-size:14px; }
+    .info-row:last-child { border-bottom:none; }
+    .info-label { color:var(--ink-3); }
+    .action-group { display:flex;flex-direction:column;gap:8px; }
+    .filter-bar { display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center; }
+    .filter-bar input, .filter-bar select { font-size:14px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:white;color:var(--ink); }
+    .filter-bar input { flex:1;min-width:180px; }
+    .school-avatar { width:36px;height:36px;border-radius:8px;background:#6d28d9;color:white;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0; }
+    .school-row-btn { background:none;border:none;color:#6d28d9;cursor:pointer;font-weight:600;text-align:left;font-size:14px;padding:0; }
+    .school-row-btn:hover { text-decoration:underline; }
+    .mini-stat { background:var(--bg);padding:12px;border-radius:var(--radius-sm);text-align:center; }
+    .mini-stat__val { font-size:20px;font-weight:800;color:#6d28d9; }
+    .mini-stat__lbl { font-size:11px;color:var(--ink-3); }
+    .btn--purple { background:#6d28d9;color:white;border:none; }
+    .btn--purple:hover { background:#5b21b6; }
+    select.plan-select { font-size:13px;padding:6px 10px;border:1.5px solid #6d28d9;border-radius:var(--radius-sm);color:#6d28d9;font-weight:700;cursor:pointer; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- School Detail Panel -->
+<div class="panel-overlay" id="panelOverlay" onclick="closePanel()"></div>
+<div class="school-detail-panel" id="schoolPanel">
+  <div class="panel-header">
+    <div class="school-avatar" id="panelAvatar">—</div>
+    <div>
+      <div style="font-size:16px;font-weight:700" id="panelName">—</div>
+      <div style="font-size:12px;color:var(--ink-3)" id="panelSub">—</div>
+    </div>
+    <button onclick="closePanel()" style="margin-left:auto;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-3)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+  </div>
+  <div class="panel-body" id="panelBody">Loading…</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let allSchools = [];
+let schoolStats = {};
+let currentSchool = null;
+
+(async () => {
+  const user = await initSaasLayout('schools', 'All Schools');
+  if (!user) return;
+  const body = document.getElementById('pageBody');
+
+  body.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div>
+        <h1>All Schools</h1>
+        <p style="color:var(--ink-3);margin:4px 0 0">Manage every school on your platform</p>
+      </div>
+      <button class="btn btn--purple" onclick="openAddSchool()">+ Register New School</button>
+    </div>
+
+    <div class="filter-bar">
+      <input type="search" id="searchInput" placeholder="<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>  Search by name, state, LGA…" oninput="renderTable()">
+      <select id="planFilter" onchange="renderTable()">
+        <option value="">All Plans</option>
+        <option value="free">Free</option>
+        <option value="basic">Basic</option>
+        <option value="pro">Pro</option>
+      </select>
+      <select id="statusFilter" onchange="renderTable()">
+        <option value="">All Status</option>
+        <option value="active">Active</option>
+        <option value="inactive">Suspended</option>
+      </select>
+    </div>
+
+    <div class="card" style="padding:0">
+      <div class="table-wrap">
+        <table id="schoolTable">
+          <thead>
+            <tr>
+              <th>School</th>
+              <th>Plan</th>
+              <th>Status</th>
+              <th>Students</th>
+              <th>Staff</th>
+              <th>Joined</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="7" style="text-align:center;padding:32px"><div class="et-spinner" style="margin:auto"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Fetch all schools
+  const { data: schools } = await db.from('schools').select('*').order('created_at', { ascending: false });
+  allSchools = schools || [];
+
+  // Fetch student & user counts per school
+  const [studRes, userRes] = await Promise.all([
+    db.from('students').select('school_id').eq('is_active', true),
+    db.from('users').select('school_id, role'),
+  ]);
+
+  const studentCounts = {};
+  (studRes.data || []).forEach(s => {
+    studentCounts[s.school_id] = (studentCounts[s.school_id] || 0) + 1;
+  });
+  const staffCounts = {};
+  (userRes.data || []).forEach(u => {
+    if (u.role === 'teacher') staffCounts[u.school_id] = (staffCounts[u.school_id] || 0) + 1;
+  });
+  const adminData = {};
+  (userRes.data || []).forEach(u => {
+    if (u.role === 'admin') adminData[u.school_id] = (adminData[u.school_id] || 0) + 1;
+  });
+
+  allSchools.forEach(s => {
+    schoolStats[s.id] = {
+      students: studentCounts[s.id] || 0,
+      staff: staffCounts[s.id] || 0,
+      admins: adminData[s.id] || 0,
+    };
+  });
+
+  renderTable();
+
+  // Check URL param to auto-open
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('id')) {
+    const s = allSchools.find(x => x.id === params.get('id'));
+    if (s) openPanel(s);
+  }
+})();
+
+function renderTable() {
+  const q       = document.getElementById('searchInput').value.toLowerCase();
+  const plan    = document.getElementById('planFilter').value;
+  const status  = document.getElementById('statusFilter').value;
+
+  let filtered = allSchools.filter(s => {
+    const matchQ = !q || [s.name, s.state, s.lga, s.email].some(v => v && v.toLowerCase().includes(q));
+    const matchP = !plan   || s.plan === plan;
+    const matchS = !status || (status === 'active' ? s.is_active : !s.is_active);
+    return matchQ && matchP && matchS;
+  });
+
+  const tbody = document.getElementById('tableBody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span></div><p>No schools match your filters</p></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(s => {
+    const stats = schoolStats[s.id] || {};
+    return `
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="school-avatar">${s.name.charAt(0)}</div>
+            <div>
+              <button class="school-row-btn" onclick='openPanel(${JSON.stringify(s).replace(/'/g,"&apos;")})'>${s.name}</button>
+              <a href="school-detail.html?id=${s.id}" style="font-size:10px;color:var(--ink-3);text-decoration:none" title="Deep dive">↗</a>
+              <div style="font-size:11px;color:var(--ink-3)">${[s.state,s.lga].filter(Boolean).join(', ') || '—'}</div>
+            </div>
+          </div>
+        </td>
+        <td><span class="plan-chip ${s.plan}">${s.plan}</span></td>
+        <td>
+          <span class="status-dot ${s.is_active ? 'active' : 'inactive'}"></span>
+          ${s.is_active ? 'Active' : 'Suspended'}
+        </td>
+        <td>${stats.students}</td>
+        <td>${stats.staff}</td>
+        <td style="font-size:12px;color:var(--ink-3)">${formatDate(s.created_at)}</td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <a href="school-detail.html?id=${s.id}" class="btn btn--ghost btn--sm">View ↗</a>
+            <button class="btn btn--sm ${s.is_active ? 'btn--danger' : 'btn--success'} btn--ghost"
+              onclick="toggleStatus('${s.id}', ${s.is_active})">
+              ${s.is_active ? 'Suspend' : 'Activate'}
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openPanel(school) {
+  currentSchool = school;
+  const stats = schoolStats[school.id] || {};
+  document.getElementById('panelAvatar').textContent = school.name.charAt(0);
+  document.getElementById('panelName').textContent = school.name;
+  document.getElementById('panelSub').textContent = [school.state, school.lga].filter(Boolean).join(', ') || 'Location not set';
+
+  document.getElementById('panelBody').innerHTML = `
+    <div class="panel-section">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">
+        <div class="mini-stat"><div class="mini-stat__val">${stats.students}</div><div class="mini-stat__lbl">Students</div></div>
+        <div class="mini-stat"><div class="mini-stat__val">${stats.staff}</div><div class="mini-stat__lbl">Teachers</div></div>
+        <div class="mini-stat"><div class="mini-stat__val">${stats.admins}</div><div class="mini-stat__lbl">Admins</div></div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section__title">School Info</div>
+      <div class="info-row"><span class="info-label">Phone</span><span>${school.phone || '—'}</span></div>
+      <div class="info-row"><span class="info-label">Email</span><span>${school.email || '—'}</span></div>
+      <div class="info-row"><span class="info-label">Address</span><span>${school.address || '—'}</span></div>
+      <div class="info-row"><span class="info-label">Motto</span><span>${school.motto || '—'}</span></div>
+      <div class="info-row"><span class="info-label">Joined</span><span>${formatDate(school.created_at)}</span></div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section__title">Subscription</div>
+      <div class="info-row">
+        <span class="info-label">Current Plan</span>
+        <span class="plan-chip ${school.plan}">${school.plan}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Status</span>
+        <span><span class="status-dot ${school.is_active ? 'active' : 'inactive'}"></span>${school.is_active ? 'Active' : 'Suspended'}</span>
+      </div>
+      <div style="margin-top:12px">
+        <label style="font-size:12px;color:var(--ink-3);display:block;margin-bottom:4px">Change Plan</label>
+        <select class="plan-select" id="planSelect" onchange="changePlan(this.value)">
+          <option value="free"  ${school.plan==='free'  ?'selected':''}>Free</option>
+          <option value="basic" ${school.plan==='basic' ?'selected':''}>Basic</option>
+          <option value="pro"   ${school.plan==='pro'   ?'selected':''}>Pro</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section__title">Actions</div>
+      <div class="action-group">
+        <button class="btn ${school.is_active ? 'btn--danger' : 'btn--success'}"
+          onclick="toggleStatus('${school.id}', ${school.is_active})">
+          ${school.is_active ? '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span> Suspend School' : '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Reactivate School'}
+        </button>
+        <button class="btn btn--secondary" onclick="viewSchoolUsers('${school.id}')">
+          <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> View School Users
+        </button>
+        <button class="btn btn--ghost" style="color:var(--danger)" onclick="confirmDelete('${school.id}', '${school.name.replace(/'/g,"\\'")}')">
+          <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span>️ Delete School
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('schoolPanel').classList.add('open');
+  document.getElementById('panelOverlay').classList.add('active');
+}
+
+function closePanel() {
+  document.getElementById('schoolPanel').classList.remove('open');
+  document.getElementById('panelOverlay').classList.remove('active');
+}
+
+async function toggleStatus(schoolId, currentlyActive) {
+  if (!confirm(`${currentlyActive ? 'Suspend' : 'Reactivate'} this school?`)) return;
+  const newStatus = !currentlyActive;
+  const { error } = await db.from('schools').update({ is_active: newStatus }).eq('id', schoolId);
+  if (error) { toast('Failed to update status', 'error'); return; }
+
+  // Log action
+  await db.from('saas_audit_log').insert({
+    action: newStatus ? 'school_activated' : 'school_suspended',
+    target_id: schoolId, target_type: 'school',
+    meta: { name: allSchools.find(s=>s.id===schoolId)?.name }
+  });
+
+  // Update local data
+  const idx = allSchools.findIndex(s => s.id === schoolId);
+  if (idx !== -1) allSchools[idx].is_active = newStatus;
+  if (currentSchool?.id === schoolId) currentSchool.is_active = newStatus;
+
+  toast(`School ${newStatus ? 'activated' : 'suspended'} successfully`);
+  renderTable();
+  if (currentSchool?.id === schoolId) openPanel(allSchools[idx]);
+}
+
+async function changePlan(newPlan) {
+  if (!currentSchool) return;
+  const oldPlan = currentSchool.plan;
+  if (newPlan === oldPlan) return;
+  const { error } = await db.from('schools').update({ plan: newPlan }).eq('id', currentSchool.id);
+  if (error) { toast('Failed to update plan', 'error'); return; }
+
+  await db.from('saas_audit_log').insert({
+    action: 'plan_changed', target_id: currentSchool.id, target_type: 'school',
+    meta: { name: currentSchool.name, old_plan: oldPlan, new_plan: newPlan }
+  });
+
+  const idx = allSchools.findIndex(s => s.id === currentSchool.id);
+  if (idx !== -1) { allSchools[idx].plan = newPlan; currentSchool.plan = newPlan; }
+  toast(`Plan updated to ${newPlan}`);
+  renderTable();
+}
+
+function viewSchoolUsers(schoolId) {
+  window.location.href = `users.html?school=${schoolId}`;
+}
+
+async function confirmDelete(schoolId, schoolName) {
+  const confirmed = confirm(`<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ PERMANENTLY delete "${schoolName}"?\n\nThis will delete ALL students, staff, results and data. This cannot be undone.`);
+  if (!confirmed) return;
+  const { error } = await db.from('schools').delete().eq('id', schoolId);
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  toast('School deleted');
+  closePanel();
+  allSchools = allSchools.filter(s => s.id !== schoolId);
+  renderTable();
+}
+
+function openAddSchool() {
+  // Reset wizard to step 1
+  showWizardStep(1);
+  openModal('addSchoolModal');
+}
+
+let wizardStep = 1;
+function showWizardStep(n) {
+  wizardStep = n;
+  document.querySelectorAll('.wizard-step').forEach((el, i) => {
+    el.style.display = (i + 1 === n) ? 'block' : 'none';
+  });
+  document.querySelectorAll('.wizard-dot').forEach((el, i) => {
+    el.classList.toggle('active', i + 1 === n);
+    el.classList.toggle('done',   i + 1 < n);
+  });
+  document.getElementById('wizardBack').style.display   = n > 1 ? '' : 'none';
+  document.getElementById('wizardNext').style.display   = n < 2 ? '' : 'none';
+  document.getElementById('wizardSubmit').style.display = n === 2 ? '' : 'none';
+}
+function wizardNext() {
+  const name = document.getElementById('newSchoolName').value.trim();
+  if (!name) { toast('School name is required', 'error'); return; }
+  showWizardStep(2);
+}
+</script>
+
+<!-- Wizard Modal -->
+<style>
+  .wizard-dots { display:flex;gap:8px;justify-content:center;margin-bottom:20px; }
+  .wizard-dot { width:10px;height:10px;border-radius:50%;background:var(--border);transition:background .2s; }
+  .wizard-dot.active { background:#6d28d9; }
+  .wizard-dot.done   { background:#10b981; }
+  .wizard-dot.done::after { content:''; }
+  .wizard-label { font-size:12px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border); }
+  .field-hint { font-size:11px;color:var(--ink-3);margin-top:4px; }
+  .success-box { background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm);padding:14px;font-size:13px;color:#166534;margin-top:12px; }
+  .btn--purple { background:#6d28d9;color:white;border:none; }
+  .btn--purple:hover { background:#5b21b6; }
+</style>
+
+<div class="modal" id="addSchoolModal">
+  <div class="modal__box" style="max-width:520px">
+    <div class="modal__header">
+      <h3>Onboard New School</h3>
+      <button class="modal__close" onclick="closeModal('addSchoolModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body">
+      <div class="wizard-dots">
+        <div class="wizard-dot active" title="Step 1: School Details"></div>
+        <div class="wizard-dot"       title="Step 2: Admin Account"></div>
+      </div>
+
+      <!-- Step 1: School Details -->
+      <div class="wizard-step">
+        <div class="wizard-label">Step 1 of 2 — School Information</div>
+        <div class="form-group">
+          <label class="form-label">School Name *</label>
+          <input class="form-input" id="newSchoolName" placeholder="e.g. Greenfield Academy">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">State</label>
+            <input class="form-input" id="newSchoolState" placeholder="Lagos">
+          </div>
+          <div class="form-group">
+            <label class="form-label">LGA</label>
+            <input class="form-input" id="newSchoolLga" placeholder="Surulere">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input class="form-input" id="newSchoolPhone" placeholder="08012345678">
+          </div>
+          <div class="form-group">
+            <label class="form-label">School Email</label>
+            <input class="form-input" type="email" id="newSchoolEmail" placeholder="school@email.com">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">School Address</label>
+            <input class="form-input" id="newSchoolAddress" placeholder="12 School Rd, Lagos">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Subscription Plan</label>
+            <select class="form-input" id="newSchoolPlan">
+              <option value="free">Free (up to 50 students)</option>
+              <option value="basic">Basic — ₦15,000/term</option>
+              <option value="pro">Pro — ₦35,000/term</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: First Admin Account -->
+      <div class="wizard-step" style="display:none">
+        <div class="wizard-label">Step 2 of 2 — First Admin Account</div>
+        <p style="font-size:13px;color:var(--ink-3);margin-bottom:16px">
+          Create the school's first administrator. They will use these credentials to log in to the school admin portal.
+        </p>
+        <div class="form-group">
+          <label class="form-label">Admin Full Name *</label>
+          <input class="form-input" id="adminName" placeholder="e.g. Chukwuemeka Obi">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Admin Email *</label>
+          <input class="form-input" type="email" id="adminEmail" placeholder="admin@greenfieldacademy.edu.ng">
+          <div class="field-hint">This will be the login email for the school admin</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Temporary Password *</label>
+            <input class="form-input" type="password" id="adminPassword" placeholder="Min 8 characters">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Admin Phone</label>
+            <input class="form-input" id="adminPhone" placeholder="08012345678">
+          </div>
+        </div>
+        <div class="success-box">
+          <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span> The admin will be asked to change their password on first login. Share these credentials securely — e.g. via WhatsApp or phone call, not email.
+        </div>
+        <div id="createProgress" style="display:none;margin-top:12px;padding:12px;background:var(--bg);border-radius:var(--radius-sm);">
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-2)">
+            <div class="et-spinner" style="width:18px;height:18px;border-width:2px;flex-shrink:0"></div>
+            <span id="progressText">Creating school…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal__footer">
+      <button class="btn btn--ghost" id="wizardBack" onclick="showWizardStep(1)" style="display:none">← Back</button>
+      <button class="btn btn--ghost" onclick="closeModal('addSchoolModal')">Cancel</button>
+      <button class="btn btn--purple" id="wizardNext"   onclick="wizardNext()">Next →</button>
+      <button class="btn btn--purple" id="wizardSubmit" onclick="createSchool()" style="display:none"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span> Create School & Admin</button>
+    </div>
+  </div>
+</div>
+
+<script>
+async function createSchool() {
+  const name      = document.getElementById('newSchoolName').value.trim();
+  const state     = document.getElementById('newSchoolState').value.trim();
+  const lga       = document.getElementById('newSchoolLga').value.trim();
+  const phone     = document.getElementById('newSchoolPhone').value.trim();
+  const email     = document.getElementById('newSchoolEmail').value.trim();
+  const address   = document.getElementById('newSchoolAddress').value.trim();
+  const plan      = document.getElementById('newSchoolPlan').value;  // already clean value
+  const adminName = document.getElementById('adminName').value.trim();
+  const adminEmail= document.getElementById('adminEmail').value.trim();
+  const adminPwd  = document.getElementById('adminPassword').value;
+  const adminPhone= document.getElementById('adminPhone').value.trim();
+
+  if (!adminName || !adminEmail || !adminPwd) {
+    toast('Admin name, email and password are required', 'error'); return;
+  }
+  if (adminPwd.length < 8) { toast('Password must be at least 8 characters', 'error'); return; }
+
+  // Show progress
+  const prog = document.getElementById('createProgress');
+  const progText = document.getElementById('progressText');
+  prog.style.display = 'block';
+  document.getElementById('wizardSubmit').disabled = true;
+
+  // ── STEP 0: Save current SaaS owner session BEFORE signUp ──
+  // signUp() replaces the active session — we must restore it afterwards
+  let ownerSession = null;
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    ownerSession = session;
+  } catch(_) {}
+
+  // ── STEP 1: Create school record ──────────────────────────
+  progText.textContent = 'Creating school record…';
+  const { data: school, error: schoolErr } = await db
+    .from('schools')
+    .insert({ name, state, lga, phone, email, address, plan })
+    .select().single();
+
+  if (schoolErr) {
+    toast('School error: ' + schoolErr.message, 'error');
+    prog.style.display = 'none';
+    document.getElementById('wizardSubmit').disabled = false;
+    return;
+  }
+
+  // ── STEP 2: Create auth user for admin ───────────────────
+  progText.textContent = 'Creating admin login account…';
+  const { data: authData, error: authErr } = await db.auth.signUp({
+    email: adminEmail,
+    password: adminPwd,
+    options: { data: { full_name: adminName, school_id: school.id, role: 'admin' } }
+  });
+
+  // ── STEP 3: Immediately restore SaaS owner session ───────
+  // This MUST happen right after signUp, before any further DB calls
+  if (ownerSession) {
+    try {
+      await db.auth.setSession({
+        access_token:  ownerSession.access_token,
+        refresh_token: ownerSession.refresh_token,
+      });
+    } catch(restoreErr) {
+      console.warn('Session restore failed — you may need to log in again:', restoreErr);
+    }
+  }
+
+  if (authErr) {
+    // Roll back school record
+    await db.from('schools').delete().eq('id', school.id);
+    toast('Auth error: ' + authErr.message, 'error');
+    prog.style.display = 'none';
+    document.getElementById('wizardSubmit').disabled = false;
+    return;
+  }
+
+  // ── STEP 4: Link admin profile with retry (FK race) ──────
+  progText.textContent = 'Linking admin to school…';
+  let userErr = null;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const { error } = await db.from('users').upsert({
+      id: authData.user.id,
+      school_id: school.id,
+      full_name: adminName,
+      phone: adminPhone || null,
+      role: 'admin',
+      is_active: true
+    }, { onConflict: 'id' });
+    if (!error) { userErr = null; break; }
+    userErr = error;
+    const isFK = error.code === '23503' || (error.message || '').toLowerCase().includes('foreign key');
+    if (isFK && attempt < 5) {
+      await new Promise(r => setTimeout(r, 700 * attempt));
+      continue;
+    }
+    break;
+  }
+
+  if (userErr) {
+    toast('User record error: ' + userErr.message + ' — school created but admin link failed. Fix in Supabase dashboard.', 'error');
+    prog.style.display = 'none';
+    document.getElementById('wizardSubmit').disabled = false;
+    return;
+  }
+
+  // ── STEP 5: Seed default grading scale ───────────────────
+  progText.textContent = 'Setting up grading scale…';
+  await db.rpc('insert_default_grading_scale', { p_school_id: school.id });
+
+  // ── STEP 6: Log the action ───────────────────────────────
+  progText.textContent = 'Finalising…';
+  await db.from('saas_audit_log').insert({
+    action: 'school_created',
+    target_id: school.id,
+    target_type: 'school',
+    meta: { name: school.name, plan: school.plan, admin_email: adminEmail, admin_name: adminName }
+  });
+
+  // ── STEP 7: Update local state & close modal ─────────────
+  allSchools.unshift({ ...school });
+  schoolStats[school.id] = { students: 0, staff: 0, admins: 1 };
+  prog.style.display = 'none';
+  document.getElementById('wizardSubmit').disabled = false;
+
+  toast(`<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${name} created! Admin: ${adminEmail}`);
+  closeModal('addSchoolModal');
+
+  // Reset form fields
+  ['newSchoolName','newSchoolState','newSchoolLga','newSchoolPhone','newSchoolEmail',
+   'newSchoolAddress','adminName','adminEmail','adminPassword','adminPhone']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('newSchoolPlan').value = 'free';
+
+  renderTable();
+}
+</script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

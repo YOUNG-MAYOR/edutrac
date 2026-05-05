@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — All Users</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    :root { --primary: #6d28d9; --primary-light: #ede9fe; --primary-dark: #5b21b6; }
+    .role-chip { padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:capitalize; }
+    .role-chip.admin        { background:#dcfce7;color:#166534; }
+    .role-chip.teacher      { background:#dbeafe;color:#1e40af; }
+    .role-chip.parent       { background:#fef9c3;color:#854d0e; }
+    .role-chip.exam_officer { background:#fae8ff;color:#86198f; }
+    .role-chip.saas_owner   { background:#ede9fe;color:#6d28d9; }
+    .status-dot { width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px; }
+    .status-dot.active   { background:#10b981; }
+    .status-dot.inactive { background:#ef4444; }
+    .filter-bar { display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center; }
+    .filter-bar input, .filter-bar select { font-size:14px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:white;color:var(--ink); }
+    .filter-bar input { flex:1;min-width:180px; }
+    .btn--purple { background:#6d28d9;color:white;border:none; }
+    .btn--purple:hover { background:#5b21b6; }
+    .school-badge { background:var(--bg);padding:2px 8px;border-radius:12px;font-size:11px;color:var(--ink-3); }
+    .page-summary { display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px; }
+    .summary-pill { background:var(--bg);padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;color:var(--ink-2); }
+    .summary-pill span { font-weight:800;color:#6d28d9; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let allUsers   = [];
+let schoolMap  = {};
+let currentFilter = { q: '', role: '', school: '', status: '' };
+
+(async () => {
+  const user = await initSaasLayout('users', 'All Users');
+  if (!user) return;
+  const body = document.getElementById('pageBody');
+
+  // Check URL param for school filter
+  const params = new URLSearchParams(window.location.search);
+  const schoolFilter = params.get('school') || '';
+
+  body.innerHTML = `
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <h1>All Users</h1>
+        <p style="color:var(--ink-3);margin:4px 0 0">Every admin, teacher and parent across all schools</p>
+      </div>
+      <button class="btn btn--purple" onclick="openModal('createUserModal')">+ Create User</button>
+    </div>
+
+    <div class="page-summary" id="pageSummary">
+      <div class="summary-pill">Loading…</div>
+    </div>
+
+    <div class="filter-bar">
+      <input type="search" id="searchInput" placeholder="<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>  Search name, email…" oninput="renderTable()">
+      <select id="roleFilter" onchange="renderTable()">
+        <option value="">All Roles</option>
+        <option value="admin">Admin</option>
+        <option value="teacher">Teacher</option>
+        <option value="parent">Parent</option>
+        <option value="exam_officer">Exam Officer</option>
+      </select>
+      <select id="schoolFilter" onchange="renderTable()">
+        <option value="">All Schools</option>
+      </select>
+      <select id="statusFilter" onchange="renderTable()">
+        <option value="">All Status</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+      </select>
+    </div>
+
+    <div class="card" style="padding:0">
+      <div class="table-wrap">
+        <table id="usersTable">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Role</th>
+              <th>School</th>
+              <th>Status</th>
+              <th>Joined</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="6" style="text-align:center;padding:32px"><div class="et-spinner" style="margin:auto"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="pagination" style="padding:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"></div>
+    </div>
+  `;
+
+  // Fetch schools and users
+  const [schoolsRes, usersRes] = await Promise.all([
+    db.from('schools').select('id, name').order('name'),
+    db.from('users').select('*, schools(name)').order('created_at', { ascending: false }),
+  ]);
+
+  (schoolsRes.data || []).forEach(s => { schoolMap[s.id] = s.name; });
+  allUsers = usersRes.data || [];
+
+  // Populate school filter
+  const schoolSelect = document.getElementById('schoolFilter');
+  (schoolsRes.data || []).forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id; opt.textContent = s.name;
+    if (s.id === schoolFilter) opt.selected = true;
+    schoolSelect.appendChild(opt);
+  });
+  if (schoolFilter) document.getElementById('schoolFilter').value = schoolFilter;
+
+  renderSummary();
+  renderTable();
+})();
+
+let currentPage = 1;
+const PAGE_SIZE = 20;
+
+function getFiltered() {
+  const q      = document.getElementById('searchInput').value.toLowerCase();
+  const role   = document.getElementById('roleFilter').value;
+  const school = document.getElementById('schoolFilter').value;
+  const status = document.getElementById('statusFilter').value;
+
+  return allUsers.filter(u => {
+    const matchQ = !q || [u.full_name, u.phone, u.schools?.name].some(v => v && v.toLowerCase().includes(q));
+    const matchR = !role   || u.role === role;
+    const matchSc = !school || u.school_id === school;
+    const matchSt = !status || (status === 'active' ? u.is_active : !u.is_active);
+    return matchQ && matchR && matchSc && matchSt;
+  });
+}
+
+function renderSummary() {
+  const roleCounts = { admin: 0, teacher: 0, parent: 0, exam_officer: 0 };
+  allUsers.forEach(u => { if (roleCounts[u.role] !== undefined) roleCounts[u.role]++; });
+  document.getElementById('pageSummary').innerHTML = `
+    <div class="summary-pill">Total: <span>${allUsers.length}</span></div>
+    <div class="summary-pill">Admins: <span>${roleCounts.admin}</span></div>
+    <div class="summary-pill">Teachers: <span>${roleCounts.teacher}</span></div>
+    <div class="summary-pill">Parents: <span>${roleCounts.parent}</span></div>
+  `;
+}
+
+function renderTable() {
+  currentPage = 1;
+  renderPage();
+}
+
+function renderPage() {
+  const filtered = getFiltered();
+  const start    = (currentPage - 1) * PAGE_SIZE;
+  const page     = filtered.slice(start, start + PAGE_SIZE);
+  const tbody    = document.getElementById('tableBody');
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span></div><p>No users match your filters</p></div></td></tr>`;
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  tbody.innerHTML = page.map(u => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar avatar--sm" style="background:#6d28d9;color:white">${u.full_name.charAt(0)}</div>
+          <div>
+            <div style="font-weight:600;font-size:14px">${u.full_name}</div>
+            <div style="font-size:11px;color:var(--ink-3)">${u.phone || '—'}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="role-chip ${u.role}">${u.role.replace('_',' ')}</span></td>
+      <td>
+        ${u.schools?.name
+          ? `<a href="schools.html?id=${u.school_id}" style="color:#6d28d9;text-decoration:none;font-size:13px">${u.schools.name}</a>`
+          : `<span style="color:var(--ink-3);font-size:13px">Platform</span>`}
+      </td>
+      <td>
+        <span class="status-dot ${u.is_active ? 'active' : 'inactive'}"></span>
+        <span style="font-size:13px">${u.is_active ? 'Active' : 'Inactive'}</span>
+      </td>
+      <td style="font-size:12px;color:var(--ink-3)">${formatDate(u.created_at)}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn--sm ${u.is_active ? 'btn--danger' : 'btn--success'} btn--ghost"
+            onclick="toggleUserStatus('${u.id}', ${u.is_active})">
+            ${u.is_active ? 'Deactivate' : 'Activate'}
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  // Pagination
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pag = document.getElementById('pagination');
+  if (totalPages <= 1) { pag.innerHTML = ''; return; }
+
+  let pagHTML = '';
+  for (let i = 1; i <= totalPages; i++) {
+    pagHTML += `<button class="btn btn--sm ${i===currentPage ? 'btn--primary' : 'btn--ghost'}" onclick="goPage(${i})">${i}</button>`;
+  }
+  pag.innerHTML = pagHTML;
+}
+
+function goPage(p) { currentPage = p; renderPage(); }
+
+async function toggleUserStatus(userId, currentlyActive) {
+  const newStatus = !currentlyActive;
+  const { error } = await db.from('users').update({ is_active: newStatus }).eq('id', userId);
+  if (error) { toast('Failed to update user', 'error'); return; }
+
+  const u = allUsers.find(x => x.id === userId);
+  if (u) u.is_active = newStatus;
+  toast(`User ${newStatus ? 'activated' : 'deactivated'}`);
+  renderPage();
+}
+</script>
+
+<!-- Create User Modal -->
+<div class="modal" id="createUserModal">
+  <div class="modal__box">
+    <div class="modal__header">
+      <h3>Create Platform User</h3>
+      <button class="modal__close" onclick="closeModal('createUserModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body">
+      <p style="color:var(--ink-3);font-size:13px;margin-bottom:16px">
+        To create school users (admin/teacher/parent), use that school's Admin portal → Staff page.<br>
+        Here you can create a new <strong>SaaS Owner</strong> account.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Full Name *</label>
+        <input class="form-input" id="newUserName" placeholder="e.g. Amaka Obi">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email *</label>
+        <input class="form-input" type="email" id="newUserEmail" placeholder="owner@edutrack.ng">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Temporary Password *</label>
+        <input class="form-input" type="password" id="newUserPassword" placeholder="Min 8 characters">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone</label>
+        <input class="form-input" id="newUserPhone" placeholder="08012345678">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select class="form-input" id="newUserRole">
+          <option value="saas_owner">SaaS Owner</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--ghost" onclick="closeModal('createUserModal')">Cancel</button>
+      <button class="btn btn--purple" onclick="createUser()">Create User</button>
+    </div>
+  </div>
+</div>
+
+<script>
+async function createUser() {
+  const name     = document.getElementById('newUserName').value.trim();
+  const email    = document.getElementById('newUserEmail').value.trim();
+  const password = document.getElementById('newUserPassword').value;
+  const phone    = document.getElementById('newUserPhone').value.trim();
+  const role     = document.getElementById('newUserRole').value;
+
+  if (!name || !email || !password) { toast('Name, email and password are required', 'error'); return; }
+  if (password.length < 8) { toast('Password must be at least 8 characters', 'error'); return; }
+
+  // Sign up new user via Supabase Auth
+  const { data: authData, error: authErr } = await db.auth.signUp({ email, password });
+  if (authErr) { toast('Auth error: ' + authErr.message, 'error'); return; }
+
+  // Insert into users table
+  const { error: dbErr } = await db.from('users').insert({
+    id: authData.user.id,
+    full_name: name,
+    phone,
+    role,
+    school_id: null,
+    is_active: true
+  });
+  if (dbErr) { toast('DB error: ' + dbErr.message, 'error'); return; }
+
+  toast('User created! They will receive a confirmation email.');
+  closeModal('createUserModal');
+
+  allUsers.unshift({ id: authData.user.id, full_name: name, phone, role, is_active: true, created_at: new Date().toISOString(), schools: null });
+  renderSummary();
+  renderTable();
+}
+</script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

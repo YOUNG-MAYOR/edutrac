@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Report Cards</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    /* ── Print styles ───────────────────────────────────── */
+    @media print {
+      .topbar, .sidebar, .bottom-nav,
+      .no-print, .sidebar-overlay,
+      .filter-section { display: none !important; }
+      .main-content { margin: 0 !important; padding: 0 !important; }
+      .page-body     { padding: 0 !important; }
+      .report-card   { page-break-after: always; }
+      .report-card:last-child { page-break-after: avoid; }
+      body { background: white; }
+    }
+
+    /* ── Report card shell ──────────────────────────────── */
+    .report-card {
+      max-width: 760px;
+      margin: 0 auto 32px;
+      border: 2px solid #1a2e6e;
+      border-radius: 8px;
+      overflow: hidden;
+      font-family: 'Times New Roman', serif;
+      background: white;
+      box-shadow: 0 4px 20px rgba(0,0,0,.1);
+    }
+
+    /* Header band */
+    .rc-header {
+      background: linear-gradient(135deg, #1a2e6e 0%, #2041a3 100%);
+      padding: 20px 24px 16px;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .rc-header-logo {
+      width: 64px; height: 64px;
+      background: white; border-radius: 50%;
+      border: 3px solid #f0c040;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 30px; flex-shrink: 0; overflow: hidden;
+    }
+    .rc-header-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .rc-header-text { flex: 1; text-align: center; }
+    .rc-school-name  { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+    .rc-school-addr  { font-size: 12px; color: rgba(255,255,255,.75); margin-top: 3px; }
+    .rc-card-title   { font-size: 13px; color: #f0c040; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-top: 6px; }
+
+    /* Gold divider */
+    .rc-gold-bar {
+      height: 4px;
+      background: linear-gradient(90deg, #c8860a, #f0c040, #f8d060, #f0c040, #c8860a);
+    }
+
+    /* Student info */
+    .rc-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0;
+      border-bottom: 2px solid #1a2e6e;
+    }
+    .rc-info-cell {
+      padding: 10px 16px;
+      border-right: 1px solid #ddd;
+    }
+    .rc-info-cell:last-child { border-right: none; }
+    .rc-info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #666; }
+    .rc-info-value { font-size: 14px; font-weight: 700; color: #1a2e6e; margin-top: 2px; }
+
+    /* Section header */
+    .rc-section-header {
+      background: #1a2e6e;
+      color: white;
+      padding: 6px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    /* Results table */
+    .rc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .rc-table th {
+      background: #f0f4f8;
+      padding: 8px 12px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      color: #374151;
+      border-bottom: 2px solid #1a2e6e;
+      border-right: 1px solid #ddd;
+    }
+    .rc-table th:first-child { text-align: left; }
+    .rc-table th:last-child  { border-right: none; }
+    .rc-table td {
+      padding: 7px 12px;
+      border-bottom: 1px solid #eee;
+      border-right: 1px solid #f0f0f0;
+      vertical-align: middle;
+    }
+    .rc-table td:last-child { border-right: none; }
+    .rc-table tr:last-child td { border-bottom: none; }
+    .rc-table tr:nth-child(even) td { background: #f9fafb; }
+    .rc-table .sub-name { font-weight: 600; color: #1a1a1a; }
+
+    .rc-grade {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 4px; font-size: 12px; font-weight: 700;
+      text-align: center;
+    }
+    .grade-A1 { background: #dcfce7; color: #16a34a; }
+    .grade-B2, .grade-B3 { background: #dbeafe; color: #1d4ed8; }
+    .grade-C4, .grade-C5, .grade-C6 { background: #fef9c3; color: #854d0e; }
+    .grade-D7, .grade-E8 { background: #fed7aa; color: #9a3412; }
+    .grade-F9 { background: #fee2e2; color: #991b1b; }
+
+    /* Summary band */
+    .rc-summary {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      border-top: 2px solid #1a2e6e;
+    }
+    .rc-summary-cell {
+      padding: 10px 12px; text-align: center;
+      border-right: 1px solid #ddd;
+    }
+    .rc-summary-cell:last-child { border-right: none; }
+    .rc-summary-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #666; letter-spacing: .3px; }
+    .rc-summary-value { font-size: 20px; font-weight: 800; color: #1a2e6e; margin-top: 2px; }
+
+    /* Footer / signature */
+    .rc-footer {
+      display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+      padding: 16px 20px; border-top: 1px solid #ddd;
+      background: #f9fafb; gap: 8px;
+    }
+    .rc-sig { text-align: center; }
+    .rc-sig-line {
+      border-top: 1px solid #999; margin: 6px auto 6px; width: 80%;
+      min-height: 52px; display: flex; align-items: flex-end; justify-content: center;
+    }
+    .rc-sig-line img { max-height: 48px; max-width: 90%; object-fit: contain; display: block; margin: 0 auto; }
+    .rc-sig-label { font-size: 11px; color: #555; font-weight: 600; }
+    .rc-sig-sublabel { font-size: 9px; color: #999; margin-top: 1px; }
+
+    /* Combination badge */
+    .combo-badge {
+      display: inline-block; padding: 2px 10px;
+      border-radius: 20px; font-size: 11px; font-weight: 700;
+      background: #1a2e6e; color: #f0c040;
+      margin-left: 8px; vertical-align: middle;
+    }
+
+    /* Filter section */
+    .filter-section { margin-bottom: 20px; }
+
+    /* Not-published banner */
+    .unpublished-banner {
+      background: var(--warning-light);
+      border: 1px solid var(--warning);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #92400e;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────
+let currentUser, currentTerm, school = {};
+let allClasses = [], allExams = [], gradingScale = [];
+// Subject maps per class — loaded on demand
+// classSubjectMap[classId] = [{ id, name, code }]
+let classSubjectMap   = {};
+// combinationSubjectMap[combinationId] = [{ id, name, code }]
+let comboSubjectMap   = {};
+let allStudentCards   = [];
+
+(async () => {
+  currentUser = await initPage(
+    ['exam_officer','vp_academic','admin'],
+    'Report Cards', 'report-cards'
+  );
+  if (!currentUser) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <button class="btn btn--secondary btn--sm no-print" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>️ Print All</button>
+  `;
+
+  // Load baseline data
+  const [
+    { data: term },
+    { data: cls  },
+    { data: exm  },
+    { data: scale },
+    { data: sch  },
+  ] = await Promise.all([
+    db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current', true).maybeSingle(),
+    db.from('classes').select('id,name,level,combination_id').eq('school_id', currentUser.school_id).order('name'),
+    db.from('exams').select('*').eq('school_id', currentUser.school_id).order('name'),
+    db.from('grading_scales').select('*').eq('school_id', currentUser.school_id).order('min_score', { ascending: false }),
+    db.from('schools').select('*').eq('id', currentUser.school_id).single(),
+  ]);
+  currentTerm  = term;
+  allClasses   = cls   || [];
+  allExams     = exm   || [];
+  gradingScale = scale || [];
+  school       = sch   || {};
+
+  // Pre-load all combination_subjects for this school
+  const { data: comboSubs } = await db.from('combination_subjects')
+    .select('combination_id, subject_id, subjects(id,name,code), is_compulsory')
+    .eq('school_id', currentUser.school_id);
+  (comboSubs || []).forEach(cs => {
+    if (!cs.subjects) return;
+    if (!comboSubjectMap[cs.combination_id]) comboSubjectMap[cs.combination_id] = [];
+    comboSubjectMap[cs.combination_id].push({ ...cs.subjects, is_compulsory: cs.is_compulsory });
+  });
+
+  // Pre-load class_subjects for all classes (for non-senior sections)
+  const { data: classSubs } = await db.from('class_subjects')
+    .select('class_id, subject_id, subjects(id,name,code)')
+    .eq('school_id', currentUser.school_id)
+    .eq('term_id', term?.id || '');
+  (classSubs || []).forEach(cs => {
+    if (!cs.subjects) return;
+    if (!classSubjectMap[cs.class_id]) classSubjectMap[cs.class_id] = [];
+    // Avoid duplicates
+    if (!classSubjectMap[cs.class_id].find(s => s.id === cs.subject_id)) {
+      classSubjectMap[cs.class_id].push(cs.subjects);
+    }
+  });
+
+  const preClass = new URLSearchParams(location.search).get('class') || '';
+  renderFilterUI(preClass);
+  if (preClass) loadReportCards(preClass);
+})();
+
+// ── Filter UI ──────────────────────────────────────────────────
+function renderFilterUI(preClass = '') {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header no-print">
+      <h1 class="page-title">Report Cards</h1>
+      <p class="page-subtitle">${currentTerm?.name || '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ No active term'} · Subjects shown are based on each class assignment</p>
+    </div>
+
+    <div class="card filter-section no-print" style="margin-bottom:20px;">
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+          <label class="form-label">Class</label>
+          <select class="form-control" id="classSelect" onchange="loadReportCards(this.value)">
+            <option value="">— Select Class —</option>
+            ${allClasses.map(c => `<option value="${c.id}" ${c.id===preClass?'selected':''}>${c.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+          <label class="form-label">Student</label>
+          <select class="form-control" id="studentFilter" onchange="filterOneStudent(this.value)" disabled>
+            <option value="">— All Students —</option>
+          </select>
+        </div>
+        <button class="btn btn--primary no-print" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>️ Print</button>
+      </div>
+    </div>
+
+    <div id="reportArea">
+      <div class="et-empty" style="padding:60px 0;">
+        <div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg></span></div>
+        <p>Select a class above to generate report cards.</p>
+      </div>
+    </div>
+  `;
+}
+
+// ── Load report cards ──────────────────────────────────────────
+async function loadReportCards(classId) {
+  if (!classId || !currentTerm) return;
+  const area = document.getElementById('reportArea');
+  showLoader(area, 'Generating report cards…');
+
+  // Class info
+  const cls = allClasses.find(c => c.id === classId);
+
+  // Enrolled students
+  const { data: enroll } = await db.from('enrollments')
+    .select('student_id, students(id,full_name,admission_no,gender,date_of_birth,combination_id,photo_url)')
+    .eq('class_id', classId)
+    .eq('term_id', currentTerm.id);
+  const students = (enroll || []).map(e => e.students).filter(Boolean)
+    .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+  if (!students.length) { showEmpty(area, 'No students enrolled in this class.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>'); return; }
+
+  // All results for this class + term
+  const { data: results } = await db.from('results')
+    .select('student_id, subject_id, exam_id, score, subjects(id,name,code), exams(id,name,max_score,weight)')
+    .eq('class_id', classId)
+    .eq('term_id', currentTerm.id)
+    .eq('school_id', currentUser.school_id);
+
+  // Attendance records for term
+  const { data: attendance } = await db.from('attendance')
+    .select('student_id, status')
+    .eq('class_id', classId)
+    .eq('term_id', currentTerm.id)
+    .eq('school_id', currentUser.school_id);
+
+  // Affective domain / remarks for each student this term
+  const studentIds = students.map(s => s.id);
+  const { data: affectiveRows } = studentIds.length
+    ? await db.from('affective_domain').select('*')
+        .in('student_id', studentIds)
+        .eq('term_id', currentTerm.id)
+    : { data: [] };
+  const affectiveMap = {};
+  (affectiveRows || []).forEach(a => { affectiveMap[a.student_id] = a; });
+
+  // Build score map: { studentId: [resultRow...] }
+  const scoreMap = {};
+  (results || []).forEach(r => {
+    if (!scoreMap[r.student_id]) scoreMap[r.student_id] = [];
+    scoreMap[r.student_id].push(r);
+  });
+
+  // Attendance map: { studentId: { total, present } }
+  const attMap = {};
+  (attendance || []).forEach(a => {
+    if (!attMap[a.student_id]) attMap[a.student_id] = { total: 0, present: 0 };
+    attMap[a.student_id].total++;
+    if (a.status === 'P' || a.status === 'L') attMap[a.student_id].present++;
+  });
+
+  // Determine section for this class
+  const sectionKey = getSection(cls);
+
+  // Class-level exam list (same for all students in class, but may differ by subject assignment)
+  const termExams = allExams.filter(e => e.term_id === currentTerm.id);
+
+  // Compute positions
+  const averages = students.map(s => ({
+    studentId: s.id,
+    overall:   buildTermSummary(scoreMap[s.id] || [], gradingScale).overall
+  }));
+  const positions = assignPositions(averages);
+
+  // Build student card HTMLs
+  allStudentCards = students.map(s =>
+    buildCard(s, cls, sectionKey, scoreMap[s.id] || [], termExams, attMap[s.id] || null, positions[s.id] || null, affectiveMap[s.id] || null)
+  );
+
+  // Populate student filter
+  const studentFilter = document.getElementById('studentFilter');
+  if (studentFilter) {
+    studentFilter.disabled = false;
+    studentFilter.innerHTML = '<option value="">— All Students —</option>' +
+      students.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
+  }
+
+  renderCards(allStudentCards);
+}
+
+function filterOneStudent(studentId) {
+  if (!studentId) { renderCards(allStudentCards); return; }
+  const idx = allStudentCards.findIndex((_, i) => {
+    const dom = document.querySelectorAll('.report-card')[i];
+    return dom?.dataset.studentId === studentId;
+  });
+  // Simpler: find by student id attr on card
+  const match = allStudentCards.filter((html, i) => html.includes(`data-sid="${studentId}"`));
+  renderCards(match.length ? match : allStudentCards);
+}
+
+function renderCards(cards) {
+  document.getElementById('reportArea').innerHTML = cards.join('');
+}
+
+// ── Subject resolver ───────────────────────────────────────────
+// Returns the subjects that should appear on a student's report card.
+// Priority:
+//   Senior section → student.combination_id → comboSubjectMap
+//   Other sections → class-level classSubjectMap (admin assigns subjects to class)
+//   Fallback       → all subjects that have results for this student
+function resolveSubjectsForStudent(student, cls, sectionKey, resultRows) {
+  let subjects = [];
+
+  if (sectionKey === 'SENIOR' && student.combination_id) {
+    // Use the student's subject combination
+    subjects = (comboSubjectMap[student.combination_id] || [])
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } else if (sectionKey === 'SENIOR' && cls.combination_id) {
+    // Fall back to class-level combination if student has none set
+    subjects = (comboSubjectMap[cls.combination_id] || [])
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } else {
+    // Junior / Primary / Nursery: use class_subjects (admin-assigned per class)
+    subjects = (classSubjectMap[cls.id] || [])
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // If admin hasn't configured subjects yet, fall back to whatever subjects have scores
+  if (!subjects.length && resultRows.length) {
+    const seen = {};
+    resultRows.forEach(r => {
+      if (r.subjects && !seen[r.subjects.id]) {
+        seen[r.subjects.id] = true;
+        subjects.push(r.subjects);
+      }
+    });
+    subjects.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  return subjects;
+}
+
+// ── Build single report card HTML ─────────────────────────────
+function buildCard(student, cls, sectionKey, resultRows, examList, attRecord, position, affective) {
+  const subjects = resolveSubjectsForStudent(student, cls, sectionKey, resultRows);
+
+  // Build per-student score map: { subjectId: { examId: score } }
+  const sMap = {};
+  resultRows.forEach(r => {
+    if (!sMap[r.subject_id]) sMap[r.subject_id] = {};
+    sMap[r.subject_id][r.exam_id] = { score: r.score, exam: r.exams };
+  });
+
+  // Build subject rows
+  let totalSubjects = 0, passCount = 0, failCount = 0, grandSum = 0;
+  const subjectRows = subjects.map(sub => {
+    const subScores = sMap[sub.id] || {};
+    const examCols  = examList.map(e => {
+      const entry = subScores[e.id];
+      const sc    = entry?.score;
+      return `<td style="text-align:center;">${sc !== undefined ? sc : '—'}</td>`;
+    });
+
+    // Weighted total
+    const vals = examList.map(e => {
+      const entry = subScores[e.id];
+      if (!entry || entry.score === undefined) return null;
+      const pct = (entry.score / (entry.exam?.max_score || e.max_score || 100)) * 100 * (entry.exam?.weight || e.weight || 1);
+      return { pct, weight: entry.exam?.weight || e.weight || 1 };
+    }).filter(Boolean);
+
+    const weightedTotal = vals.length
+      ? vals.reduce((s, v) => s + v.pct, 0) / vals.reduce((s, v) => s + v.weight, 0)
+      : null;
+    const totalDisplay = weightedTotal !== null ? Math.round(weightedTotal * 10) / 10 : null;
+
+    const gObj = totalDisplay !== null ? gradeFromScale(totalDisplay, gradingScale) : { grade: '—', remark: '—' };
+
+    if (totalDisplay !== null) {
+      totalSubjects++;
+      grandSum += totalDisplay;
+      if (totalDisplay >= 40) passCount++; else failCount++;
+    }
+
+    return `
+      <tr>
+        <td class="sub-name">${sub.name}${sub.is_compulsory ? ' <span style="color:#dc2626;font-size:10px;">*</span>' : ''}</td>
+        ${examCols.join('')}
+        <td style="text-align:center;font-weight:700;">${totalDisplay !== null ? totalDisplay : '—'}</td>
+        <td style="text-align:center;"><span class="rc-grade grade-${gObj.grade}">${gObj.grade}</span></td>
+        <td style="text-align:center;font-size:12px;color:var(--ink-3);">${gObj.remark}</td>
+      </tr>`;
+  }).join('');
+
+  const overall  = totalSubjects ? (grandSum / totalSubjects).toFixed(1) : '—';
+  const oGrade   = totalSubjects ? gradeFromScale(parseFloat(overall), gradingScale) : { grade: '—', remark: '—' };
+  const attPct   = attRecord ? Math.round((attRecord.present / attRecord.total) * 100) : null;
+  const posLabel = position ? `${position.suffix} of ${position.outOf}` : '—';
+
+  // Combination badge
+  const comboBadge = student.combination_id && comboSubjectMap[student.combination_id]
+    ? `<span class="combo-badge">${getCombinationName(student.combination_id)}</span>` : '';
+
+  // Published warning
+  const unpublishedNote = !currentTerm?.results_published
+    ? `<div class="unpublished-banner no-print"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Results for this term have not been published yet. This is a preview only.</div>` : '';
+
+  return `
+    <div class="report-card" data-sid="${student.id}">
+      ${unpublishedNote}
+
+      <!-- Header -->
+      <div class="rc-header">
+        <div class="rc-header-logo">
+          ${school.logo_url ? `<img src="${school.logo_url}" alt="Logo">` : '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>'}
+        </div>
+        <div class="rc-header-text">
+          <div class="rc-school-name">${school.name || 'School Name'}</div>
+          <div class="rc-school-addr">${[school.address, school.state].filter(Boolean).join(', ')}</div>
+          <div class="rc-card-title">Student Academic Report</div>
+        </div>
+        <div style="width:64px;text-align:center;">
+          ${student.photo_url
+            ? `<img src="${student.photo_url}" style="width:64px;height:64px;border-radius:8px;border:2px solid #f0c040;object-fit:cover;">`
+            : `<div style="width:64px;height:64px;border-radius:8px;border:2px solid #f0c040;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:28px;">${student.gender==='F'?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>':'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>'}</div>`
+          }
+        </div>
+      </div>
+      <div class="rc-gold-bar"></div>
+
+      <!-- Student info -->
+      <div class="rc-info-grid">
+        <div class="rc-info-cell">
+          <div class="rc-info-label">Student Name</div>
+          <div class="rc-info-value">${student.full_name}${comboBadge}</div>
+        </div>
+        <div class="rc-info-cell">
+          <div class="rc-info-label">Admission No.</div>
+          <div class="rc-info-value">${student.admission_no || '—'}</div>
+        </div>
+        <div class="rc-info-cell">
+          <div class="rc-info-label">Class</div>
+          <div class="rc-info-value">${cls?.name || '—'}</div>
+        </div>
+        <div class="rc-info-cell">
+          <div class="rc-info-label">Term</div>
+          <div class="rc-info-value">${currentTerm?.name || '—'}</div>
+        </div>
+        <div class="rc-info-cell">
+          <div class="rc-info-label">Gender</div>
+          <div class="rc-info-value">${student.gender === 'M' ? 'Male' : student.gender === 'F' ? 'Female' : '—'}</div>
+        </div>
+        <div class="rc-info-cell">
+          <div class="rc-info-label">Section</div>
+          <div class="rc-info-value">${sectionKey} SECTION</div>
+        </div>
+      </div>
+
+      <!-- Results table -->
+      <div class="rc-section-header">Academic Performance</div>
+      <table class="rc-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;min-width:140px;">Subject</th>
+            ${examList.map(e => `<th>${e.name}<br><span style="font-weight:400;font-size:10px;">/${e.max_score}</span></th>`).join('')}
+            <th>Total</th>
+            <th>Grade</th>
+            <th>Remark</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${subjectRows || `<tr><td colspan="${examList.length + 4}" style="text-align:center;color:var(--ink-3);padding:20px;">No results found for this student</td></tr>`}
+        </tbody>
+      </table>
+
+      <!-- Summary -->
+      <div class="rc-summary">
+        <div class="rc-summary-cell">
+          <div class="rc-summary-label">Overall Avg</div>
+          <div class="rc-summary-value" style="color:${parseFloat(overall)>=50?'#16a34a':'#dc2626'};">${overall}%</div>
+        </div>
+        <div class="rc-summary-cell">
+          <div class="rc-summary-label">Grade</div>
+          <div class="rc-summary-value">${oGrade.grade}</div>
+        </div>
+        <div class="rc-summary-cell">
+          <div class="rc-summary-label">Position</div>
+          <div class="rc-summary-value" style="font-size:16px;">${posLabel}</div>
+        </div>
+        <div class="rc-summary-cell">
+          <div class="rc-summary-label">Passed</div>
+          <div class="rc-summary-value" style="color:#16a34a;">${passCount}</div>
+        </div>
+        <div class="rc-summary-cell">
+          <div class="rc-summary-label">Attendance</div>
+          <div class="rc-summary-value" style="font-size:16px;">${attPct !== null ? attPct + '%' : '—'}</div>
+        </div>
+      </div>
+
+      <!-- Remarks section -->
+      ${affective ? `
+        ${affective.class_teacher_remark ? `
+        <div style="padding:8px 16px;font-size:12px;border-top:1px solid #eee;">
+          <span style="font-weight:700;text-transform:uppercase;color:#666;letter-spacing:.5px;font-size:10px;">Class Teacher's Remark: </span>
+          ${affective.class_teacher_remark}
+        </div>` : ''}
+        ${affective.vp_academic_remark ? `
+        <div style="padding:8px 16px;font-size:12px;border-top:1px solid #eee;background:#eff6ff;">
+          <span style="font-weight:700;text-transform:uppercase;color:#1e40af;letter-spacing:.5px;font-size:10px;">VP Academic's Remark: </span>
+          ${affective.vp_academic_remark}
+        </div>` : ''}
+        ${affective.exam_officer_remark ? `
+        <div style="padding:8px 16px;font-size:12px;border-top:1px solid #eee;background:#faf5ff;">
+          <span style="font-weight:700;text-transform:uppercase;color:#6b21a8;letter-spacing:.5px;font-size:10px;">Exam Officer's Remark: </span>
+          ${affective.exam_officer_remark}
+        </div>` : ''}
+        ${affective.principal_remark ? `
+        <div style="padding:8px 16px;font-size:12px;border-top:1px solid #eee;background:#f0fdf4;">
+          <span style="font-weight:700;text-transform:uppercase;color:#166534;letter-spacing:.5px;font-size:10px;">Principal's Remark: </span>
+          ${affective.principal_remark}
+        </div>` : ''}
+        ${affective.next_term_begins ? `
+        <div style="padding:8px 16px;font-size:12px;border-top:1px solid #eee;background:#fffbeb;">
+          <strong>Next Term Begins:</strong> ${new Date(affective.next_term_begins).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}
+        </div>` : ''}
+      ` : ''}
+
+      <!-- Affective domain placeholder & signatures -->
+      <div class="rc-footer">
+        <div class="rc-sig">
+          <div class="rc-sig-line">
+            ${school.class_teacher_signature_url ? `<img src="${school.class_teacher_signature_url}" alt="Signature" crossorigin="anonymous">` : ''}
+          </div>
+          <div class="rc-sig-label">Class Teacher</div>
+          <div class="rc-sig-sublabel">Signature &amp; Stamp</div>
+        </div>
+        <div class="rc-sig">
+          <div class="rc-sig-line">
+            ${school.vp_signature_url ? `<img src="${school.vp_signature_url}" alt="Signature" crossorigin="anonymous">` : ''}
+          </div>
+          <div class="rc-sig-label">VP Academic</div>
+          <div class="rc-sig-sublabel">Signature &amp; Stamp</div>
+        </div>
+        <div class="rc-sig">
+          <div class="rc-sig-line">
+            ${school.exam_officer_signature_url ? `<img src="${school.exam_officer_signature_url}" alt="Signature" crossorigin="anonymous">` : ''}
+          </div>
+          <div class="rc-sig-label">Exam Officer</div>
+          <div class="rc-sig-sublabel">Signature &amp; Stamp</div>
+        </div>
+        <div class="rc-sig">
+          <div class="rc-sig-line">
+            ${school.principal_signature_url ? `<img src="${school.principal_signature_url}" alt="Signature" crossorigin="anonymous">` : ''}
+          </div>
+          <div class="rc-sig-label">Principal</div>
+          <div class="rc-sig-sublabel">Signature &amp; Stamp</div>
+        </div>
+      </div>
+
+      ${subjects.some(s => s.is_compulsory !== undefined)
+        ? `<div style="padding:6px 16px;background:#f9fafb;border-top:1px dashed #ddd;font-size:10px;color:#888;">* Compulsory subject for this combination</div>`
+        : ''}
+    </div>`;
+}
+
+// ── Utilities ──────────────────────────────────────────────────
+function getSection(cls) {
+  const level = (cls?.level || cls?.name || '').toLowerCase();
+  if (/senior|sss|shs/i.test(level) || /^ss[s]?\s*[123]/i.test(cls?.name || '')) return 'SENIOR';
+  if (/junior|jss|jhs/i.test(level) || /^jss/i.test(cls?.name || ''))            return 'JUNIOR';
+  if (/primary|basic|pry/i.test(level) || /^p[1-6]$|^pry|^pri/i.test(cls?.name || '')) return 'PRIMARY';
+  if (/nursery|creche|kg|kindergarten/i.test(level))                              return 'NURSERY';
+  return 'JUNIOR';
+}
+
+function getCombinationName(combinationId) {
+  // Try to find from the preloaded combo data
+  // We stored subjects but not the combo name — look it up from allClasses or a static map
+  // This is a display helper; fetch from parent if needed
+  return ''; // Name pulled from combination_subjects header if set up
+}
+
+// Re-expose assignPositions from calculations.js
+function assignPositions(studentAverages) {
+  const sorted = [...studentAverages].filter(s => s.overall !== null).sort((a, b) => b.overall - a.overall);
+  const positions = {};
+  let pos = 1;
+  sorted.forEach((s, i) => {
+    if (i > 0 && sorted[i - 1].overall !== s.overall) pos = i + 1;
+    const suffix = getOrdinalSuffix(pos);
+    positions[s.studentId] = { position: pos, outOf: sorted.length, suffix };
+  });
+  return positions;
+}
+
+function getOrdinalSuffix(n) {
+  const s = ['th','st','nd','rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+</script>
+</body>
+</html>

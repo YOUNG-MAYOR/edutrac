@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Daily Activities</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    .activity-type-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:20px;}
+    .type-card{border:2px solid var(--border);border-radius:var(--radius);padding:14px 10px;text-align:center;cursor:pointer;transition:var(--transition);background:var(--surface);}
+    .type-card:hover{border-color:var(--primary);transform:translateY(-2px);}
+    .type-card.active{border-color:var(--primary);background:var(--primary-light);}
+    .type-card__icon{font-size:28px;margin-bottom:6px;}
+    .type-card__label{font-size:12px;font-weight:700;color:var(--ink);}
+    .activity-feed{display:flex;flex-direction:column;gap:12px;}
+    .activity-item{border:1px solid var(--border);border-radius:var(--radius);padding:16px;background:var(--surface);}
+    .activity-item__header{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+    .activity-item__icon{font-size:22px;}
+    .activity-item__meta{flex:1;}
+    .activity-item__type{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3);}
+    .activity-item__title{font-size:15px;font-weight:700;color:var(--ink);margin-top:2px;}
+    .activity-item__date{font-size:11px;color:var(--ink-4);}
+    .activity-item__body{font-size:13px;color:var(--ink-2);line-height:1.5;margin-top:6px;}
+    .activity-item__subject{display:inline-block;padding:2px 9px;border-radius:100px;font-size:11px;font-weight:700;background:var(--primary-light);color:var(--primary);margin-top:6px;}
+    .activity-item__due{display:inline-block;padding:2px 9px;border-radius:100px;font-size:11px;font-weight:700;background:#fff7ed;color:#c2410c;margin-left:6px;margin-top:6px;}
+    .post-form{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:20px;}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+    @media(max-width:600px){.form-row{grid-template-columns:1fr;}}
+    .form-group{margin-bottom:14px;}
+    .form-group label{font-size:12px;font-weight:700;color:var(--ink-2);display:block;margin-bottom:5px;}
+    .form-group select,.form-group input,.form-group textarea{
+      width:100%;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+      padding:9px 12px;font-size:14px;background:var(--surface);color:var(--ink);
+      outline:none;font-family:inherit;box-sizing:border-box;
+    }
+    .form-group select:focus,.form-group input:focus,.form-group textarea:focus{border-color:var(--primary);}
+    .form-group textarea{resize:vertical;min-height:90px;}
+    .date-nav{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+    .date-nav button{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;cursor:pointer;font-size:14px;transition:var(--transition);}
+    .date-nav button:hover{border-color:var(--primary);}
+    .date-nav__label{flex:1;text-align:center;font-size:15px;font-weight:700;}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let user, term, myClasses = [], mySubjects = [], activities = [];
+let selectedDate = new Date().toISOString().split('T')[0];
+let selectedClass = '';
+let showForm = false;
+
+const ACT_TYPES = [
+  { key:'lesson',       icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>', label:'Lesson' },
+  { key:'assignment',   icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>', label:'Assignment' },
+  { key:'homework',     icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>', label:'Homework' },
+  { key:'quiz',         icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.98-3 2.5 2.5 0 0 1-1.32-4.24 3 3 0 0 1 .34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.98-3 2.5 2.5 0 0 0 1.32-4.24 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2"/></svg></span>', label:'Quiz' },
+  { key:'announcement', icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>', label:'Announcement' },
+  { key:'note',         icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span>', label:'Note' },
+  { key:'event',        icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>', label:'Event' },
+];
+
+(async () => {
+  user = await initPage(['teacher','admin','exam_officer'], 'Daily Activities', 'daily-activities');
+  if (!user) return;
+
+  document.getElementById('topbarActions').innerHTML =
+    `<button class="btn btn--primary btn--sm" onclick="toggleForm()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Post Activity</button>`;
+
+  const ctx = await loadSchoolContext(user.school_id);
+  term = ctx.term;
+
+  // Load my classes
+  const { data: assignments } = await db.from('class_subjects')
+    .select('class_id,subject_id,classes(id,name,level),subjects(id,name)')
+    .eq('teacher_id', user.id).eq('school_id', user.school_id);
+
+  const classMap = {}, subjectMap = {};
+  (assignments || []).forEach(a => {
+    if (a.classes && !classMap[a.class_id]) classMap[a.class_id] = a.classes;
+    if (a.subjects) subjectMap[a.subject_id] = a.subjects;
+  });
+
+  // Form teacher classes
+  const { data: formCls } = await db.from('classes')
+    .select('id,name,level').eq('teacher_id', user.id).eq('school_id', user.school_id);
+  (formCls || []).forEach(c => { if (!classMap[c.id]) classMap[c.id] = c; });
+
+  myClasses  = Object.values(classMap);
+  mySubjects = Object.values(subjectMap);
+
+  if (myClasses.length > 0) selectedClass = myClasses[0].id;
+
+  await loadActivities();
+})();
+
+async function loadActivities() {
+  const body = document.getElementById('pageBody');
+  body.innerHTML = `<div class="et-loader"><div class="et-spinner"></div></div>`;
+
+  let query = db.from('daily_activities')
+    .select('*,subjects(name),users(full_name)')
+    .eq('school_id', user.school_id)
+    .eq('activity_date', selectedDate)
+    .order('created_at', { ascending: false });
+
+  if (selectedClass) query = query.eq('class_id', selectedClass);
+
+  const { data, error } = await query;
+  activities = data || [];
+  renderPage();
+}
+
+function renderPage() {
+  const body = document.getElementById('pageBody');
+  const dateObj = new Date(selectedDate + 'T12:00:00');
+  const dateLabel = dateObj.toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+  body.innerHTML = `
+    <div class="page-header">
+      <h1><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span> Daily Activities</h1>
+      <p>${term ? term.name : ''} · Post lessons, assignments & announcements for parents</p>
+    </div>
+
+    <!-- Class selector -->
+    <div class="card" style="padding:16px;margin-bottom:16px;">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <label style="font-size:13px;font-weight:700;color:var(--ink-2);flex-shrink:0;">Class:</label>
+        <select onchange="selectedClass=this.value;loadActivities()" style="border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 12px;font-size:14px;background:var(--surface);color:var(--ink);outline:none;flex:1;min-width:160px;">
+          ${myClasses.map(c => `<option value="${c.id}" ${c.id===selectedClass?'selected':''}>${c.name}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <!-- Date navigation -->
+    <div class="date-nav">
+      <button onclick="changeDate(-1)">← Prev</button>
+      <div class="date-nav__label">${dateLabel}</div>
+      <button onclick="changeDate(1)" ${selectedDate >= new Date().toISOString().split('T')[0] ? 'disabled style="opacity:.4;"' : ''}>Next →</button>
+    </div>
+
+    <!-- Post form -->
+    ${showForm ? renderPostForm() : ''}
+
+    <!-- Activities feed -->
+    <div class="card" style="padding:20px;">
+      <div class="card__header" style="margin-bottom:16px;">
+        <span class="card__title">Activities for ${dateLabel}</span>
+        <span style="font-size:13px;color:var(--ink-3);">${activities.length} posted</span>
+      </div>
+      ${activities.length === 0
+        ? `<div style="text-align:center;padding:40px;color:var(--ink-3);">
+             <div style="font-size:40px;margin-bottom:12px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span></div>
+             <p>No activities posted yet for this date.<br>
+             <button class="btn btn--primary btn--sm" style="margin-top:10px;" onclick="toggleForm()">Post First Activity</button></p>
+           </div>`
+        : `<div class="activity-feed">${activities.map(renderActivityItem).join('')}</div>`
+      }
+    </div>
+  `;
+}
+
+function renderPostForm() {
+  return `
+    <div class="post-form" style="margin-bottom:20px;">
+      <div style="font-size:16px;font-weight:800;margin-bottom:16px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Post New Activity</div>
+
+      <div style="margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:700;color:var(--ink-2);margin-bottom:8px;">Activity Type</div>
+        <div class="activity-type-grid">
+          ${ACT_TYPES.map(t => `
+            <div class="type-card ${window._selType===t.key?'active':''}" onclick="selectType('${t.key}')">
+              <div class="type-card__icon">${t.icon}</div>
+              <div class="type-card__label">${t.label}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Subject (optional)</label>
+          <select id="formSubject">
+            <option value="">— General / No subject —</option>
+            ${mySubjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" id="formDate" value="${selectedDate}" max="${new Date().toISOString().split('T')[0]}">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Title *</label>
+        <input type="text" id="formTitle" placeholder="E.g. Chapter 5: Photosynthesis, Assignment on Quadratics…">
+      </div>
+
+      <div class="form-group">
+        <label>Description / Details</label>
+        <textarea id="formDesc" placeholder="Describe what was covered, what students need to do, resources…"></textarea>
+      </div>
+
+      <div class="form-group" id="dueDateGroup" style="display:${window._selType==='assignment'||window._selType==='homework'||window._selType==='quiz'?'block':'none'}">
+        <label>Due Date</label>
+        <input type="date" id="formDue">
+      </div>
+
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn--primary" onclick="postActivity()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Post Activity</button>
+        <button class="btn btn--ghost" onclick="showForm=false;renderPage();">Cancel</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderActivityItem(a) {
+  const t = ACT_TYPES.find(x => x.key === a.activity_type) || { icon:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>', label: a.activity_type };
+  return `
+    <div class="activity-item">
+      <div class="activity-item__header">
+        <div class="activity-item__icon">${t.icon}</div>
+        <div class="activity-item__meta">
+          <div class="activity-item__type">${t.label}</div>
+          <div class="activity-item__title">${escHtml(a.title)}</div>
+        </div>
+        <div class="activity-item__date">${formatDate(a.activity_date)}</div>
+      </div>
+      ${a.description ? `<div class="activity-item__body">${escHtml(a.description)}</div>` : ''}
+      <div>
+        ${a.subjects?.name ? `<span class="activity-item__subject"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> ${escHtml(a.subjects.name)}</span>` : ''}
+        ${a.due_date ? `<span class="activity-item__due">⏰ Due: ${formatDate(a.due_date)}</span>` : ''}
+      </div>
+      ${a.created_by === user.id ? `
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <button class="btn btn--ghost btn--sm" style="color:var(--danger);" onclick="deleteActivity('${a.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span> Delete</button>
+        </div>` : ''}
+    </div>
+  `;
+}
+
+window._selType = 'lesson';
+function selectType(key) {
+  window._selType = key;
+  // Update active cards
+  document.querySelectorAll('.type-card').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  const dg = document.getElementById('dueDateGroup');
+  if (dg) dg.style.display = ['assignment','homework','quiz'].includes(key) ? 'block' : 'none';
+}
+
+async function postActivity() {
+  if (!selectedClass) { toast('Please select a class.', 'error'); return; }
+  const title = document.getElementById('formTitle')?.value.trim();
+  const desc  = document.getElementById('formDesc')?.value.trim();
+  const date  = document.getElementById('formDate')?.value;
+  const subj  = document.getElementById('formSubject')?.value;
+  const due   = document.getElementById('formDue')?.value;
+  if (!title) { toast('Title is required.', 'error'); return; }
+
+  // Find current term for the class
+  let termId = term?.id;
+
+  // Guard: if no current term, don't insert null term_id (it's a NOT NULL FK)
+  if (!termId) { toast('No active term is set. Ask admin to set a current term.', 'error'); return; }
+
+  const row = {
+    school_id:     user.school_id,
+    class_id:      selectedClass,
+    term_id:       termId,
+    activity_date: date || selectedDate,
+    activity_type: window._selType || 'lesson',
+    subject_id:    subj || null,
+    title,
+    description:   desc || null,
+    due_date:      due || null,
+    created_by:    user.id
+  };
+
+  const { error } = await db.from('daily_activities').insert(row);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Activity posted!', 'success');
+  showForm = false;
+  selectedDate = row.activity_date;
+  await loadActivities();
+}
+
+async function deleteActivity(id) {
+  if (!confirm('Delete this activity?')) return;
+  const { error } = await db.from('daily_activities').delete().eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  toast('Deleted.', 'success');
+  await loadActivities();
+}
+
+function toggleForm() {
+  showForm = !showForm;
+  renderPage();
+}
+
+function changeDate(delta) {
+  const d = new Date(selectedDate + 'T12:00:00');
+  d.setDate(d.getDate() + delta);
+  const today = new Date().toISOString().split('T')[0];
+  const nd = d.toISOString().split('T')[0];
+  if (nd > today) return;
+  selectedDate = nd;
+  loadActivities();
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function formatDate(d) {
+  if (!d) return '';
+  return new Date(d + 'T12:00:00').toLocaleDateString('en-NG', { weekday:'short', day:'numeric', month:'short' });
+}
+</script>
+<script src="../../js/pwa.js"></script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+# EduTrack NG — Netlify Configuration
+# Ensures PWA works correctly with proper headers
+
+[build]
+  publish = "."
+
+# ── AI Proxy Edge Function ───────────────────────────────────
+# Set ANTHROPIC_API_KEY in Netlify → Site settings → Environment variables
+[[edge_functions]]
+  path = "/api/ai-chat"
+  function = "ai-proxy"
+
+[[edge_functions]]
+  path = "/api/provision-school"
+  function = "provision-school"
+
+[[edge_functions]]
+  path = "/api/reset-staff-password"
+  function = "reset-staff-password"
+
+# ── Security & PWA Headers ───────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Service Worker — must NOT be cached by browser
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Content-Type = "application/javascript"
+
+# Manifest
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+    Cache-Control = "public, max-age=86400"
+
+# Icons — cache aggressively
+[[headers]]
+  for = "/icons/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# CSS & JS — cache with version
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+# Public HTML pages — short cache so updates propagate
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+# ── ISSUE D-04: Role-gated portal HTML ──────────────────────
+# These pages must NEVER be cached by the browser or service worker.
+# Caching them leaks UI structure and feature existence to unauthorized
+# users on shared devices even after logout. Data is auth-gated, but
+# the HTML shell itself reveals which features exist for each role.
+#
+# Cache-Control: no-store means:
+#   • Browser will not store the response in any cache
+#   • SW fetch handlers that check Cache-Control will see no-store
+#   • CDN/proxy won't store it either
+# ─────────────────────────────────────────────────────────────
+
+[[headers]]
+  for = "/admin/*.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/portals/staff/*.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/portals/academic-office/*.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/portals/bursary/*.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/portals/admin-office/*.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/portals/parent/*.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+# Student portal (authenticated pages) — no-store
+# Exception: /portals/student/login.html is handled separately below
+[[headers]]
+  for = "/portals/student/index.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/portals/student/results.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/portals/student/attendance.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/portals/student/fees.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/portals/student/profile.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/portals/student/notifications.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+# Student portal login — unauthenticated, may be cached
+[[headers]]
+  for = "/portals/student/login.html"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/report-card/*.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/saas-admin/*.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"
+
+[[headers]]
+  for = "/saas-console/*.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate"
+    Pragma = "no-cache"

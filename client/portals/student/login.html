@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EduTrack NG">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>EduTrack NG — Student Login</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    .login-bg-pattern {
+      position:fixed; inset:0; background:var(--ink);
+      background-image:
+        radial-gradient(circle at 20% 80%, #2563eb22 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, #7c3aed11 0%, transparent 50%);
+    }
+    .login-page { position:relative; z-index:1; }
+    .pin-input { font-size:24px; font-family:var(--mono); letter-spacing:8px; text-align:center; }
+
+    /* School picker */
+    .school-search-wrap { position:relative; }
+    .school-dropdown {
+      position:absolute; top:calc(100% + 4px); left:0; right:0;
+      background:white; border:1px solid var(--border); border-radius:var(--radius-sm);
+      box-shadow:0 8px 24px rgba(0,0,0,.12); z-index:100;
+      max-height:220px; overflow-y:auto; display:none;
+    }
+    .school-dropdown.open { display:block; }
+    .school-option {
+      padding:11px 14px; cursor:pointer; font-size:14px;
+      border-bottom:1px solid var(--border); transition:background .1s;
+    }
+    .school-option:last-child { border-bottom:none; }
+    .school-option:hover { background:var(--primary-light); }
+    .school-option__name { font-weight:600; color:var(--ink); }
+    .school-option__sub  { font-size:11px; color:var(--ink-3); margin-top:2px; }
+
+    /* Confirmed school badge */
+    .school-badge {
+      display:flex; align-items:center; gap:10px;
+      background:#f0fdf4; border:1px solid #86efac;
+      border-radius:8px; padding:10px 14px; margin-bottom:16px;
+    }
+    .school-badge__info { flex:1; }
+    .school-badge__name { font-weight:700; font-size:14px; color:#166534; }
+    .school-badge__change { font-size:12px; color:var(--primary); cursor:pointer; text-decoration:underline; background:none; border:none; padding:0; }
+
+    /* Steps */
+    .step { display:none; }
+    .step.active { display:block; }
+  </style>
+</head>
+<body>
+<div class="login-bg-pattern"></div>
+<div class="login-page">
+  <div class="login-card">
+
+    <div class="login-logo">
+      <div class="login-logo-icon" id="schoolLogoEl"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span></div>
+      <div class="login-logo-text">
+        <h1>EduTrack NG</h1>
+        <p id="schoolNameEl">Student Portal</p>
+      </div>
+    </div>
+
+    <!-- STEP 1: Pick school (shown when no ?school= param) -->
+    <div class="step active" id="stepSchool">
+      <h2>Find Your School</h2>
+      <p class="subtitle">Search for your school to continue</p>
+      <div class="form-group">
+        <label class="form-label">School Name</label>
+        <div class="school-search-wrap">
+          <input type="text" id="schoolSearch" class="form-control"
+                 placeholder="Type your school name…"
+                 autocomplete="off"
+                 oninput="searchSchools(this.value)">
+          <div class="school-dropdown" id="schoolDropdown"></div>
+        </div>
+      </div>
+      <div id="schoolPickErr" class="form-error" style="display:none;margin-bottom:12px;"></div>
+    </div>
+
+    <!-- STEP 2: Login form (shown once school is confirmed) -->
+    <div class="step" id="stepLogin">
+      <div class="school-badge" id="schoolBadge">
+        <span style="font-size:20px"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span></span>
+        <div class="school-badge__info">
+          <div class="school-badge__name" id="badgeSchoolName">—</div>
+          <div style="font-size:11px;color:#166534">Confirmed school</div>
+        </div>
+        <button class="school-badge__change" onclick="changeSchool()">Change</button>
+      </div>
+
+      <h2>Student Login</h2>
+      <p class="subtitle">Enter your Admission Number and PIN</p>
+
+      <div class="form-group">
+        <label class="form-label">Admission Number <span class="required">*</span></label>
+        <input type="text" id="admNo" class="form-control"
+               placeholder="e.g. ADM001"
+               autocomplete="username"
+               style="text-transform:uppercase;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">PIN <span class="required">*</span></label>
+        <input type="password" id="pinInput" class="form-control pin-input"
+               placeholder="••••" maxlength="8" autocomplete="current-password">
+      </div>
+      <div id="loginErr" class="form-error" style="display:none;margin-bottom:12px;"></div>
+      <button class="btn btn--primary btn--full" id="loginBtn" onclick="studentLogin()">Sign In</button>
+    </div>
+
+    <div style="margin-top:20px;text-align:center;">
+      <a href="../../login.html" style="font-size:13px;color:var(--ink-3);">← Back to main login</a>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+  <script src="../../js/supabase.js"></script>
+<script>
+let currentSchoolId   = null;
+let allSchools        = [];
+let searchTimeout     = null;
+
+// ── Initialise ───────────────────────────────────────────────
+(async () => {
+  const schoolId = new URLSearchParams(location.search).get('school');
+
+  if (schoolId) {
+    // Came via school-specific link — resolve immediately, skip step 1
+    const { data: school } = await db.from('schools')
+      .select('id, name, logo_url, is_active, state, lga')
+      .eq('id', schoolId).maybeSingle();
+
+    if (school && school.is_active) {
+      selectSchool(school);
+      return;
+    }
+    // Invalid/inactive — fall through to search step
+  }
+
+  // No param (or bad param) — load school list for search
+  const { data: schools } = await db.from('schools')
+    .select('id, name, state, lga, logo_url')
+    .eq('is_active', true)
+    .order('name');
+  allSchools = schools || [];
+
+  // If there's only one school on the platform, auto-select it
+  if (allSchools.length === 1) {
+    selectSchool(allSchools[0]);
+    return;
+  }
+
+  showStep('stepSchool');
+})();
+
+// ── School search ────────────────────────────────────────────
+function searchSchools(q) {
+  clearTimeout(searchTimeout);
+  const dd = document.getElementById('schoolDropdown');
+
+  if (!q.trim()) { dd.classList.remove('open'); return; }
+
+  searchTimeout = setTimeout(() => {
+    const matches = allSchools.filter(s =>
+      s.name.toLowerCase().includes(q.toLowerCase()) ||
+      (s.state || '').toLowerCase().includes(q.toLowerCase()) ||
+      (s.lga   || '').toLowerCase().includes(q.toLowerCase())
+    );
+
+    if (!matches.length) {
+      dd.innerHTML = `<div class="school-option" style="color:var(--ink-3);cursor:default">No schools found matching "${q}"</div>`;
+    } else {
+      dd.innerHTML = matches.map(s => `
+        <div class="school-option" onclick='pickSchool(${JSON.stringify(s)})'>
+          <div class="school-option__name">${s.name}</div>
+          <div class="school-option__sub">${[s.state, s.lga].filter(Boolean).join(', ') || 'Location not set'}</div>
+        </div>
+      `).join('');
+    }
+    dd.classList.add('open');
+  }, 200);
+}
+
+function pickSchool(school) {
+  document.getElementById('schoolDropdown').classList.remove('open');
+  document.getElementById('schoolSearch').value = school.name;
+  selectSchool(school);
+}
+
+function selectSchool(school) {
+  currentSchoolId = school.id;
+
+  // Update header branding
+  document.getElementById('schoolNameEl').textContent = school.name + ' — Student Portal';
+  document.title = school.name + ' — Student Login';
+  if (school.logo_url) {
+    document.getElementById('schoolLogoEl').innerHTML =
+      `<img src="${school.logo_url}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;"
+            onerror="this.parentElement.innerHTML='<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>'">`;
+  }
+
+  // Update badge
+  document.getElementById('badgeSchoolName').textContent = school.name;
+
+  // Update URL without reload (so bookmarks/sharing carry school param)
+  const url = new URL(location.href);
+  url.searchParams.set('school', school.id);
+  history.replaceState(null, '', url.toString());
+
+  showStep('stepLogin');
+  setTimeout(() => document.getElementById('admNo')?.focus(), 100);
+}
+
+function changeSchool() {
+  currentSchoolId = null;
+  document.getElementById('admNo').value    = '';
+  document.getElementById('pinInput').value = '';
+  document.getElementById('loginErr').style.display = 'none';
+  document.getElementById('schoolSearch').value = '';
+  document.getElementById('schoolDropdown').classList.remove('open');
+  showStep('stepSchool');
+  setTimeout(() => document.getElementById('schoolSearch')?.focus(), 100);
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.school-search-wrap')) {
+    document.getElementById('schoolDropdown')?.classList.remove('open');
+  }
+});
+
+// ── Login ────────────────────────────────────────────────────
+async function studentLogin() {
+  const admNo = document.getElementById('admNo').value.trim().toUpperCase();
+  const pin   = document.getElementById('pinInput').value.trim();
+  const btn   = document.getElementById('loginBtn');
+  const errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+
+  if (!admNo || !pin) {
+    errEl.textContent = 'Enter your admission number and PIN.';
+    errEl.style.display = 'block'; return;
+  }
+  if (!currentSchoolId) {
+    errEl.textContent = 'School not selected. Please search for your school above.';
+    errEl.style.display = 'block'; return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Signing in…';
+
+  try {
+    const { data: result, error } = await db.rpc('verify_student_login', {
+      p_admission_no: admNo,
+      p_pin:          pin,
+      p_school_id:    currentSchoolId   // scoped to this school only
+    });
+
+    if (error) throw new Error('Server error: ' + error.message);
+    if (!result.ok) throw new Error(result.error || 'Login failed. Contact your school admin.');
+
+    sessionStorage.setItem('et_student_session', JSON.stringify({
+      id:           result.id,
+      full_name:    result.full_name,
+      school_id:    result.school_id,
+      admission_no: result.admission_no,
+      photo_url:    result.photo_url || null,
+      gender:       result.gender    || null,
+      logged_in_at: new Date().toISOString()
+    }));
+
+    window.location.href = 'index.html';
+
+  } catch (err) {
+    errEl.textContent   = err.message;
+    errEl.style.display = 'block';
+    btn.disabled        = false;
+    btn.textContent     = 'Sign In';
+  }
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+function showStep(id) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const activeStep = document.querySelector('.step.active')?.id;
+    if (activeStep === 'stepLogin') studentLogin();
+  }
+});
+</script>
+<script src="../../js/pwa.js"></script>
+</body>
+</html>

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — SMS Notifications</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .template-card{border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:12px}
+    .template-card:hover{border-color:var(--primary);box-shadow:0 2px 12px rgba(10,110,63,.08)}
+    .template-body{font-size:13px;color:var(--ink-3);background:var(--surface-2);padding:10px 14px;border-radius:8px;line-height:1.6;font-family:var(--mono);margin-top:8px}
+    .status-sent{background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700}
+    .status-failed{background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700}
+    .recipient-chip{display:inline-flex;align-items:center;gap:5px;background:var(--primary-light);color:var(--primary);padding:3px 10px;border-radius:100px;font-size:12px;font-weight:600;margin:3px}
+    .char-count{font-size:12px;color:var(--ink-3);text-align:right;margin-top:4px}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, termiiKey='', senderID='EduTrackNG';
+let classes=[], students=[], currentTerm;
+let selectedRecipients=[];
+
+const TEMPLATES=[
+  {name:'Results Published',body:'Dear Parent, the {term} results for {student_name} are now available. Login to EduTrack NG Parent Portal to view. - {school_name}'},
+  {name:'Fee Reminder',body:'Dear Parent, school fees for {student_name} for {term} are yet to be paid. Kindly pay at the school bursar. - {school_name}'},
+  {name:'Absent Today',body:'Dear Parent, {student_name} was absent from school today. Please contact the school. - {school_name}'},
+  {name:'Low Attendance',body:"Dear Parent, {student_name}'s attendance has fallen below 75% this term. Please ensure regular attendance. - {school_name}"},
+  {name:'Term Begins',body:'{term} begins Monday. Ensure {student_name} reports with all required materials. - {school_name}'},
+  {name:'Term Ends',body:'{term} ends this Friday. Report cards available on the Parent Portal. Thank you. - {school_name}'},
+  {name:'PTA Meeting',body:'Dear Parent, there is a PTA meeting this Saturday at 10am. Your presence is important. - {school_name}'},
+];
+
+(async()=>{
+  currentUser=await initAdminLayout('sms','SMS Notifications');
+  if(!currentUser)return;
+  const [{data:cls},{data:stu},{data:term},{data:school}]=await Promise.all([
+    db.from('classes').select('id,name').eq('school_id',currentUser.school_id).order('name'),
+    db.from('students').select('id,full_name,admission_no,parent_phone,class_id,classes(name)').eq('school_id',currentUser.school_id).eq('is_active',true).order('full_name'),
+    db.from('terms').select('*').eq('school_id',currentUser.school_id).eq('is_current',true).maybeSingle(),
+    db.from('schools').select('settings,name').eq('id',currentUser.school_id).single()
+  ]);
+  classes=cls||[];students=stu||[];currentTerm=term;
+  const s=school?.data?.settings||school?.settings||{};
+  termiiKey=s.termii_api_key||'';
+  senderID=s.termii_sender_id||school?.data?.name?.substring(0,11)||'EduTrackNG';
+  renderPage();
+})();
+
+function renderPage(){
+  document.getElementById('pageBody').innerHTML=`
+    <div class="page-header"><h1>SMS Notifications</h1><p>Send SMS to parents via Termii</p></div>
+    <div class="tabs" style="margin-bottom:24px;">
+      <button class="tab active" onclick="switchTab('compose',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span>️ Compose</button>
+      <button class="tab" onclick="switchTab('templates',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg></span> Templates</button>
+      <button class="tab" onclick="switchTab('log',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> Sent Log</button>
+      <button class="tab" onclick="switchTab('config',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>️ Configuration</button>
+    </div>
+    <div id="tabContent"></div>`;
+  switchTabDirect('compose');
+}
+
+function switchTab(tab,btn){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');switchTabDirect(tab)}
+function switchTabDirect(tab){const c=document.getElementById('tabContent');if(tab==='compose')renderCompose(c);else if(tab==='templates')renderTemplates(c);else if(tab==='log')renderLog(c);else if(tab==='config')renderConfig(c)}
+
+function renderCompose(c){
+  c.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;align-items:start;">
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card__header"><span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Recipients</span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            <button class="btn btn--secondary btn--sm" onclick="selRec('all')">All Parents</button>
+            <button class="btn btn--secondary btn--sm" onclick="selRec('class')">By Class</button>
+            <button class="btn btn--secondary btn--sm" onclick="selRec('defaulters')">Fee Defaulters</button>
+          </div>
+          <div id="recOptions"></div>
+          <div id="recPreview" style="margin-top:10px;"></div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card__header"><span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span> Message</span><button class="btn btn--secondary btn--sm" onclick="toggleTplPicker()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg></span> Template</button></div>
+          <textarea id="smsBody" class="form-control" rows="5" placeholder="Your message...&#10;Use {student_name},{school_name},{term}" oninput="updateCC()" style="font-family:var(--mono);resize:vertical;"></textarea>
+          <div class="char-count" id="charCount">0 / 160</div>
+          <div id="tplPicker" style="display:none;margin-top:8px;"></div>
+        </div>
+        <div class="card">
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Sender ID</label><input type="text" id="smsSender" class="form-control" value="${senderID}" maxlength="11"></div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:8px;">
+            <button class="btn btn--primary" onclick="sendSMS()" id="sendBtn"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send SMS</button>
+            <div id="sendProgress" style="font-size:13px;color:var(--ink-3);"></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card"><div style="font-size:24px;font-weight:800;color:var(--primary);" id="recCount">0</div><div style="font-size:12px;color:var(--ink-3);font-weight:600;text-transform:uppercase;">Selected recipients</div></div>
+        <div class="card"><div style="font-size:20px;font-weight:800;">₦<span id="estCost">0</span></div><div style="font-size:12px;color:var(--ink-3);font-weight:600;text-transform:uppercase;">Est. cost (₦4/SMS)</div></div>
+        ${!termiiKey?'<div class="card" style="background:var(--warning-light);border-color:var(--warning);"><p style="font-size:13px;color:var(--warning);font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Termii not configured</p><button class="btn btn--warning btn--sm" style="margin-top:8px;" onclick="document.querySelectorAll(\'.tab\')[3].click()">Configure →</button></div>':'<div class="card" style="background:#dcfce7;border-color:#4ade80;"><p style="font-size:13px;color:#15803d;font-weight:700;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Termii Connected</p></div>'}
+      </div>
+    </div>`;
+  selRec('all');
+}
+
+function selRec(type){
+  const optEl=document.getElementById('recOptions');
+  selectedRecipients=[];
+  if(type==='all'){selectedRecipients=students.filter(s=>s.parent_phone);optEl.innerHTML='';updateRecPreview();}
+  else if(type==='class'){optEl.innerHTML=`<select class="form-control" onchange="filterByClass(this.value)" style="max-width:200px;"><option value="">Select class...</option>${classes.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>`;}
+  else if(type==='defaulters'){loadDefaulters();}
+}
+function filterByClass(id){selectedRecipients=students.filter(s=>s.class_id===id&&s.parent_phone);updateRecPreview();}
+async function loadDefaulters(){
+  if(!currentTerm)return;
+  const{data:paid}=await db.from('payments').select('student_id').eq('school_id',currentUser.school_id).eq('term_id',currentTerm.id);
+  const paidIds=new Set((paid||[]).map(p=>p.student_id));
+  selectedRecipients=students.filter(s=>!paidIds.has(s.id)&&s.parent_phone);
+  document.getElementById('recOptions').innerHTML=`<div style="font-size:13px;color:var(--ink-3);">${selectedRecipients.length} students with outstanding fees</div>`;
+  updateRecPreview();
+}
+function updateRecPreview(){
+  const n=selectedRecipients.length;
+  document.getElementById('recCount').textContent=n;
+  document.getElementById('estCost').textContent=(n*4).toLocaleString();
+  document.getElementById('recPreview').innerHTML=n?selectedRecipients.slice(0,4).map(s=>`<span class="recipient-chip"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span> ${s.full_name.split(' ')[0]}</span>`).join('')+(n>4?`<span class="recipient-chip" style="background:var(--surface-2);color:var(--ink-3);">+${n-4}</span>`:''): '<span style="font-size:13px;color:var(--ink-3);">No recipients</span>';
+}
+function updateCC(){const l=document.getElementById('smsBody').value.length;const s=Math.ceil(l/160)||1;document.getElementById('charCount').textContent=`${l} / ${s*160} (${s} SMS)`;}
+function toggleTplPicker(){const el=document.getElementById('tplPicker');el.style.display=el.style.display==='none'?'block':'none';el.innerHTML=TEMPLATES.map((t,i)=>`<div onclick="useTpl(${i})" style="padding:8px 12px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''"><strong>${t.name}</strong><br><span style="color:var(--ink-3);">${t.body.substring(0,55)}...</span></div>`).join('');}
+function useTpl(i){document.getElementById('smsBody').value=TEMPLATES[i].body;document.getElementById('tplPicker').style.display='none';updateCC();}
+
+async function sendSMS(){
+  const msg=document.getElementById('smsBody').value.trim();
+  const sender=document.getElementById('smsSender').value.trim()||senderID;
+  if(!msg){toast('Write a message first.','error');return;}
+  if(!selectedRecipients.length){toast('Select recipients.','error');return;}
+  if(!termiiKey){toast('Configure Termii key first.','error');return;}
+  if(!confirm(`Send SMS to ${selectedRecipients.length} parents?`))return;
+  const btn=document.getElementById('sendBtn');const prog=document.getElementById('sendProgress');
+  btn.disabled=true;btn.textContent='⏳ Sending...';
+  let sent=0,failed=0;
+  for(const student of selectedRecipients){
+    const raw=student.parent_phone?.replace(/\D/g,'');
+    if(!raw){failed++;continue;}
+    const phone=raw.startsWith('0')?'234'+raw.slice(1):raw.startsWith('234')?raw:'234'+raw;
+    const personalMsg=msg.replace(/{student_name}/g,student.full_name).replace(/{school_name}/g,currentUser.schools?.name||'School').replace(/{term}/g,currentTerm?.name||'Term');
+    try{
+      const res=await fetch('https://api.ng.termii.com/api/sms/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:phone,from:sender.substring(0,11),sms:personalMsg,type:'plain',api_key:termiiKey,channel:'generic'})});
+      const data=await res.json();
+      if(data.message_id||data.message==='Successfully Sent'){sent++;await db.from('sms_log').insert({school_id:currentUser.school_id,student_id:student.id,phone,message:personalMsg,status:'sent',sent_by:currentUser.id}).catch(()=>{});}
+      else failed++;
+    }catch{failed++;}
+    prog.textContent=`${sent+failed}/${selectedRecipients.length}...`;
+    if((sent+failed)%10===0)await new Promise(r=>setTimeout(r,100));
+  }
+  btn.disabled=false;btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Send SMS';
+  toast(`${sent} sent${failed?`, ${failed} failed`:''}`,sent>0?'success':'error');
+  prog.textContent='';
+}
+
+function renderTemplates(c){
+  c.innerHTML=TEMPLATES.map((t,i)=>`
+    <div class="template-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong style="font-size:14px;">${t.name}</strong>
+        <button class="btn btn--secondary btn--sm" onclick="useTplTab(${i})">Use →</button>
+      </div>
+      <div class="template-body">${t.body}</div>
+    </div>`).join('');
+}
+function useTplTab(i){document.querySelectorAll('.tab')[0].click();setTimeout(()=>{document.getElementById('smsBody').value=TEMPLATES[i].body;updateCC();toast('Template applied!','success');},50);}
+
+async function renderLog(c){
+  showLoader('#tabContent','Loading...');
+  const{data:logs}=await db.from('sms_log').select('id,phone,message,status,sent_at,students(full_name)').eq('school_id',currentUser.school_id).order('sent_at',{ascending:false}).limit(100);
+  if(!logs?.length){c.innerHTML=`<div class="card"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span></div><p>No SMS sent yet.</p></div></div>`;return;}
+  const totalSent=logs.filter(l=>l.status==='sent').length;
+  c.innerHTML=`
+    <div class="stat-grid" style="margin-bottom:20px;">
+      <div class="stat-card"><div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span></div><div class="stat-card__value">${logs.length}</div><div class="stat-card__label">Total Messages</div></div>
+      <div class="stat-card"><div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div><div class="stat-card__value" style="color:var(--success);">${totalSent}</div><div class="stat-card__label">Delivered</div></div>
+      <div class="stat-card"><div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span></div><div class="stat-card__value">₦${(totalSent*4).toLocaleString()}</div><div class="stat-card__label">Est. Cost</div></div>
+    </div>
+    <div class="card" style="padding:0;">
+      <div class="table-wrap" style="border:none;">
+        <table>
+          <thead><tr><th>Student</th><th>Phone</th><th>Message</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody>${logs.map(l=>`<tr><td style="font-weight:600;">${l.students?.full_name||'—'}</td><td style="font-size:12px;">${l.phone}</td><td style="max-width:260px;font-size:12px;">${l.message?.substring(0,70)}...</td><td><span class="${l.status==='sent'?'status-sent':'status-failed'}">${l.status}</span></td><td style="font-size:12px;color:var(--ink-3);">${formatDate(l.sent_at)}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function renderConfig(c){
+  c.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:800px;">
+      <div class="card">
+        <div class="card__header"><span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></span> Termii Configuration</span></div>
+        <div class="form-group"><label class="form-label">API Key <span class="required">*</span></label><input type="text" id="termiiKey" class="form-control" value="${termiiKey}" placeholder="TL_xxxxxxxxxxxx"><div class="form-hint">From <a href="https://app.termii.com" target="_blank" style="color:var(--primary);">app.termii.com</a> → Settings → API Keys</div></div>
+        <div class="form-group"><label class="form-label">Sender ID</label><input type="text" id="termiiSender" class="form-control" value="${senderID}" maxlength="11" placeholder="EduTrackNG"></div>
+        <button class="btn btn--primary" onclick="saveCfg()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save</button>
+        <div id="cfgMsg" style="margin-top:10px;"></div>
+      </div>
+      <div class="card">
+        <div class="card__header"><span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span> Setup Guide</span></div>
+        <div style="font-size:13px;color:var(--ink-2);line-height:1.9;">
+          <p><strong>1.</strong> Sign up at <a href="https://termii.com" target="_blank" style="color:var(--primary);">termii.com</a></p>
+          <p><strong>2.</strong> Fund your Termii wallet (~₦4/SMS)</p>
+          <p><strong>3.</strong> Register your Sender ID</p>
+          <p><strong>4.</strong> Copy API key and paste above</p>
+        </div>
+        <div style="margin-top:12px;padding:10px;background:var(--primary-light);border-radius:8px;font-size:12px;color:var(--primary);"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span> Test with 1 message before bulk sending.</div>
+      </div>
+    </div>`;
+}
+
+async function saveCfg(){
+  const key=document.getElementById('termiiKey').value.trim();
+  const sender=document.getElementById('termiiSender').value.trim().replace(/\s/g,'').substring(0,11);
+  const msg=document.getElementById('cfgMsg');
+  if(!key){msg.innerHTML='<span class="form-error">Enter API key.</span>';return;}
+  const{data:school}=await db.from('schools').select('settings').eq('id',currentUser.school_id).single();
+  const existing=school?.settings||{};
+  const{error}=await db.from('schools').update({settings:{...existing,termii_api_key:key,termii_sender_id:sender}}).eq('id',currentUser.school_id);
+  if(error){msg.innerHTML=`<span class="form-error">${error.message}</span>`;return;}
+  termiiKey=key;senderID=sender;
+  toast('Termii configured!','success');
+  msg.innerHTML='<span style="color:var(--success);font-size:13px;font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Saved!</span>';
+}
+</script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

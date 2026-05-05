@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <title>EduTrack NG — Timetable Builder</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .builder-steps { display:flex; gap:0; margin-bottom:24px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+    .builder-step { flex:1; padding:14px 18px; display:flex; align-items:center; gap:10px; border-right:1px solid var(--border); transition:background .15s; }
+    .builder-step:last-child { border-right:none; }
+    .builder-step.done   { background:var(--primary-light); }
+    .builder-step.active { background:var(--ink); }
+    .builder-step.active .step-lbl, .builder-step.active .step-val { color:white !important; }
+    .builder-step.done .step-num  { background:var(--primary); color:white; }
+    .builder-step.active .step-num { background:var(--primary); color:white; }
+    .step-num { width:26px; height:26px; border-radius:50%; background:var(--surface-3); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; }
+    .step-lbl { font-size:11px; font-weight:600; color:var(--ink-3); text-transform:uppercase; letter-spacing:.4px; }
+    .step-val { font-size:13px; font-weight:700; color:var(--ink); margin-top:2px; }
+    .config-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media(max-width:600px){ .config-grid { grid-template-columns:1fr; } }
+    .tt-preview { overflow-x:auto; margin-top:20px; }
+    .tt-table { border-collapse:collapse; min-width:700px; font-size:12px; width:100%; }
+    .tt-table th { background:var(--ink); color:white; padding:10px 8px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; white-space:nowrap; border-right:1px solid rgba(255,255,255,.2); }
+    .tt-table th:first-child { text-align:left; min-width:120px; }
+    .tt-table td { padding:8px; border:1px solid var(--border); text-align:center; vertical-align:middle; min-width:110px; font-size:12px; }
+    .tt-table tr:hover td { background:var(--primary-light); }
+    .tt-cell { border-radius:6px; padding:5px 7px; text-align:left; }
+    .tt-cell__sub { font-weight:700; font-size:12px; color:var(--ink); }
+    .tt-cell__teacher { font-size:10px; color:var(--ink-3); margin-top:1px; }
+    .tt-cell--break { background:var(--surface-3); color:var(--ink-3); font-style:italic; font-size:11px; text-align:center; }
+    .tt-cell--free   { color:var(--ink-4); font-size:11px; }
+    .conflict-badge { display:inline-block; background:#fee2e2; color:#991b1b; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; }
+    .progress-wrap { background:var(--surface-3); border-radius:100px; height:8px; overflow:hidden; margin:8px 0; }
+    .progress-fill { height:100%; background:var(--primary); border-radius:100px; transition:width .3s ease; }
+    .summary-chips { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+    .summary-chip { padding:6px 14px; border-radius:100px; font-size:12px; font-weight:600; background:var(--surface-3); color:var(--ink-2); }
+    .summary-chip.good { background:#dcfce7; color:#166534; }
+    .summary-chip.warn { background:#fef9c3; color:#854d0e; }
+    .summary-chip.danger { background:#fee2e2; color:#991b1b; }
+    .day-tab { padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; color:var(--ink-3); transition:var(--transition); }
+    .day-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, currentTerm;
+let allClasses=[], allSubjects=[], allTeachers=[];
+let classSubjectMap={};   // classId → [{subjectId,subjectName,teacherId,teacherName}]
+let generatedTimetable={}; // classId → {Mon:[...], Tue:[...], ...}
+let ttConfig={ periodsPerDay:8, periodMins:40, breakAfter:3, breakMins:20, startTime:'08:00', assemblyMins:15 };
+let selectedClassId='', activeDay='Mon', currentStep=1;
+const DAYS=['Mon','Tue','Wed','Thu','Fri'];
+
+(async()=>{
+  currentUser = await initAdminLayout('timetable-builder','Timetable Builder');
+  if(!currentUser) return;
+
+  document.getElementById('topbarActions').innerHTML=`
+    <button class="btn btn--secondary btn--sm" onclick="window.location.href='timetable.html'">← Timetable</button>
+    <button class="btn btn--primary btn--sm" id="saveAllBtn" onclick="saveAll()" style="display:none;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save All to DB</button>
+  `;
+
+  const [termR,classR,subjectR,teacherR,csR,configR] = await Promise.all([
+    db.from('terms').select('*').eq('school_id',currentUser.school_id).eq('is_current',true).maybeSingle(),
+    db.from('classes').select('id,name,level,section').eq('school_id',currentUser.school_id).order('name'),
+    db.from('subjects').select('id,name,code').eq('school_id',currentUser.school_id).order('name'),
+    db.from('users').select('id,full_name').eq('school_id',currentUser.school_id).eq('role','teacher').eq('is_active',true).order('full_name'),
+    db.from('class_subjects').select('class_id,subject_id,teacher_id,subjects(id,name),users!class_subjects_teacher_id_fkey(id,full_name)')
+      .eq('school_id',currentUser.school_id).eq('term_id',(await db.from('terms').select('id').eq('school_id',currentUser.school_id).eq('is_current',true).maybeSingle()).data?.id||''),
+    db.from('timetable_config').select('*').eq('school_id',currentUser.school_id).maybeSingle(),
+  ]);
+
+  currentTerm  = termR.data;
+  allClasses   = classR.data||[];
+  allSubjects  = subjectR.data||[];
+  allTeachers  = teacherR.data||[];
+
+  // Build class–subject–teacher map
+  (csR.data||[]).forEach(cs=>{
+    if(!classSubjectMap[cs.class_id]) classSubjectMap[cs.class_id]=[];
+    classSubjectMap[cs.class_id].push({
+      subjectId:   cs.subject_id,
+      subjectName: cs.subjects?.name||'',
+      teacherId:   cs.teacher_id,
+      teacherName: cs.users?.full_name||'TBA',
+    });
+  });
+
+  // Load saved config
+  if(configR.data){
+    ttConfig.periodsPerDay = configR.data.periods_per_day     || ttConfig.periodsPerDay;
+    ttConfig.periodMins    = configR.data.period_duration_mins || ttConfig.periodMins;
+    ttConfig.breakAfter    = configR.data.break_after_period   || ttConfig.breakAfter;
+    ttConfig.breakMins     = configR.data.break_duration_mins  || ttConfig.breakMins;
+    ttConfig.startTime     = configR.data.school_start_time    || ttConfig.startTime;
+    ttConfig.assemblyMins  = configR.data.assembly_duration_mins|| ttConfig.assemblyMins;
+  }
+
+  renderPage();
+})();
+
+function renderPage(){
+  document.getElementById('pageBody').innerHTML=`
+    <div class="page-header">
+      <div><h1 class="page-title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span> Timetable Builder</h1>
+      <p class="page-subtitle">${currentTerm?.name||'No active term'} · Auto-generate class timetables avoiding teacher conflicts</p></div>
+    </div>
+
+    ${renderStepper()}
+
+    <!-- Step 1: Configure -->
+    <div id="step1Panel" class="${currentStep===1?'':'d-none'}">
+      <div class="card">
+        <div class="card__header"><div class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>️ School Schedule Settings</div></div>
+        <div class="config-grid">
+          <div class="form-group">
+            <label class="form-label">School Start Time</label>
+            <input type="time" class="form-control" id="cfgStart" value="${ttConfig.startTime}" oninput="ttConfig.startTime=this.value">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Assembly Duration (minutes)</label>
+            <input type="number" class="form-control" id="cfgAssembly" value="${ttConfig.assemblyMins}" min="0" max="60" oninput="ttConfig.assemblyMins=+this.value">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Periods Per Day</label>
+            <select class="form-control" id="cfgPeriods" onchange="ttConfig.periodsPerDay=+this.value">
+              ${[6,7,8,9,10].map(n=>`<option value="${n}" ${n===ttConfig.periodsPerDay?'selected':''}>${n} periods</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Period Duration (minutes)</label>
+            <select class="form-control" id="cfgDuration" onchange="ttConfig.periodMins=+this.value">
+              ${[30,35,40,45,50].map(n=>`<option value="${n}" ${n===ttConfig.periodMins?'selected':''}>${n} minutes</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Break After Period</label>
+            <select class="form-control" onchange="ttConfig.breakAfter=+this.value">
+              ${[2,3,4,5].map(n=>`<option value="${n}" ${n===ttConfig.breakAfter?'selected':''}>${n===2?'2nd (Morning break)':n===3?'3rd period':n+'th period'}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Break Duration (minutes)</label>
+            <select class="form-control" onchange="ttConfig.breakMins=+this.value">
+              ${[15,20,25,30].map(n=>`<option value="${n}" ${n===ttConfig.breakMins?'selected':''}>${n} minutes</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:16px;padding:12px;background:var(--surface-2);border-radius:var(--radius-sm);font-size:13px;">
+          <strong>Schedule preview:</strong> School starts at <strong>${ttConfig.startTime}</strong>.
+          After <strong>${ttConfig.assemblyMins}min</strong> assembly,
+          <strong>${ttConfig.periodsPerDay} periods × ${ttConfig.periodMins}min</strong> each,
+          with a <strong>${ttConfig.breakMins}min break</strong> after period ${ttConfig.breakAfter}.
+          <strong>School ends at ~${computeEndTime()}</strong>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:10px;">
+          <button class="btn btn--primary" onclick="saveConfigAndNext()">Save & Continue →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Select class & generate -->
+    <div id="step2Panel" class="${currentStep===2?'':'d-none'}">
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card__header"><div><div class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M8 8h.01M16 8h.01M8 16h.01M16 16h.01M12 12h.01"/></svg></span> Auto-Generate Timetable</div><div class="card__subtitle">Select a class and generate a balanced timetable. Teacher conflicts are automatically avoided.</div></div></div>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+          <div class="form-group" style="margin:0;flex:1;min-width:180px;">
+            <label class="form-label">Class to Generate</label>
+            <select class="form-control" id="classSelect" onchange="selectedClassId=this.value">
+              <option value="">— Select Class —</option>
+              ${allClasses.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+            </select>
+          </div>
+          <button class="btn btn--primary" onclick="generateTimetable()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M8 8h.01M16 8h.01M8 16h.01M16 16h.01M12 12h.01"/></svg></span> Auto-Generate</button>
+          <button class="btn btn--secondary" onclick="generateAllClasses()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span> Generate All Classes</button>
+        </div>
+        <div id="genProgress" style="display:none;margin-top:12px;">
+          <div style="font-size:13px;color:var(--ink-3);" id="genProgressText">Generating…</div>
+          <div class="progress-wrap"><div class="progress-fill" id="genProgressBar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div id="ttPreview"></div>
+    </div>
+
+    <!-- Step 3: Review & save -->
+    <div id="step3Panel" class="${currentStep===3?'':'d-none'}">
+      <div id="finalReview"></div>
+    </div>
+  `;
+}
+
+function renderStepper(){
+  const steps=[
+    {n:1,label:'Configure',val:ttConfig.periodsPerDay+'p × '+ttConfig.periodMins+'min'},
+    {n:2,label:'Generate',val:Object.keys(generatedTimetable).length+' class(es) generated'},
+    {n:3,label:'Review & Save',val:''},
+  ];
+  return `<div class="builder-steps">${steps.map(s=>`
+    <div class="builder-step ${currentStep>s.n?'done':currentStep===s.n?'active':''}">
+      <div class="step-num">${currentStep>s.n?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>':s.n}</div>
+      <div>
+        <div class="step-lbl">${s.label}</div>
+        <div class="step-val">${s.val}</div>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function computeEndTime(){
+  const [h,m]=ttConfig.startTime.split(':').map(Number);
+  let totalMins=h*60+m+ttConfig.assemblyMins;
+  for(let p=0;p<ttConfig.periodsPerDay;p++){
+    totalMins+=ttConfig.periodMins;
+    if(p+1===ttConfig.breakAfter) totalMins+=ttConfig.breakMins;
+  }
+  return `${String(Math.floor(totalMins/60)).padStart(2,'0')}:${String(totalMins%60).padStart(2,'0')}`;
+}
+
+async function saveConfigAndNext(){
+  // Upsert timetable_config
+  const {error} = await db.from('timetable_config').upsert({
+    school_id:currentUser.school_id,
+    periods_per_day:ttConfig.periodsPerDay,
+    period_duration_mins:ttConfig.periodMins,
+    break_after_period:ttConfig.breakAfter,
+    break_duration_mins:ttConfig.breakMins,
+    school_start_time:ttConfig.startTime,
+    assembly_duration_mins:ttConfig.assemblyMins,
+  },{onConflict:'school_id'});
+  if(error){ toast('Config save error: '+error.message,'error'); return; }
+  toast('Settings saved!','success');
+  currentStep=2;
+  renderPage();
+}
+
+function generateTimetable(){
+  const classId=document.getElementById('classSelect')?.value||selectedClassId;
+  if(!classId){ toast('Please select a class.','error'); return; }
+  const subjects=classSubjectMap[classId]||[];
+  if(!subjects.length){ toast('No subjects assigned to this class. Go to Class Subjects first.','error'); return; }
+  generatedTimetable[classId]=runGenerator([classId]);
+  renderTimetablePreview(classId);
+  currentStep=2;
+  document.getElementById('saveAllBtn').style.display='inline-flex';
+}
+
+async function generateAllClasses(){
+  const prog=document.getElementById('genProgress');
+  const progText=document.getElementById('genProgressText');
+  const progBar=document.getElementById('genProgressBar');
+  prog.style.display='block';
+  const valid=allClasses.filter(c=>(classSubjectMap[c.id]||[]).length>0);
+  if(!valid.length){ toast('No classes have subjects assigned yet. Configure Class Subjects first.','error'); prog.style.display='none'; return; }
+  for(let i=0;i<valid.length;i++){
+    const cls=valid[i];
+    progText.textContent=`Generating ${cls.name} (${i+1}/${valid.length})…`;
+    progBar.style.width=Math.round((i+1)/valid.length*100)+'%';
+    generatedTimetable[cls.id]=runGenerator([cls.id]);
+    await new Promise(r=>setTimeout(r,50)); // yield to UI
+  }
+  prog.style.display='none';
+  toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Generated timetables for '+valid.length+' classes!','success');
+  currentStep=3;
+  document.getElementById('saveAllBtn').style.display='inline-flex';
+  renderAllPreview();
+  renderPage(); // re-render stepper
+}
+
+// ── Core generator algorithm ──────────────────────────────────
+// Greedy round-robin: assigns each subject evenly across the week
+// while tracking teacher conflicts (teacher can't be in 2 places at once)
+function runGenerator(classIds){
+  const classId=classIds[0];
+  const subjects=classSubjectMap[classId]||[];
+  if(!subjects.length) return {};
+
+  const schedule={}; // day → period → {subjectId,subjectName,teacherId,teacherName}
+  DAYS.forEach(d=>{
+    schedule[d]=[];
+    for(let p=0;p<ttConfig.periodsPerDay;p++) schedule[d].push(null);
+  });
+
+  // How many times each subject should appear per week
+  // Target: ~5 periods per week per subject (distribute evenly)
+  const perSubject=Math.max(1,Math.floor((ttConfig.periodsPerDay*5)/subjects.length));
+  const subjectCounts={}; subjects.forEach(s=>{subjectCounts[s.subjectId]=0;});
+
+  // Track teacher schedule across ALL classes (conflict avoidance)
+  // teacherSchedule[teacherId][day][period] = classId
+  if(!window._teacherSchedule) window._teacherSchedule={};
+  const ts=window._teacherSchedule;
+
+  // Shuffle subjects for variety
+  const shuffled=[...subjects].sort(()=>Math.random()-.5);
+
+  for(const day of DAYS){
+    let subIdx=0;
+    for(let period=0;period<ttConfig.periodsPerDay;period++){
+      // Try to assign a subject
+      let assigned=false;
+      for(let tries=0;tries<shuffled.length*2;tries++){
+        const sub=shuffled[subIdx%shuffled.length]; subIdx++;
+        if(subjectCounts[sub.subjectId]>=perSubject*5) continue; // max total
+        // Check teacher conflict
+        if(sub.teacherId){
+          if(!ts[sub.teacherId]) ts[sub.teacherId]={};
+          if(!ts[sub.teacherId][day]) ts[sub.teacherId][day]={};
+          if(ts[sub.teacherId][day][period]) continue; // conflict
+          ts[sub.teacherId][day][period]=classId;
+        }
+        schedule[day][period]={subjectId:sub.subjectId,subjectName:sub.subjectName,teacherId:sub.teacherId,teacherName:sub.teacherName};
+        subjectCounts[sub.subjectId]++;
+        assigned=true;
+        break;
+      }
+      if(!assigned){
+        // Assign first available subject ignoring max count
+        const sub=shuffled[period%shuffled.length];
+        schedule[day][period]={subjectId:sub.subjectId,subjectName:sub.subjectName,teacherId:sub.teacherId,teacherName:sub.teacherName};
+      }
+    }
+  }
+  return schedule;
+}
+
+function renderTimetablePreview(classId){
+  const cls=allClasses.find(c=>c.id===classId);
+  const sched=generatedTimetable[classId];
+  if(!sched) return;
+
+  // Count subjects
+  const subjectFreq={};
+  DAYS.forEach(d=>sched[d].forEach(s=>{if(s){subjectFreq[s.subjectId]=(subjectFreq[s.subjectId]||0)+1;}}));
+
+  const prevEl=document.getElementById('ttPreview');
+  if(!prevEl) return;
+
+  prevEl.innerHTML=`
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+      <div style="background:var(--ink);color:white;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;">
+        <div><div style="font-weight:700;font-size:15px;">${cls?.name} — Generated Timetable</div>
+        <div style="font-size:12px;color:#9ca3af;">${ttConfig.periodsPerDay} periods/day · ${(Object.values(subjectFreq).length)} subjects</div></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn--sm" style="background:rgba(255,255,255,.15);color:white;" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>️ Print</button>
+          <button class="btn btn--sm" style="background:rgba(255,255,255,.15);color:white;" onclick="saveSingleClass('${classId}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save This Class</button>
+        </div>
+      </div>
+      <div class="tt-preview">
+        ${buildTTTable(sched)}
+      </div>
+      <div class="summary-chips" style="padding:12px 16px;">
+        <div class="summary-chip good"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${Object.values(subjectFreq).length} subjects covered</div>
+        <div class="summary-chip"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span> ${DAYS.length * ttConfig.periodsPerDay} total periods</div>
+        ${Object.entries(subjectFreq).map(([sid,c])=>{
+          const sub=(classSubjectMap[classId]||[]).find(s=>s.subjectId===sid);
+          return `<div class="summary-chip">${sub?.subjectName||sid}: ${c}×/week</div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function buildTTTable(sched){
+  const periods=Array.from({length:ttConfig.periodsPerDay},(_,i)=>i);
+  // Compute period times
+  const times=[];
+  let cur=ttConfig.startTime.split(':').map(Number);
+  let mins=cur[0]*60+cur[1]+ttConfig.assemblyMins;
+  for(let p=0;p<ttConfig.periodsPerDay;p++){
+    const s=`${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`;
+    mins+=ttConfig.periodMins;
+    const e=`${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`;
+    times.push({start:s,end:e,isBreakAfter:p+1===ttConfig.breakAfter});
+    if(p+1===ttConfig.breakAfter) mins+=ttConfig.breakMins;
+  }
+
+  const COLORS=['#dbeafe','#dcfce7','#fef9c3','#ede9fe','#fed7aa','#fce7f3','#e0f2fe','#d1fae5'];
+  const subjectColors={};
+  let colorIdx=0;
+
+  return `<table class="tt-table">
+    <thead>
+      <tr>
+        <th>Period</th>
+        ${DAYS.map(d=>`<th>${d}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${periods.map(p=>{
+        const t=times[p];
+        return `<tr>
+          <td style="font-weight:700;font-size:11px;text-align:center;background:var(--surface-2);">
+            P${p+1}<br><span style="font-weight:400;color:var(--ink-3);">${t.start}–${t.end}</span>
+          </td>
+          ${DAYS.map(d=>{
+            const cell=sched[d][p];
+            if(!cell) return `<td><span class="tt-cell--free">Free</span></td>`;
+            if(!subjectColors[cell.subjectId]){subjectColors[cell.subjectId]=COLORS[colorIdx%COLORS.length];colorIdx++;}
+            return `<td>
+              <div class="tt-cell" style="background:${subjectColors[cell.subjectId]};">
+                <div class="tt-cell__sub">${cell.subjectName}</div>
+                <div class="tt-cell__teacher">${cell.teacherName}</div>
+              </div>
+            </td>`;
+          }).join('')}
+        </tr>
+        ${t.isBreakAfter?`<tr><td colspan="${DAYS.length+1}" class="tt-cell--break"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg></span>️ Break — ${ttConfig.breakMins} minutes</td></tr>`:''}`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+function renderAllPreview(){
+  const el=document.getElementById('finalReview')||document.getElementById('ttPreview');
+  if(!el) return;
+  const generated=Object.entries(generatedTimetable);
+  if(!generated.length){ el.innerHTML='<div class="et-empty"><p>No timetables generated yet.</p></div>'; return; }
+  el.innerHTML=generated.map(([classId,sched])=>{
+    const cls=allClasses.find(c=>c.id===classId);
+    const subjectFreq={};
+    DAYS.forEach(d=>(sched[d]||[]).forEach(s=>{if(s)subjectFreq[s.subjectId]=(subjectFreq[s.subjectId]||0)+1;}));
+    return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:18px;">
+      <div style="background:var(--ink);color:white;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-weight:700;">${cls?.name||classId}</div>
+        <button class="btn btn--sm" style="background:rgba(255,255,255,.15);color:white;" onclick="saveSingleClass('${classId}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save</button>
+      </div>
+      <div class="tt-preview">${buildTTTable(sched)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function saveSingleClass(classId){
+  if(!currentTerm){ toast('No active term.','error'); return; }
+  const sched=generatedTimetable[classId];
+  if(!sched){ toast('Generate timetable first.','error'); return; }
+
+  // Delete existing timetable for this class+term
+  await db.from('timetable').delete().eq('class_id',classId).eq('term_id',currentTerm.id).eq('school_id',currentUser.school_id);
+
+  const rows=[];
+  DAYS.forEach(day=>{
+    (sched[day]||[]).forEach((cell,period)=>{
+      if(!cell) return;
+      rows.push({ school_id:currentUser.school_id, class_id:classId, term_id:currentTerm.id,
+        day, period, subject_id:cell.subjectId, teacher_id:cell.teacherId||null,
+        duration_minutes:ttConfig.periodMins });
+    });
+  });
+
+  const {error} = await db.from('timetable').insert(rows);
+  if(error){ toast('Save error: '+error.message,'error'); return; }
+  const cls=allClasses.find(c=>c.id===classId);
+  toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Timetable saved for '+cls?.name+' ('+rows.length+' slots)','success');
+}
+
+async function saveAll(){
+  if(!currentTerm){ toast('No active term.','error'); return; }
+  const btn=document.getElementById('saveAllBtn');
+  btn.disabled=true; btn.textContent='Saving…';
+  let total=0,errors=0;
+  for(const classId of Object.keys(generatedTimetable)){
+    await db.from('timetable').delete().eq('class_id',classId).eq('term_id',currentTerm.id).eq('school_id',currentUser.school_id);
+    const sched=generatedTimetable[classId];
+    const rows=[];
+    DAYS.forEach(day=>{
+      (sched[day]||[]).forEach((cell,period)=>{
+        if(!cell) return;
+        rows.push({ school_id:currentUser.school_id, class_id:classId, term_id:currentTerm.id,
+          day, period, subject_id:cell.subjectId, teacher_id:cell.teacherId||null, duration_minutes:ttConfig.periodMins });
+      });
+    });
+    const{error}=await db.from('timetable').insert(rows);
+    if(error) errors++;
+    else total+=rows.length;
+  }
+  btn.disabled=false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save All to DB';
+  toast(errors?`<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Saved ${total} slots with ${errors} error(s)`:`<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> All timetables saved — ${total} slots!`, errors?'error':'success');
+}
+
+// Show/hide step panels
+['step1Panel','step2Panel','step3Panel'].forEach((id,i)=>{
+  const el=document.getElementById(id);
+  if(el) el.classList.toggle('d-none', currentStep!==i+1);
+});
+</script>
+<script src="../js/pwa.js"></script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

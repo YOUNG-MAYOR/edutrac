@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EduTrack NG">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>EduTrack NG — Fees</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let currentUser, children = [], currentTerm;
+
+(async () => {
+  currentUser = await initPage(['parent'], 'Fees & Payments', 'fees');
+  if (!currentUser) return;
+
+  const [{ data: links }, { data: term }] = await Promise.all([
+    db.from('parent_students').select('students(id,full_name,enrollments(classes(name)))').eq('parent_id', currentUser.id),
+    db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current',true).maybeSingle()
+  ]);
+  children = (links || []).map(l => l.students).filter(Boolean);
+  currentTerm = term;
+  const preselect = new URLSearchParams(location.search).get('student') || '';
+
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header"><h1>Fees & Payments</h1><p>${term?.name || 'Current Term'}</p></div>
+    <div class="filter-bar">
+      <select class="form-control" id="childSel" onchange="load()" style="max-width:260px;">
+        <option value="">Select child…</option>
+        ${children.map(c => `<option value="${c.id}" ${c.id===preselect?'selected':''}>${c.full_name}</option>`).join('')}
+      </select>
+    </div>
+    <div id="feeContent">
+      <div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span></div><p>Select your child to view fee status.</p></div>
+    </div>
+  `;
+  if (preselect) load();
+})();
+
+async function load() {
+  const studentId = document.getElementById('childSel').value;
+  if (!studentId || !currentTerm) return;
+  showLoader('#feeContent');
+
+  const child = children.find(c => c.id === studentId);
+  const [{ data: feeTypes }, { data: payments }] = await Promise.all([
+    db.from('fee_types').select('*').eq('school_id', currentUser.school_id),
+    db.from('payments').select('*, fee_types(name,amount)')
+      .eq('student_id', studentId).eq('term_id', currentTerm.id)
+      .order('paid_at', {ascending: false})
+  ]);
+
+  const totalExpected = (feeTypes || []).reduce((s, f) => s + Number(f.amount), 0);
+  const totalPaid = (payments || []).reduce((s, p) => s + Number(p.amount_paid), 0);
+  const balance = totalExpected - totalPaid;
+  const pct = totalExpected > 0 ? Math.min(100, Math.round(totalPaid / totalExpected * 100)) : 0;
+  const barCol = pct >= 100 ? '' : pct >= 50 ? 'warn' : 'danger';
+
+  document.getElementById('feeContent').innerHTML = `
+    <div class="card" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <div class="avatar avatar--lg">${child?.full_name?.charAt(0)}</div>
+        <div style="flex:1;">
+          <div style="font-size:18px;font-weight:700;">${child?.full_name}</div>
+          <div style="font-size:13px;color:var(--ink-3);">${child?.enrollments?.[0]?.classes?.name || ''}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:var(--ink-3);">Balance Due</div>
+          <div style="font-size:28px;font-weight:800;color:${balance > 0 ? 'var(--danger)' : 'var(--success)'};">
+            ${formatMoney(Math.max(0, balance))}
+          </div>
+          ${balance <= 0 ? '<div style="color:var(--success);font-size:13px;font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Fully Paid</div>' : ''}
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:20px 0;">
+        <div style="padding:12px;background:var(--surface-2);border-radius:var(--radius-sm);text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">Expected</div>
+          <div style="font-size:18px;font-weight:700;">${formatMoney(totalExpected)}</div>
+        </div>
+        <div style="padding:12px;background:var(--success-light);border-radius:var(--radius-sm);text-align:center;">
+          <div style="font-size:11px;color:var(--success);margin-bottom:4px;">Paid</div>
+          <div style="font-size:18px;font-weight:700;color:var(--success);">${formatMoney(totalPaid)}</div>
+        </div>
+        <div style="padding:12px;background:${balance>0?'var(--danger-light)':'var(--success-light)'};border-radius:var(--radius-sm);text-align:center;">
+          <div style="font-size:11px;color:${balance>0?'var(--danger)':'var(--success)'};margin-bottom:4px;">Balance</div>
+          <div style="font-size:18px;font-weight:700;color:${balance>0?'var(--danger)':'var(--success)'};">${formatMoney(Math.max(0,balance))}</div>
+        </div>
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:13px;font-weight:600;">Payment Progress</span>
+          <span style="font-size:13px;font-weight:700;">${pct}%</span>
+        </div>
+        <div class="progress-bar" style="height:12px;">
+          <div class="progress-bar__fill ${barCol}" style="width:${pct}%;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fee breakdown -->
+    ${feeTypes?.length ? `
+    <div class="card" style="margin-bottom:20px;padding:0;">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);font-weight:700;">Fee Breakdown</div>
+      <div class="table-wrap" style="border:none;">
+        <table>
+          <thead><tr><th>Fee Type</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>
+            ${feeTypes.map(f => {
+              const paid = (payments || [])
+                .filter(p => p.fee_types?.name === f.name)
+                .reduce((s, p) => s + Number(p.amount_paid), 0);
+              const isPaid = paid >= Number(f.amount);
+              return `<tr>
+                <td style="font-weight:500;">${f.name}</td>
+                <td>${formatMoney(f.amount)}</td>
+                <td>
+                  ${isPaid
+                    ? '<span class="badge badge--green">Paid</span>'
+                    : paid > 0
+                      ? `<span class="badge badge--yellow">Partial — ${formatMoney(paid)} paid</span>`
+                      : '<span class="badge badge--red">Unpaid</span>'
+                  }
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ` : ''}
+
+    <!-- Payment history -->
+    <div class="card" style="padding:0;">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);font-weight:700;">Payment History (${payments?.length || 0})</div>
+      ${payments?.length ? `
+        <div class="table-wrap" style="border:none;">
+          <table>
+            <thead><tr><th>Fee</th><th>Amount</th><th>Method</th><th>Date</th></tr></thead>
+            <tbody>
+              ${payments.map(p => `<tr>
+                <td>${p.fee_types?.name || '—'}</td>
+                <td style="color:var(--success);font-weight:600;">${formatMoney(p.amount_paid)}</td>
+                <td><span class="chip">${p.payment_method || '—'}</span></td>
+                <td style="font-size:13px;color:var(--ink-3);">${formatDate(p.paid_at)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : '<div class="et-empty" style="padding:30px;"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span></div><p>No payments recorded yet.</p></div>'}
+    </div>
+  `;
+}
+</script>
+<script src="../../js/pwa.js"></script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EduTrack NG">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>EduTrack NG — Teacher Dashboard</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+(async () => {
+  const user = await initPage(['teacher', 'admin'], 'Dashboard', 'dashboard');
+  if (!user) return;
+  const body = document.getElementById('pageBody');
+
+  // Get current term
+  const { data: term } = await db.from('terms')
+    .select('*').eq('school_id', user.school_id).eq('is_current', true).maybeSingle();
+
+  // SOURCE 1: Classes where this teacher is the Form Teacher (classes.teacher_id)
+  // This is set from Admin → Classes → Edit → Form Teacher
+  const { data: formClasses } = await db.from('classes')
+    .select('id, name, level')
+    .eq('teacher_id', user.id)
+    .eq('school_id', user.school_id);
+
+  // SOURCE 2: Subject assignments (class_subjects.teacher_id)
+  // This is set from Admin → Staff → Assign Subjects
+  const { data: allAssignments, error: assignErr } = await db.from('class_subjects')
+    .select('class_id, subject_id, term_id, classes(id,name,level), subjects(id,name,code)')
+    .eq('teacher_id', user.id)
+    .eq('school_id', user.school_id);
+
+  if (assignErr) console.error('Class assignment query error:', assignErr);
+
+  // Merge both sources into one unified classMap
+  const classMap = {};
+
+  // Add form teacher classes first (no subjects known from this source)
+  (formClasses || []).forEach(cls => {
+    if (!classMap[cls.id]) {
+      classMap[cls.id] = {
+        id: cls.id, name: cls.name, level: cls.level || '',
+        subjects: [], subjectIds: new Set(), isFormTeacher: true
+      };
+    } else {
+      classMap[cls.id].isFormTeacher = true;
+    }
+  });
+
+  // Merge subject assignments (adds classes + their subjects)
+  (allAssignments || []).forEach(a => {
+    if (!a.class_id || !a.classes) return;
+    if (!classMap[a.class_id]) {
+      classMap[a.class_id] = {
+        id: a.class_id, name: a.classes.name, level: a.classes.level || '',
+        subjects: [], subjectIds: new Set(), isFormTeacher: false
+      };
+    }
+    if (a.subjects?.name && !classMap[a.class_id].subjectIds.has(a.subject_id)) {
+      classMap[a.class_id].subjects.push({ name: a.subjects.name, code: a.subjects.code || '' });
+      classMap[a.class_id].subjectIds.add(a.subject_id);
+    }
+  });
+
+  const myClasses = Object.values(classMap);
+
+  // Attendance today
+  const today = new Date().toISOString().split('T')[0];
+  const takenToday = [];
+  for (const cls of myClasses) {
+    const { count } = await db.from('attendance').select('id', {count:'exact',head:true})
+      .eq('class_id', cls.id).eq('date', today);
+    if (count > 0) takenToday.push(cls.id);
+  }
+
+  body.innerHTML = `
+    <div class="page-header">
+      <h1>Good ${getGreeting()}, ${user.full_name.split(' ')[0]}! <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span></h1>
+      <p>${term ? term.name + ' Term' : 'No current term set'} · ${new Date().toLocaleDateString('en-NG',{weekday:'long',day:'numeric',month:'long'})}</p>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>️</div>
+        <div class="stat-card__value" style="color:var(--primary)">${myClasses.length}</div>
+        <div class="stat-card__label">My Classes</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span></div>
+        <div class="stat-card__value" style="color:var(--info)">${new Set((allAssignments||[]).map(a=>a.subject_id)).size}</div>
+        <div class="stat-card__label">Subjects</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span></div>
+        <div class="stat-card__value" style="color:var(--success)">${takenToday.length}/${myClasses.length}</div>
+        <div class="stat-card__label">Attendance Today</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card__header">
+        <span class="card__title">My Classes & Subjects</span>
+        <span style="font-size:12px;color:var(--ink-3);">${term ? term.name + ' Term' : 'All terms'}</span>
+      </div>
+      ${myClasses.length ? `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;">
+          ${myClasses.map(cls => `
+            <div style="border:1.5px solid ${takenToday.includes(cls.id)?'var(--success)':'var(--border)'};border-radius:var(--radius);padding:16px;background:var(--surface);position:relative;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <div>
+                  <div style="font-size:16px;font-weight:800;color:var(--ink);">${cls.name}</div>
+                  ${cls.level ? `<div style="font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;">${cls.level}</div>` : ''}
+                  ${cls.isFormTeacher ? `<div style="font-size:11px;color:var(--primary);font-weight:700;margin-top:2px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span> Form Teacher</div>` : ''}
+                </div>
+                <div style="background:var(--primary);color:white;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;">${cls.subjects.length} subj.</div>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px;">
+                ${cls.subjects.map(s=>`<span style="background:var(--primary-light);color:var(--primary);border:1px solid var(--primary);border-radius:100px;padding:2px 8px;font-size:11px;font-weight:700;">${s.code||s.name.substring(0,4)}</span>`).join('')}
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <a href="attendance.html?class=${cls.id}" class="btn btn--secondary btn--sm"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> Attendance</a>
+                <a href="score-entry.html?class=${cls.id}" class="btn btn--secondary btn--sm"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Scores</a>
+                <a href="students.html?class=${cls.id}" class="btn btn--ghost btn--sm"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Students</a>
+              </div>
+              ${takenToday.includes(cls.id) 
+                ? '<div style="font-size:11px;color:var(--success);margin-top:10px;font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Attendance taken today</div>' 
+                : '<div style="font-size:11px;color:var(--warning);margin-top:10px;font-weight:600;">⏳ Attendance pending</div>'}
+            </div>
+          `).join('')}
+        </div>
+      ` : `<div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>️</div><p>No classes assigned yet.<br><small>Admin can assign you via:<br>• <strong>Classes page → Edit → Form Teacher</strong><br>• <strong>Staff page → Assign Subjects</strong></small></p></div>`}
+    </div>
+
+    <div class="card">
+      <div class="card__header"><span class="card__title">Quick Actions</span></div>
+      <div class="btn-group">
+        <a href="attendance.html" class="btn btn--primary"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> Take Attendance</a>
+        <a href="score-entry.html" class="btn btn--secondary"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Enter Scores</a>
+        <a href="students.html" class="btn btn--secondary"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span> View Students</a>
+        <a href="timetable.html" class="btn btn--secondary"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>️ My Timetable</a>
+      </div>
+    </div>
+  `;
+})();
+function getGreeting() {
+  const h = new Date().getHours();
+  return h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+}
+</script>
+<script src="../../js/pwa.js"></script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

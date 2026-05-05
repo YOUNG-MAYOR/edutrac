@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Billing & Plans</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    :root { --primary: #6d28d9; --primary-light: #ede9fe; --primary-dark: #5b21b6; }
+    .plan-card { border:2px solid var(--border);border-radius:var(--radius);padding:24px;position:relative;transition:border-color .2s; }
+    .plan-card.active-plan { border-color:#6d28d9;background:#faf8ff; }
+    .plan-card__badge { position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#6d28d9;color:white;padding:2px 14px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap; }
+    .plan-price { font-size:32px;font-weight:800;color:#6d28d9;margin:12px 0 4px; }
+    .plan-price small { font-size:14px;font-weight:400;color:var(--ink-3); }
+    .plan-feature { display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 0;color:var(--ink-2); }
+    .plan-feature::before { content:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>';color:#10b981;font-weight:700; }
+    .revenue-section { background:linear-gradient(135deg,#6d28d9,#4f46e5);color:white;border-radius:var(--radius);padding:28px;margin-bottom:24px; }
+    .rev-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:20px; }
+    .rev-item { text-align:center; }
+    .rev-item__val { font-size:28px;font-weight:800;line-height:1; }
+    .rev-item__lbl { font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.5px;margin-top:4px; }
+    .payment-row { display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-size:14px; }
+    .payment-row:last-child { border-bottom:none; }
+    .pay-school { font-weight:600;color:var(--ink); }
+    .pay-amount { font-weight:700;color:#10b981; }
+    .pay-plan { padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;text-transform:uppercase; }
+    .pay-plan.free  { background:#f1f5f9;color:#64748b; }
+    .pay-plan.basic { background:#dbeafe;color:#1d4ed8; }
+    .pay-plan.pro   { background:#ede9fe;color:#6d28d9; }
+    .month-tab { display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid var(--border);overflow-x:auto; }
+    .month-tab-btn { padding:8px 16px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap; }
+    .month-tab-btn.active { color:#6d28d9;border-bottom-color:#6d28d9;font-weight:700; }
+    .chart-bar { display:flex;flex-direction:column;align-items:center;gap:4px; }
+    .chart-bar__fill { width:32px;border-radius:4px 4px 0 0;background:linear-gradient(180deg,#818cf8,#6d28d9);min-height:4px;transition:height .3s; }
+    .chart-bar__label { font-size:10px;color:var(--ink-3); }
+    .chart-bar__val { font-size:10px;font-weight:700;color:#6d28d9; }
+    .bars-chart { display:flex;align-items:flex-end;gap:8px;height:140px;padding:0 4px; }
+    .bars-chart-wrap { overflow-x:auto;margin-bottom:8px; }
+    .mrr-label { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3);margin-bottom:4px; }
+    .btn--purple { background:#6d28d9;color:white;border:none; }
+    .btn--purple:hover { background:#5b21b6; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+const PLAN_PRICES = { free: 0, basic: 45000, pro: 85000 };
+const PLAN_NAMES  = { free: 'Free', basic: 'Basic', pro: 'Pro' };
+
+(async () => {
+  const user = await initSaasLayout('billing', 'Billing & Plans');
+  if (!user) return;
+  const body = document.getElementById('pageBody');
+
+  body.innerHTML = `
+    <div class="page-header">
+      <h1>Billing & Plans</h1>
+      <p style="color:var(--ink-3)">Platform revenue, plan pricing, and subscription overview</p>
+    </div>
+
+    <div class="revenue-section" id="revenueSection">
+      <div style="font-size:14px;opacity:.8;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Platform Revenue</div>
+      <div class="rev-grid" id="revGrid">
+        ${[1,2,3].map(()=>`<div class="rev-item"><div class="et-spinner" style="margin:auto;border-top-color:white"></div></div>`).join('')}
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:24px;" id="mainGrid">
+      <div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="card__header"><span class="card__title">Monthly Revenue Trend</span></div>
+          <div class="bars-chart-wrap">
+            <div class="bars-chart" id="revenueChart"><div class="et-spinner" style="margin:auto"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card__header"><span class="card__title">School Subscriptions</span></div>
+          <div id="schoolPayments"><div class="et-loader"><div class="et-spinner"></div></div></div>
+        </div>
+      </div>
+      <div class="card" style="align-self:start">
+        <div class="card__header"><span class="card__title">Plan Distribution</span></div>
+        <div id="planDist"><div class="et-loader"><div class="et-spinner"></div></div></div>
+      </div>
+    </div>
+
+    <h2 style="margin-bottom:16px">Plan Pricing</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px" id="planGrid">
+      ${renderPlanCards()}
+    </div>
+  `;
+
+  if (window.innerWidth < 768) document.getElementById('mainGrid').style.gridTemplateColumns = '1fr';
+
+  // Fetch data
+  const [schoolsRes, paymentsRes] = await Promise.all([
+    db.from('schools').select('id, name, plan, is_active, created_at').order('name'),
+    db.from('payments').select('amount_paid, created_at, school_id, schools(name)').order('created_at', { ascending: false }),
+  ]);
+
+  const schools  = schoolsRes.data  || [];
+  const payments = paymentsRes.data || [];
+
+  // Revenue totals
+  const now     = new Date();
+  const thisMonth = now.getMonth();
+  const thisYear  = now.getFullYear();
+
+  // MRR = sum of plan prices for active schools
+  const mrr = schools.filter(s => s.is_active).reduce((sum, s) => sum + PLAN_PRICES[s.plan], 0);
+  const revenueThisMonth = payments
+    .filter(p => { const d = new Date(p.created_at); return d.getMonth()===thisMonth && d.getFullYear()===thisYear; })
+    .reduce((s,p) => s + Number(p.amount_paid), 0);
+  const totalRevenue = payments.reduce((s, p) => s + Number(p.amount_paid), 0);
+
+  document.getElementById('revGrid').innerHTML = `
+    <div class="rev-item"><div class="rev-item__val">${formatMoney(mrr)}</div><div class="rev-item__lbl">Est. MRR</div></div>
+    <div class="rev-item"><div class="rev-item__val">${formatMoney(revenueThisMonth)}</div><div class="rev-item__lbl">This Month</div></div>
+    <div class="rev-item"><div class="rev-item__val">${formatMoney(totalRevenue)}</div><div class="rev-item__lbl">All Time</div></div>
+  `;
+
+  // Monthly revenue chart (last 6 months)
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(thisYear, thisMonth - i, 1);
+    months.push({ month: d.getMonth(), year: d.getFullYear(), label: d.toLocaleDateString('en-NG', { month:'short' }) });
+  }
+  const monthlyRevenue = months.map(m => {
+    const rev = payments
+      .filter(p => { const d = new Date(p.created_at); return d.getMonth()===m.month && d.getFullYear()===m.year; })
+      .reduce((s,p) => s + Number(p.amount_paid), 0);
+    return { ...m, rev };
+  });
+  const maxRev = Math.max(...monthlyRevenue.map(m => m.rev), 1);
+
+  document.getElementById('revenueChart').innerHTML = monthlyRevenue.map(m => `
+    <div class="chart-bar" style="flex:1">
+      <div class="chart-bar__val">${m.rev > 0 ? (m.rev/1000).toFixed(0)+'k' : ''}</div>
+      <div class="chart-bar__fill" style="height:${Math.max(4, Math.round(m.rev/maxRev*120))}px"></div>
+      <div class="chart-bar__label">${m.label}</div>
+    </div>
+  `).join('');
+
+  // Plan distribution
+  const planCounts = { free: 0, basic: 0, pro: 0 };
+  schools.forEach(s => planCounts[s.plan]++);
+  const total = schools.length || 1;
+  const planColors = { free: '#94a3b8', basic: '#3b82f6', pro: '#6d28d9' };
+
+  document.getElementById('planDist').innerHTML = `
+    <div style="margin-bottom:16px">
+      ${Object.entries(planCounts).map(([plan, count]) => {
+        const pct = Math.round(count/total*100);
+        return `
+          <div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:13px;font-weight:600;text-transform:capitalize">${plan}</span>
+              <span style="font-size:13px;color:var(--ink-3)">${count} (${pct}%)</span>
+            </div>
+            <div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden">
+              <div style="height:8px;width:${pct}%;background:${planColors[plan]};border-radius:4px"></div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:16px">
+      <div class="mrr-label">Est. MRR Breakdown</div>
+      ${Object.entries(planCounts).map(([plan, count]) => `
+        <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px">
+          <span style="text-transform:capitalize;color:var(--ink-3)">${plan} × ${count}</span>
+          <span style="font-weight:700">${formatMoney(PLAN_PRICES[plan] * count)}</span>
+        </div>
+      `).join('')}
+      <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:14px;font-weight:800;border-top:1px solid var(--border);margin-top:8px">
+        <span>Total MRR</span><span style="color:#6d28d9">${formatMoney(mrr)}</span>
+      </div>
+    </div>
+  `;
+
+  // School subscription list
+  document.getElementById('schoolPayments').innerHTML = schools.length ? `
+    ${schools.slice(0, 30).map(s => {
+      const monthlyBill = PLAN_PRICES[s.plan];
+      return `
+        <div class="payment-row">
+          <div>
+            <div class="pay-school">${s.name}</div>
+            <div style="font-size:11px;color:var(--ink-3)">${s.is_active ? 'Active' : 'Suspended'} · Joined ${formatDate(s.created_at)}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="pay-plan ${s.plan}">${s.plan}</span>
+            <span class="pay-amount">${formatMoney(monthlyBill)}/mo</span>
+            <button class="btn btn--ghost btn--sm" onclick="quickChangePlan('${s.id}','${s.name}','${s.plan}')">Edit</button>
+          </div>
+        </div>
+      `;
+    }).join('')}
+    ${schools.length > 30 ? `<div style="text-align:center;padding:12px;color:var(--ink-3);font-size:13px">+ ${schools.length-30} more — <a href="schools.html" style="color:#6d28d9">View All Schools</a></div>` : ''}
+  ` : `<div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span></div><p>No schools yet</p></div>`;
+
+})();
+
+function renderPlanCards() {
+  const plans = [
+    { key: 'free',  name: 'Free',  price: 0,     features: ['Up to 50 students','1 admin user','Basic attendance','Results management'] },
+    { key: 'basic', name: 'Basic', price: 45000, features: ['Up to 300 students','3 admin users','All Free features','Fee management','Parent portal','SMS alerts (50/mo)'] },
+    { key: 'pro',   name: 'Pro',   price: 85000, features: ['Unlimited students','Unlimited admins','All Basic features','WhatsApp integration','Paystack payments','Priority support','White-label branding'], badge: 'Most Popular' },
+  ];
+  return plans.map(p => `
+    <div class="plan-card ${p.key === 'pro' ? 'active-plan' : ''}">
+      ${p.badge ? `<div class="plan-card__badge">${p.badge}</div>` : ''}
+      <div style="font-size:16px;font-weight:700">${p.name}</div>
+      <div class="plan-price">
+        ${p.price === 0 ? 'Free' : formatMoney(p.price)}
+        ${p.price > 0 ? '<small>/month</small>' : ''}
+      </div>
+      <div style="height:1px;background:var(--border);margin:12px 0"></div>
+      ${p.features.map(f => `<div class="plan-feature">${f}</div>`).join('')}
+    </div>
+  `).join('');
+}
+
+async function quickChangePlan(schoolId, schoolName, currentPlan) {
+  const newPlan = prompt(`Change plan for "${schoolName}"\nCurrent: ${currentPlan}\n\nEnter new plan (free / basic / pro):`);
+  if (!newPlan || !['free','basic','pro'].includes(newPlan.toLowerCase())) {
+    if (newPlan !== null) toast('Invalid plan. Use: free, basic, or pro', 'error');
+    return;
+  }
+  const plan = newPlan.toLowerCase();
+  if (plan === currentPlan) { toast('No change made'); return; }
+
+  const { error } = await db.from('schools').update({ plan }).eq('id', schoolId);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+
+  await db.from('saas_audit_log').insert({
+    action: 'plan_changed', target_id: schoolId, target_type: 'school',
+    meta: { name: schoolName, old_plan: currentPlan, new_plan: plan }
+  });
+  toast(`Plan updated to ${plan}`);
+  setTimeout(() => location.reload(), 1000);
+}
+</script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

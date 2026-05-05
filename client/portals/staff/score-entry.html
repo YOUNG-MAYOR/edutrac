@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Score Entry</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    /* ── Offline banner ───────────────────────────────────── */
+    .offline-banner {
+      background: var(--warning); color: #fff; text-align: center;
+      padding: 9px 16px; font-size: 13px; font-weight: 600;
+      display: none; position: sticky; top: var(--header-h); z-index: 40;
+      letter-spacing: .2px;
+    }
+    .offline-banner.show { display: block; }
+
+    /* ── Section selector (Step 1) ───────────────────────── */
+    .section-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 8px;
+    }
+    .section-card {
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      background: var(--surface);
+    }
+    .section-card:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+    .section-card.active {
+      border-color: var(--primary);
+      background: var(--primary-light);
+      box-shadow: 0 0 0 3px #0a6e3f22;
+    }
+    .section-card__icon { font-size: 32px; margin-bottom: 8px; }
+    .section-card__name { font-size: 14px; font-weight: 700; color: var(--ink); }
+    .section-card__count { font-size: 12px; color: var(--ink-3); margin-top: 3px; }
+
+    /* ── Stepper ──────────────────────────────────────────── */
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 20px;
+      flex: 1;
+      border-right: 1px solid var(--border);
+      position: relative;
+      transition: background .15s;
+    }
+    .step-item:last-child { border-right: none; }
+    .step-item.done   { background: var(--primary-light); }
+    .step-item.active { background: var(--ink); }
+    .step-item.active .step-num  { background: var(--primary); color: #fff; }
+    .step-item.active .step-label { color: #fff; }
+    .step-item.active .step-val   { color: #9ca3af; }
+    .step-item.done .step-num    { background: var(--primary); color: #fff; }
+    .step-num {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--surface-3); color: var(--ink-3);
+      font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-text { min-width: 0; }
+    .step-label { font-size: 11px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .5px; }
+    .step-val   { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+    .step-item.active .step-label,
+    .step-item.done .step-label { color: var(--primary-dark); }
+    .step-item.done .step-label { color: var(--primary); }
+
+    /* ── Score table ──────────────────────────────────────── */
+    .score-input {
+      width: 80px; text-align: center;
+      border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      padding: 7px 8px; font-size: 14px; font-weight: 600;
+      transition: var(--transition); outline: none;
+    }
+    .score-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px #0a6e3f18; background: var(--primary-light); }
+    .score-input.has-value { border-color: var(--success); background: var(--success-light); }
+    .score-input.offline-pending { border-color: var(--warning); background: var(--warning-light); }
+    .score-row:focus-within { background: #f0fdf4 !important; }
+
+    .unsaved-dot {
+      display: inline-block; width: 7px; height: 7px;
+      background: var(--warning); border-radius: 50%; margin-left: 5px;
+      vertical-align: middle;
+    }
+
+    /* Grade chip */
+    .grade-chip {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 100px; font-size: 12px; font-weight: 700;
+      background: var(--surface-3); color: var(--ink-2);
+    }
+    .grade-chip.A1 { background: #dcfce7; color: #16a34a; }
+    .grade-chip.B2, .grade-chip.B3 { background: #dbeafe; color: #1d4ed8; }
+    .grade-chip.C4, .grade-chip.C5, .grade-chip.C6 { background: #fef9c3; color: #854d0e; }
+    .grade-chip.D7, .grade-chip.E8 { background: #fed7aa; color: #9a3412; }
+    .grade-chip.F9 { background: #fee2e2; color: #991b1b; }
+
+    /* Save all button sticky */
+    .save-bar {
+      position: sticky; bottom: 0;
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap;
+      box-shadow: 0 -4px 16px rgba(0,0,0,.07);
+      z-index: 30;
+    }
+    .save-bar__info { font-size: 13px; color: var(--ink-3); }
+    .save-bar__info strong { color: var(--ink); }
+
+    /* Summary row */
+    .summary-bar {
+      display: flex; gap: 20px; flex-wrap: wrap;
+      padding: 12px 20px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .summary-bar span { color: var(--ink-3); }
+    .summary-bar strong { color: var(--ink); margin-left: 4px; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<div class="offline-banner" id="offlineBanner">
+  <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Offline Mode — Scores are saved locally and will sync automatically when you reconnect
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────
+let user, term, allTerms = [], grading = [], exams = [];
+let allMyAssignments = [];           // all class_subjects for this teacher
+let selectedSection  = '';           // e.g. 'SENIOR'
+let selectedClassId  = '';
+let selectedClassObj = null;
+let selectedSubjectId= '';
+let selectedSubjectName = '';
+let selectedExamId   = '';
+let selectedExamMax  = 100;
+let students         = [];
+let scores           = {};           // { studentId: score }
+let pendingSync      = {};           // { key: { studentId: score } }
+let isOnline         = navigator.onLine;
+
+// School sections — maps level keyword to display name + icon
+const SECTIONS = [
+  { key: 'NURSERY', label: 'Nursery Section',  icon: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg></span>', keywords: ['nursery','creche','kindergarten','playgroup'] },
+  { key: 'PRIMARY', label: 'Primary Section',  icon: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>', keywords: ['primary','basic','grade','std','standard'] },
+  { key: 'JUNIOR',  label: 'Junior Section',   icon: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>', keywords: ['junior','jss','jhs','middle'] },
+  { key: 'SENIOR',  label: 'Senior Section',   icon: '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>', keywords: ['senior','sss','shs','upper'] },
+];
+
+function classSection(cls) {
+  const lvl = (cls.level || cls.name || '').toLowerCase();
+  for (const s of SECTIONS) {
+    if (s.keywords.some(k => lvl.includes(k))) return s.key;
+  }
+  // Fallback: guess from class name prefix
+  if (/^jss/i.test(cls.name))  return 'JUNIOR';
+  if (/^ss[s]?\s*[123]/i.test(cls.name)) return 'SENIOR';
+  if (/^pry|^pri|^p[1-6]$/i.test(cls.name)) return 'PRIMARY';
+  if (/^nurs|^nur|^kg|^kd/i.test(cls.name)) return 'NURSERY';
+  return 'JUNIOR'; // safe default
+}
+
+// ── Offline detection ──────────────────────────────────────────
+window.addEventListener('online',  () => { isOnline = true;  updateOfflineBanner(); syncPending(); });
+window.addEventListener('offline', () => { isOnline = false; updateOfflineBanner(); });
+function updateOfflineBanner() {
+  document.getElementById('offlineBanner')?.classList.toggle('show', !isOnline);
+}
+
+// ── Init ───────────────────────────────────────────────────────
+(async () => {
+  user = await initPage(['teacher','admin','exam_officer'], 'Score Entry', 'score-entry');
+  if (!user) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <span id="syncStatus" style="font-size:12px;color:var(--ink-3);"></span>
+    <button class="btn btn--secondary btn--sm" id="syncBtn" onclick="syncPending()" style="display:none;">⬆ Sync Offline Scores</button>
+  `;
+
+  const ctx = await loadSchoolContext(user.school_id);
+  term    = ctx.term;
+  grading = ctx.grading;
+
+  // Load ALL terms so teacher can switch
+  const { data: termsData } = await db.from('terms')
+    .select('id,name,is_current').eq('school_id', user.school_id)
+    .order('created_at', { ascending: false });
+  allTerms = termsData || [];
+
+  // Load exams for current term
+  if (term) {
+    const { data: exm } = await db.from('exams')
+      .select('*').eq('school_id', user.school_id)
+      .eq('term_id', term.id).order('name');
+    exams = exm || [];
+  }
+
+  // Load all class_subjects assigned to this teacher
+  const { data: assignments } = await db.from('class_subjects')
+    .select('class_id, subject_id, term_id, classes(id,name,level,combination_id), subjects(id,name,code)')
+    .eq('teacher_id', user.id)
+    .eq('school_id', user.school_id);
+
+  // Also load classes where this teacher is the form teacher
+  const { data: formClasses } = await db.from('classes')
+    .select('id,name,level,combination_id')
+    .eq('teacher_id', user.id)
+    .eq('school_id', user.school_id);
+
+  // Merge
+  const classMap = {};
+  (assignments || []).forEach(a => {
+    if (!a.classes) return;
+    const cid = a.class_id;
+    if (!classMap[cid]) classMap[cid] = { ...a.classes, subjects: [] };
+    if (a.subjects) classMap[cid].subjects.push(a.subjects);
+  });
+  (formClasses || []).forEach(c => {
+    if (!classMap[c.id]) classMap[c.id] = { ...c, subjects: [] };
+  });
+  allMyAssignments = Object.values(classMap);
+
+  // If admin, load ALL classes with their subjects
+  if (user.role === 'admin' || user.role === 'exam_officer') {
+    const { data: allClasses } = await db.from('classes')
+      .select('id,name,level,combination_id')
+      .eq('school_id', user.school_id).order('name');
+    // Only filter by term if one is active; otherwise load all term's subjects
+    let allCSQuery = db.from('class_subjects')
+      .select('class_id,subject_id,subjects(id,name,code)')
+      .eq('school_id', user.school_id);
+    if (term?.id) allCSQuery = allCSQuery.eq('term_id', term.id);
+    const { data: allCS } = await allCSQuery;
+    const csMap = {};
+    (allCS || []).forEach(cs => {
+      if (!csMap[cs.class_id]) csMap[cs.class_id] = [];
+      if (cs.subjects) csMap[cs.class_id].push(cs.subjects);
+    });
+    allMyAssignments = (allClasses || []).map(c => ({ ...c, subjects: csMap[c.id] || [] }));
+  }
+
+  loadOfflineScores();
+  updateOfflineBanner();
+  renderPage();
+})();
+
+// ── Term switcher ─────────────────────────────────────────────
+async function switchTerm(termId) {
+  const selectedTerm = allTerms.find(t => t.id === termId);
+  if (!selectedTerm) return;
+  term = selectedTerm;
+
+  // Reset selections when term changes
+  selectedSection   = '';
+  selectedClassId   = '';
+  selectedClassObj  = null;
+  selectedSubjectId = '';
+  selectedSubjectName = '';
+  selectedExamId    = '';
+  students          = [];
+  scores            = {};
+
+  // Reload exams for the newly selected term
+  const { data: exm } = await db.from('exams')
+    .select('*').eq('school_id', user.school_id)
+    .eq('term_id', term.id).order('name');
+  exams = exm || [];
+
+  // Reload class_subjects for the new term (admin/exam_officer)
+  if (user.role === 'admin' || user.role === 'exam_officer') {
+    const { data: allClasses } = await db.from('classes')
+      .select('id,name,level,combination_id')
+      .eq('school_id', user.school_id).order('name');
+    const { data: allCS } = await db.from('class_subjects')
+      .select('class_id,subject_id,subjects(id,name,code)')
+      .eq('school_id', user.school_id)
+      .eq('term_id', term.id); // switchTerm always has a valid term
+    const csMap = {};
+    (allCS || []).forEach(cs => {
+      if (!csMap[cs.class_id]) csMap[cs.class_id] = [];
+      if (cs.subjects) csMap[cs.class_id].push(cs.subjects);
+    });
+    allMyAssignments = (allClasses || []).map(c => ({ ...c, subjects: csMap[c.id] || [] }));
+  } else {
+    // Reload teacher assignments for new term
+    const { data: assignments } = await db.from('class_subjects')
+      .select('class_id, subject_id, term_id, classes(id,name,level,combination_id), subjects(id,name,code)')
+      .eq('teacher_id', user.id).eq('school_id', user.school_id)
+      .eq('term_id', term.id);
+    const classMap = {};
+    (assignments || []).forEach(a => {
+      if (!a.classes) return;
+      if (!classMap[a.class_id]) classMap[a.class_id] = { ...a.classes, subjects: [] };
+      if (a.subjects) classMap[a.class_id].subjects.push(a.subjects);
+    });
+    allMyAssignments = Object.values(classMap);
+  }
+
+  renderPage();
+  toast('Switched to ' + term.name, 'success');
+}
+
+// ── RENDER: Main page shell ────────────────────────────────────
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <div style="flex:1;">
+        <h1 class="page-title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Score Entry</h1>
+        <p class="page-subtitle">${term?.name || '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ No current term set'} · Follow the steps below to enter scores</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+        <label style="font-size:13px;font-weight:600;color:var(--ink-3);">Term:</label>
+        <select class="form-control" id="termSwitcher" style="max-width:200px;font-weight:600;"
+          onchange="switchTerm(this.value)">
+          ${allTerms.map(t => `<option value="${t.id}" ${t.id===term?.id?'selected':''}>${t.name}${t.is_current?' (Current)':''}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    ${renderStepper()}
+
+    <div id="step1" class="step-panel">
+      ${renderSectionStep()}
+    </div>
+    <div id="step2" class="step-panel" style="display:none;">
+      ${renderClassStep()}
+    </div>
+    <div id="step3" class="step-panel" style="display:none;">
+      ${renderSubjectExamStep()}
+    </div>
+    <div id="scoreContainer" style="display:none;"></div>
+  `;
+}
+
+// ── Stepper HTML ───────────────────────────────────────────────
+function renderStepper() {
+  const step = selectedExamId ? 4 : selectedSubjectId ? 3 : selectedClassId ? 2 : 1;
+  const sectionObj = SECTIONS.find(s => s.key === selectedSection);
+
+  const makeStep = (n, label, val) => {
+    const cls = n < step ? 'done' : n === step ? 'active' : '';
+    const num = n < step ? '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : n;
+    return `
+      <div class="step-item ${cls}" onclick="${n < step ? `goBackTo(${n})` : ''}" style="${n < step ? 'cursor:pointer' : ''}">
+        <div class="step-num">${num}</div>
+        <div class="step-text">
+          <div class="step-label">${label}</div>
+          <div class="step-val">${val || 'Not selected'}</div>
+        </div>
+      </div>`;
+  };
+
+  return `
+    <div class="stepper" style="margin-bottom:24px;">
+      ${makeStep(1, 'Section', sectionObj?.label || '')}
+      ${makeStep(2, 'Class',   selectedClassObj?.name || '')}
+      ${makeStep(3, 'Subject & Assessment', selectedSubjectId ? (selectedSubjectName + (selectedExamId ? ' · ' + exams.find(e=>e.id===selectedExamId)?.name : '')) : '')}
+    </div>`;
+}
+
+// ── Step 1: Section selection ──────────────────────────────────
+function renderSectionStep() {
+  // Count classes per section
+  const sectionCounts = {};
+  allMyAssignments.forEach(cls => {
+    const s = classSection(cls);
+    sectionCounts[s] = (sectionCounts[s] || 0) + 1;
+  });
+
+  const activeSections = SECTIONS.filter(s => (sectionCounts[s.key] || 0) > 0);
+  if (activeSections.length === 0) {
+    return `<div class="card"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span></div><p>No classes are assigned to you for this term.<br>Contact the admin to assign subjects.</p></div></div>`;
+  }
+
+  return `
+    <div class="card">
+      <div class="card__header">
+        <div>
+          <div class="card__title">Select Section</div>
+          <div class="card__subtitle">Choose the school section to enter scores for</div>
+        </div>
+      </div>
+      <div class="section-grid">
+        ${activeSections.map(s => `
+          <div class="section-card ${selectedSection === s.key ? 'active' : ''}"
+               onclick="selectSection('${s.key}')">
+            <div class="section-card__icon">${s.icon}</div>
+            <div class="section-card__name">${s.label}</div>
+            <div class="section-card__count">${sectionCounts[s.key] || 0} class${(sectionCounts[s.key]||0)!==1?'es':''}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+// ── Step 2: Class selection ────────────────────────────────────
+function renderClassStep() {
+  const classes = allMyAssignments.filter(c => classSection(c) === selectedSection);
+
+  return `
+    <div class="card">
+      <div class="card__header">
+        <div>
+          <div class="card__title">Select Class</div>
+          <div class="card__subtitle">${SECTIONS.find(s=>s.key===selectedSection)?.label} — ${classes.length} class${classes.length!==1?'es':''} available</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-top:4px;">
+        ${classes.map(c => {
+          const subCount = c.subjects?.length || 0;
+          return `
+            <div class="section-card ${selectedClassId === c.id ? 'active' : ''}"
+                 onclick="selectClass('${c.id}')">
+              <div class="section-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>️</div>
+              <div class="section-card__name">${c.name}</div>
+              <div class="section-card__count">${subCount} subject${subCount!==1?'s':''}</div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+// ── Step 3: Subject + Assessment ──────────────────────────────
+function renderSubjectExamStep() {
+  const cls     = allMyAssignments.find(c => c.id === selectedClassId);
+  const subjects = cls?.subjects || [];
+
+  return `
+    <div class="card">
+      <div class="card__header">
+        <div>
+          <div class="card__title">Select Subject &amp; Assessment</div>
+          <div class="card__subtitle">Class: <strong>${cls?.name || ''}</strong></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px;">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Subject</label>
+          <select class="form-control" id="subjectSel" onchange="onSubjectChange()">
+            <option value="">— Choose Subject —</option>
+            ${subjects.map(s => `<option value="${s.id}" data-name="${s.name}">${s.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Assessment</label>
+          <select class="form-control" id="examSel" disabled onchange="onExamChange()">
+            <option value="">— Choose Assessment —</option>
+            ${exams.map(e => `<option value="${e.id}" data-max="${e.max_score}">${e.name} (/ ${e.max_score})</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div id="loadScoresBtn" style="display:none;margin-top:16px;">
+        <button class="btn btn--primary" onclick="loadScores()">
+          Load Students &amp; Scores →
+        </button>
+      </div>
+    </div>`;
+}
+
+// ── Navigation / Selection handlers ───────────────────────────
+function selectSection(key) {
+  selectedSection   = key;
+  selectedClassId   = '';
+  selectedClassObj  = null;
+  selectedSubjectId = '';
+  selectedExamId    = '';
+  students = []; scores = {};
+  renderPage();
+  document.getElementById('step1').style.display = 'none';
+  document.getElementById('step2').style.display = 'block';
+  document.getElementById('scoreContainer').style.display = 'none';
+}
+
+function selectClass(classId) {
+  selectedClassId  = classId;
+  selectedClassObj = allMyAssignments.find(c => c.id === classId);
+  selectedSubjectId = '';
+  selectedExamId    = '';
+  students = []; scores = {};
+  renderPage();
+  document.getElementById('step1').style.display = 'none';
+  document.getElementById('step2').style.display = 'none';
+  document.getElementById('step3').style.display = 'block';
+  document.getElementById('scoreContainer').style.display = 'none';
+}
+
+function onSubjectChange() {
+  const sel = document.getElementById('subjectSel');
+  selectedSubjectId   = sel.value;
+  selectedSubjectName = sel.options[sel.selectedIndex]?.dataset.name || '';
+  document.getElementById('examSel').disabled = !selectedSubjectId;
+  toggleLoadBtn();
+  updateStepper();
+}
+
+function onExamChange() {
+  const sel = document.getElementById('examSel');
+  selectedExamId  = sel.value;
+  selectedExamMax = parseFloat(sel.options[sel.selectedIndex]?.dataset.max || 100);
+  toggleLoadBtn();
+  updateStepper();
+}
+
+function toggleLoadBtn() {
+  const btn = document.getElementById('loadScoresBtn');
+  if (btn) btn.style.display = (selectedSubjectId && selectedExamId) ? 'block' : 'none';
+}
+
+function updateStepper() {
+  const stepperEl = document.querySelector('.stepper');
+  if (stepperEl) stepperEl.outerHTML = renderStepper();
+}
+
+function goBackTo(step) {
+  if (step === 1) { selectedSection = ''; selectedClassId = ''; selectedClassObj = null; selectedSubjectId = ''; selectedExamId = ''; renderPage(); }
+  if (step === 2) { selectedClassId = ''; selectedClassObj = null; selectedSubjectId = ''; selectedExamId = ''; renderPage(); document.getElementById('step1').style.display='none'; document.getElementById('step2').style.display='block'; document.getElementById('step3').style.display='none'; document.getElementById('scoreContainer').style.display='none'; }
+  if (step === 3) { selectedSubjectId = ''; selectedExamId = ''; renderPage(); document.getElementById('step1').style.display='none'; document.getElementById('step2').style.display='none'; document.getElementById('step3').style.display='block'; document.getElementById('scoreContainer').style.display='none'; }
+}
+
+// ── Load students + existing scores ───────────────────────────
+async function loadScores() {
+  if (!term) { toast('No current term is set. Ask admin to set one.', 'error'); return; }
+  if (!selectedClassId || !selectedSubjectId || !selectedExamId) return;
+
+  const container = document.getElementById('scoreContainer');
+  container.style.display = 'block';
+  showLoader(container, 'Loading students…');
+
+  // Enrolled students in this class + term
+  students = await getEnrolledStudents(selectedClassId, term.id, user.school_id);
+  if (!students.length) {
+    showEmpty(container, 'No students are enrolled in this class for the current term.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>');
+    return;
+  }
+
+  // Existing scores from DB
+  scores = {};
+  if (isOnline) {
+    const { data: existing } = await db.from('results')
+      .select('student_id,score')
+      .eq('school_id', user.school_id)
+      .eq('subject_id', selectedSubjectId)
+      .eq('exam_id', selectedExamId)
+      .eq('term_id', term.id);
+    (existing || []).forEach(r => { scores[r.student_id] = r.score; });
+  }
+
+  // Merge offline pending
+  const offlineKey = `${selectedClassId}|${selectedSubjectId}|${selectedExamId}`;
+  Object.assign(scores, pendingSync[offlineKey] || {});
+
+  // Update stepper
+  const stepperEl = document.querySelector('.stepper');
+  if (stepperEl) stepperEl.outerHTML = renderStepper();
+
+  renderScoreTable();
+}
+
+// ── Score table ────────────────────────────────────────────────
+function renderScoreTable() {
+  const offlineKey = `${selectedClassId}|${selectedSubjectId}|${selectedExamId}`;
+  const pendingForKey = pendingSync[offlineKey] || {};
+  const hasPending = Object.keys(pendingForKey).length > 0;
+  const subjectName = allMyAssignments.find(c=>c.id===selectedClassId)?.subjects?.find(s=>s.id===selectedSubjectId)?.name || selectedSubjectName;
+  const examObj = exams.find(e => e.id === selectedExamId);
+
+  // Stats
+  const enteredCount = students.filter(s => scores[s.id] !== undefined && scores[s.id] !== '').length;
+  const avgScore = enteredCount
+    ? students.reduce((sum,s) => sum + (scores[s.id] !== undefined ? parseFloat(scores[s.id]) : 0), 0) / enteredCount
+    : null;
+
+  document.getElementById('scoreContainer').innerHTML = `
+    <div class="card" style="padding:0;overflow:hidden;">
+      <!-- Table header -->
+      <div style="background:var(--ink);color:white;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:16px;font-weight:700;">${subjectName}</div>
+          <div style="font-size:12px;color:#9ca3af;margin-top:2px;">${selectedClassObj?.name || ''} · ${examObj?.name || ''} (/ ${selectedExamMax}) · ${term?.name || ''}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          ${hasPending ? `<span style="background:#d97706;color:white;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> ${Object.keys(pendingForKey).length} offline</span>` : ''}
+          <button class="btn btn--primary btn--sm" onclick="saveAllScores()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save All</button>
+        </div>
+      </div>
+
+      <!-- Summary bar -->
+      <div class="summary-bar">
+        <div><span>Total Students:</span><strong>${students.length}</strong></div>
+        <div><span>Scores Entered:</span><strong>${enteredCount}</strong></div>
+        <div><span>Pending:</span><strong>${students.length - enteredCount}</strong></div>
+        ${avgScore !== null ? `<div><span>Class Average:</span><strong>${avgScore.toFixed(1)}</strong></div>` : ''}
+      </div>
+
+      <!-- Tip -->
+      <div style="padding:10px 20px;background:var(--info-light);font-size:12px;color:var(--info);border-bottom:1px solid var(--border);">
+        <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span> Use <kbd style="background:white;border:1px solid #ccc;border-radius:3px;padding:1px 5px;font-size:11px;">Tab</kbd> or <kbd style="background:white;border:1px solid #ccc;border-radius:3px;padding:1px 5px;font-size:11px;">Enter</kbd> to move between rows quickly.
+        ${!isOnline ? ' &nbsp;<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span> <strong>Offline:</strong> scores will auto-sync when you reconnect.' : ''}
+      </div>
+
+      <!-- Table -->
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px;">#</th>
+              <th>Student</th>
+              <th style="width:90px;color:var(--ink-3);font-size:12px;">Adm No</th>
+              <th style="text-align:center;width:120px;">Score <span style="font-weight:400;font-size:11px;">(/ ${selectedExamMax})</span></th>
+              <th style="text-align:center;width:70px;">%</th>
+              <th style="text-align:center;width:70px;">Grade</th>
+              <th style="text-align:center;width:70px;">Remark</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${students.map((s, i) => {
+              const sc = scores[s.id] !== undefined ? scores[s.id] : '';
+              const isPending = pendingForKey[s.id] !== undefined;
+              const pct = sc !== '' ? Math.round((parseFloat(sc) / selectedExamMax) * 100) : null;
+              const gObj = pct !== null ? gradeFromScale(parseFloat(sc), grading) : { grade: '—', remark: '—' };
+              const pctColor = pct === null ? '' : pct >= 70 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+              return `
+                <tr class="score-row" id="row_${s.id}" style="${i%2===1?'background:var(--surface-2)':''}">
+                  <td style="color:var(--ink-3);font-size:13px;text-align:center;">${i+1}</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <div class="avatar avatar--sm" style="flex-shrink:0;">${s.full_name.charAt(0)}</div>
+                      <div>
+                        <div style="font-weight:600;font-size:14px;">${s.full_name}${isPending ? '<span class="unsaved-dot" title="Offline — pending sync"></span>' : ''}</div>
+                        ${s.gender ? `<div style="font-size:11px;color:var(--ink-4);">${s.gender==='M'?'Male':'Female'}</div>` : ''}
+                      </div>
+                    </div>
+                  </td>
+                  <td style="color:var(--ink-3);font-size:12px;">${s.admission_no || '—'}</td>
+                  <td style="text-align:center;">
+                    <input
+                      type="number"
+                      class="score-input ${sc!==''?'has-value':''} ${isPending?'offline-pending':''}"
+                      id="sc_${s.id}"
+                      value="${sc}"
+                      min="0" max="${selectedExamMax}" step="0.5"
+                      oninput="updateRow('${s.id}')"
+                      onkeydown="if(event.key==='Enter'){event.preventDefault();focusNext(${i});}"
+                      tabindex="${i+1}"
+                      placeholder="—"
+                    >
+                  </td>
+                  <td style="text-align:center;" id="pct_${s.id}">
+                    ${pct !== null ? `<span style="font-weight:700;font-size:13px;color:${pctColor};">${pct}%</span>` : '<span style="color:var(--ink-4);">—</span>'}
+                  </td>
+                  <td style="text-align:center;" id="grade_${s.id}">
+                    <span class="grade-chip ${gObj.grade}">${gObj.grade}</span>
+                  </td>
+                  <td style="text-align:center;font-size:12px;color:var(--ink-3);" id="remark_${s.id}">
+                    ${gObj.remark !== '—' ? gObj.remark : '—'}
+                  </td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Save bar -->
+      <div class="save-bar">
+        <div class="save-bar__info">
+          <strong>${enteredCount}</strong> of <strong>${students.length}</strong> scores entered
+          ${hasPending ? ` · <span style="color:var(--warning);"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> ${Object.keys(pendingForKey).length} offline pending</span>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn--secondary btn--sm" onclick="clearAllScores()">Clear All</button>
+          <button class="btn btn--primary" onclick="saveAllScores()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save All Scores</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Focus first empty input
+  const firstEmpty = students.find(s => scores[s.id] === undefined || scores[s.id] === '');
+  if (firstEmpty) document.getElementById(`sc_${firstEmpty.id}`)?.focus();
+}
+
+// ── Live row update ────────────────────────────────────────────
+function updateRow(studentId) {
+  const input = document.getElementById(`sc_${studentId}`);
+  const val   = parseFloat(input?.value);
+
+  input?.classList.toggle('has-value', !isNaN(val));
+
+  if (isNaN(val)) {
+    document.getElementById(`pct_${studentId}`).innerHTML = '<span style="color:var(--ink-4);">—</span>';
+    document.getElementById(`grade_${studentId}`).innerHTML = '<span class="grade-chip">—</span>';
+    document.getElementById(`remark_${studentId}`).textContent = '—';
+    return;
+  }
+
+  const pct = Math.round((val / selectedExamMax) * 100);
+  const gObj = gradeFromScale(val, grading);
+  const pctColor = pct >= 70 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+
+  document.getElementById(`pct_${studentId}`).innerHTML =
+    `<span style="font-weight:700;font-size:13px;color:${pctColor};">${pct}%</span>`;
+  document.getElementById(`grade_${studentId}`).innerHTML =
+    `<span class="grade-chip ${gObj.grade}">${gObj.grade}</span>`;
+  document.getElementById(`remark_${studentId}`).textContent = gObj.remark || '—';
+}
+
+function focusNext(currentIndex) {
+  const next = document.querySelector(`input[tabindex="${currentIndex + 2}"]`);
+  if (next) next.focus();
+}
+
+function clearAllScores() {
+  if (!confirm('Clear all scores on screen? (This does not delete saved scores.)')) return;
+  students.forEach(s => {
+    const input = document.getElementById(`sc_${s.id}`);
+    if (input) { input.value = ''; input.classList.remove('has-value'); updateRow(s.id); }
+  });
+}
+
+// ── Save all scores ────────────────────────────────────────────
+async function saveAllScores() {
+  if (!term) { toast('No current term set.', 'error'); return; }
+
+  const rows = students.map(s => {
+    const val = document.getElementById(`sc_${s.id}`)?.value;
+    return (val !== '' && val !== undefined && !isNaN(parseFloat(val)))
+      ? {
+          school_id: user.school_id, student_id: s.id,
+          subject_id: selectedSubjectId, exam_id: selectedExamId,
+          term_id: term.id, class_id: selectedClassId,
+          score: parseFloat(val),
+          captured_offline: false,
+          entered_by: user.id,
+        }
+      : null;
+  }).filter(Boolean);
+
+  if (!rows.length) { toast('No scores to save.', 'error'); return; }
+
+  // ── Issue 7 Fix: Actively probe connectivity instead of trusting navigator.onLine ──
+  // navigator.onLine can be true even without real internet access.
+  // We do a lightweight probe via the Supabase REST health endpoint.
+  let reallyOnline = false;
+  try {
+    const probe = await Promise.race([
+      db.from('schools').select('id').eq('id', user.school_id).limit(1),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
+    ]);
+    reallyOnline = !probe.error;
+  } catch { reallyOnline = false; }
+
+  if (reallyOnline) {
+    const { error } = await db.from('results').upsert(rows, {
+      onConflict: 'student_id,subject_id,exam_id',
+      ignoreDuplicates: false
+    });
+    if (error) {
+      saveOfflineScores(rows);
+      toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ DB error — saved offline. Error: ' + error.message, 'error');
+    } else {
+      const key = `${selectedClassId}|${selectedSubjectId}|${selectedExamId}`;
+      delete pendingSync[key];
+      saveOfflineCacheToStorage();
+      toast(`<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${rows.length} scores saved successfully!`, 'success');
+      document.querySelectorAll('.unsaved-dot').forEach(d => d.remove());
+      document.querySelectorAll('.offline-pending').forEach(el => el.classList.remove('offline-pending'));
+
+      // ── Notify admin/exam_officer about submitted scores (admin-only, never broadcast to students) ──
+      try {
+        // Fetch admin & exam officer users for this school
+        const { data: adminUsers } = await db
+          .from('users')
+          .select('id')
+          .eq('school_id', user.school_id)
+          .eq('is_active', true)
+          .in('role', ['admin', 'exam_officer', 'vp_academic']);
+
+        if (adminUsers && adminUsers.length) {
+          // Build class/subject name labels if available
+          const classLabel  = selectedClassId  ? (document.getElementById('classSelect')?.selectedOptions[0]?.text  || 'a class')  : 'a class';
+          const subjectLabel= selectedSubjectId ? (document.getElementById('subjectSelect')?.selectedOptions[0]?.text || 'a subject') : 'a subject';
+          const notifTitle  = `\u{1F4CA} Scores Submitted: ${subjectLabel} \u2014 ${classLabel}`;
+          const notifBody   = `${user.full_name || 'A teacher'} submitted ${rows.length} score(s) for ${subjectLabel} (${classLabel}).`;
+
+          const notifRows = adminUsers.map(u => ({
+            school_id:   user.school_id,
+            user_id:     u.id,
+            student_id:  null,
+            title:       notifTitle,
+            body:        notifBody,
+            type:        'result',
+            sender_role: 'teacher',
+            sender_name: user.full_name || 'Teacher'
+          }));
+          await db.from('notifications').insert(notifRows);
+        }
+      } catch (e) { console.warn('Score notification skipped:', e); }
+    }
+  } else {
+    saveOfflineScores(rows);
+    isOnline = false;
+    updateOfflineBanner();
+    toast(`<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span> ${rows.length} scores saved offline — will sync on reconnect.`, 'info');
+  }
+}
+
+// ── Offline helpers ────────────────────────────────────────────
+function saveOfflineScores(rows) {
+  const key = `${selectedClassId}|${selectedSubjectId}|${selectedExamId}`;
+  if (!pendingSync[key]) pendingSync[key] = {};
+  rows.forEach(r => { pendingSync[key][r.student_id] = r.score; });
+  saveOfflineCacheToStorage();
+  const btn = document.getElementById('syncBtn');
+  if (btn) btn.style.display = 'inline-flex';
+}
+
+function saveOfflineCacheToStorage() {
+  try { localStorage.setItem('et_offline_scores_v2', JSON.stringify(pendingSync)); } catch {}
+}
+
+function loadOfflineScores() {
+  try {
+    const cached = localStorage.getItem('et_offline_scores_v2');
+    if (cached) pendingSync = JSON.parse(cached);
+    const count = Object.keys(pendingSync).length;
+    if (count > 0) {
+      const btn = document.getElementById('syncBtn');
+      if (btn) btn.style.display = 'inline-flex';
+      const status = document.getElementById('syncStatus');
+      if (status) status.textContent = `${count} offline batch${count!==1?'es':''} pending`;
+    }
+  } catch {}
+}
+
+async function syncPending() {
+  // Real connectivity probe
+  let reallyOnline = false;
+  try {
+    const probe = await Promise.race([
+      db.from('schools').select('id').eq('id', user.school_id).limit(1),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
+    ]);
+    reallyOnline = !probe.error;
+  } catch { reallyOnline = false; }
+
+  if (!reallyOnline) { toast('Still offline. Please check your connection.', 'error'); return; }
+  isOnline = true;
+  updateOfflineBanner();
+
+  const batches = Object.entries(pendingSync);
+  if (!batches.length) { toast('Nothing to sync.', 'info'); return; }
+
+  document.getElementById('syncStatus').textContent = 'Syncing…';
+  let synced = 0, failed = 0;
+
+  for (const [key, studentScores] of batches) {
+    const [classId, subjectId, examId] = key.split('|');
+    const rows = Object.entries(studentScores).map(([studentId, score]) => ({
+      school_id: user.school_id, student_id: studentId,
+      subject_id: subjectId, exam_id: examId,
+      term_id: term?.id, class_id: classId,
+      score: parseFloat(score), captured_offline: true,
+      entered_by: user.id,
+    }));
+    const { error } = await db.from('results').upsert(rows, {
+      onConflict: 'student_id,subject_id,exam_id', ignoreDuplicates: false
+    });
+    if (!error) { delete pendingSync[key]; synced += rows.length; }
+    else failed++;
+  }
+
+  saveOfflineCacheToStorage();
+  const remaining = Object.keys(pendingSync).length;
+  if (remaining === 0) {
+    document.getElementById('syncBtn').style.display = 'none';
+    document.getElementById('syncStatus').textContent = '';
+  } else {
+    document.getElementById('syncStatus').textContent = `${remaining} batch${remaining!==1?'es':''} still pending`;
+  }
+  toast(failed ? `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ ${synced} synced, ${failed} failed` : `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${synced} scores synced!`, failed ? 'error' : 'success');
+  if (selectedExamId) loadScores();
+}
+</script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

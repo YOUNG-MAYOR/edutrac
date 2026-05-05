@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Online Payments</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .paystack-banner{
+      background:linear-gradient(135deg,#0a6e3f,#065530);
+      border-radius:var(--radius-lg);padding:24px 28px;
+      display:flex;align-items:center;gap:20px;margin-bottom:24px;
+      color:white;
+    }
+    .ps-logo{font-size:32px;flex-shrink:0}
+    .ps-banner-text h3{font-size:16px;font-weight:700;margin-bottom:4px}
+    .ps-banner-text p{font-size:13px;opacity:.75}
+    .ps-config-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px}
+    .ps-config-card h3{font-size:15px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+    .payment-link-card{
+      background:var(--surface-2);border:1px solid var(--border);
+      border-radius:var(--radius);padding:16px;
+      display:flex;align-items:center;gap:14px;margin-bottom:10px;
+    }
+    .plc-icon{font-size:24px;width:44px;height:44px;background:var(--primary-light);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .plc-info{flex:1}
+    .plc-title{font-size:14px;font-weight:600}
+    .plc-sub{font-size:12px;color:var(--ink-3);margin-top:2px}
+    .plc-amount{font-size:16px;font-weight:800;color:var(--primary)}
+    .status-live{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#16a34a;background:#dcfce7;padding:3px 10px;border-radius:100px}
+    .status-test{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#d97706;background:#fef3c7;padding:3px 10px;border-radius:100px}
+    .trans-row{display:grid;grid-template-columns:1fr 1fr 1fr 120px 100px;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px}
+    .trans-row:last-child{border-bottom:none}
+    .trans-head{background:var(--surface-3);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3)}
+    .pay-success{background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700}
+    .pay-fail{background:#fee2e2;color:#dc2626;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700}
+    .pay-pending{background:#fef3c7;color:#d97706;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, currentTerm, feeTypes = [], paystackKey = '';
+
+(async () => {
+  currentUser = await initAdminLayout('fees', 'Online Payments');
+  if (!currentUser) return;
+
+  const [{ data: term }, { data: ft }, { data: settings }] = await Promise.all([
+    db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current', true).maybeSingle(),
+    db.from('fee_types').select('*').eq('school_id', currentUser.school_id),
+    db.from('schools').select('settings').eq('id', currentUser.school_id).single()
+  ]);
+
+  currentTerm = term;
+  feeTypes = ft || [];
+  paystackKey = settings?.data?.settings?.paystack_public_key || '';
+
+  renderPage();
+})();
+
+function renderPage() {
+  const isConfigured = !!paystackKey;
+
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1>Online Payments</h1>
+      <p>Collect school fees online via Paystack — parents pay from their phone</p>
+    </div>
+
+    <!-- Paystack Banner -->
+    <div class="paystack-banner">
+      <div class="ps-logo"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span></div>
+      <div class="ps-banner-text">
+        <h3>Paystack Integration ${isConfigured ? '<span class="status-live">● Live</span>' : '<span class="status-test"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Not Configured</span>'}</h3>
+        <p>${isConfigured ? 'Parents can now pay fees online. Payments reflect automatically.' : 'Add your Paystack public key below to start collecting fees online.'}</p>
+      </div>
+      ${isConfigured ? '<button class="btn btn--secondary btn--sm" onclick="showConfig()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Settings</button>' : '<button class="btn btn--primary btn--sm" onclick="showConfig()">+ Configure Now</button>'}
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" style="margin-bottom:20px;">
+      <button class="tab active" onclick="switchTab('config',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>️ Configuration</button>
+      <button class="tab" onclick="switchTab('links',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span> Payment Links</button>
+      <button class="tab" onclick="switchTab('transactions',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> Transactions</button>
+      <button class="tab" onclick="switchTab('verify',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Verify Payment</button>
+    </div>
+
+    <div id="tabContent"></div>
+  `;
+
+  switchTabDirect('config');
+}
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  switchTabDirect(tab);
+}
+
+function switchTabDirect(tab) {
+  const c = document.getElementById('tabContent');
+  if (tab === 'config') renderConfig(c);
+  else if (tab === 'links') renderLinks(c);
+  else if (tab === 'transactions') renderTransactions(c);
+  else if (tab === 'verify') renderVerify(c);
+}
+
+// ── CONFIG ────────────────────────────────────────────────────
+function renderConfig(c) {
+  c.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:800px;">
+      <div class="ps-config-card">
+        <h3><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></span> Paystack API Keys</h3>
+        <div class="form-group">
+          <label class="form-label">Public Key <span class="required">*</span></label>
+          <input type="text" id="pkKey" class="form-control" placeholder="pk_live_xxxxxxxxxxxx" value="${paystackKey}">
+          <div class="form-hint">Get this from your Paystack Dashboard → Settings → API Keys</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">School Name on Receipt</label>
+          <input type="text" id="psSchoolName" class="form-control" value="${currentUser.schools?.name || ''}" placeholder="School name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Currency</label>
+          <select id="psCurrency" class="form-control">
+            <option value="NGN" selected>NGN (Nigerian Naira ₦)</option>
+          </select>
+        </div>
+        <button class="btn btn--primary" onclick="savePaystackConfig()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save Configuration</button>
+        <div id="configMsg" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="ps-config-card">
+        <h3><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span> Setup Guide</h3>
+        <div style="font-size:13px;color:var(--ink-2);line-height:1.8;">
+          <p style="margin-bottom:12px;"><strong>Step 1:</strong> Create a free account at <a href="https://paystack.com" target="_blank" style="color:var(--primary);">paystack.com</a></p>
+          <p style="margin-bottom:12px;"><strong>Step 2:</strong> Go to Settings → API Keys &amp; Webhooks</p>
+          <p style="margin-bottom:12px;"><strong>Step 3:</strong> Copy your <strong>Public Key</strong> (starts with pk_live_) and paste it above</p>
+          <p style="margin-bottom:12px;"><strong>Step 4:</strong> Generate payment links for each fee type and share with parents</p>
+          <p><strong>Step 5:</strong> Parents pay from their phone — money goes directly to your Paystack account</p>
+        </div>
+        <div style="margin-top:16px;padding:12px;background:var(--primary-light);border-radius:var(--radius-sm);font-size:12px;color:var(--primary);">
+          <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span> Paystack charges 1.5% per transaction (capped at ₦2,000). Free for transactions under ₦2,500.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function savePaystackConfig() {
+  const key = document.getElementById('pkKey').value.trim();
+  const msg = document.getElementById('configMsg');
+  if (!key) { msg.innerHTML = '<span class="form-error">Enter your Paystack public key.</span>'; return; }
+  if (!key.startsWith('pk_')) { msg.innerHTML = '<span class="form-error">Key must start with pk_live_ or pk_test_</span>'; return; }
+
+  const { data: school } = await db.from('schools').select('settings').eq('id', currentUser.school_id).single();
+  const currentSettings = school?.settings || {};
+  const { error } = await db.from('schools').update({
+    settings: { ...currentSettings, paystack_public_key: key }
+  }).eq('id', currentUser.school_id);
+
+  if (error) { msg.innerHTML = `<span class="form-error">${error.message}</span>`; return; }
+  paystackKey = key;
+  toast('Paystack configured! Payment links are now active.', 'success');
+  msg.innerHTML = '<span style="color:var(--success);font-size:13px;font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Saved successfully!</span>';
+}
+
+// ── PAYMENT LINKS ────────────────────────────────────────────
+function renderLinks(c) {
+  if (!paystackKey) {
+    c.innerHTML = `<div class="card"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></span></div><p>Configure your Paystack key first in the Configuration tab.</p></div></div>`;
+    return;
+  }
+  if (!feeTypes.length) {
+    c.innerHTML = `<div class="card"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span></div><p>No fee types set up. Go to <a href="fees.html" style="color:var(--primary);">Fees page</a> to add fee types first.</p></div></div>`;
+    return;
+  }
+  c.innerHTML = `
+    <div class="page-header" style="margin-bottom:16px;">
+      <h3 style="font-size:15px;font-weight:700;">Share these links with parents to collect fees online</h3>
+    </div>
+    <div class="card" style="margin-bottom:20px;padding:16px 20px;background:var(--info-light);border-color:var(--info);">
+      <p style="font-size:13px;color:var(--info);">
+        ℹ️ These are <strong>custom payment links</strong>. When parents click them, they are taken to a Paystack payment page pre-filled with the fee amount. After payment, the reference number is automatically recorded.
+      </p>
+    </div>
+    <div id="linksList">
+      ${feeTypes.map(ft => `
+        <div class="payment-link-card">
+          <div class="plc-icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span></div>
+          <div class="plc-info">
+            <div class="plc-title">${ft.name}</div>
+            <div class="plc-sub">Share this link with parents to collect ${ft.name.toLowerCase()} online</div>
+          </div>
+          <div class="plc-amount">${formatMoney(ft.amount)}</div>
+          <div style="display:flex;gap:8px;flex-shrink:0;">
+            <button class="btn btn--primary btn--sm" onclick="initiatePayment('${ft.id}','${ft.name}',${ft.amount})">
+              <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span> Pay Now
+            </button>
+            <button class="btn btn--secondary btn--sm" onclick="copyPayLink('${ft.id}','${ft.name}',${ft.amount})">
+              <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> Copy Link
+            </button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    <!-- Manual payment initiation -->
+    <div class="card" style="margin-top:20px;">
+      <div class="card__header"><span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span> Collect Payment Now</span></div>
+      <p style="font-size:13px;color:var(--ink-3);margin-bottom:16px;">Use this to collect payment from a parent who is present in the school.</p>
+      <div class="form-grid" style="max-width:600px;">
+        <div class="form-group">
+          <label class="form-label">Student</label>
+          <input type="text" id="payStudentSearch" class="form-control" placeholder="Type student name..." oninput="searchPayStudent()">
+          <input type="hidden" id="payStudentId">
+          <div id="payStudentSuggest" style="position:relative;"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fee Type</label>
+          <select id="payFeeType" class="form-control" onchange="updatePayAmount()">
+            <option value="">Select fee...</option>
+            ${feeTypes.map(ft => `<option value="${ft.id}" data-amount="${ft.amount}" data-name="${ft.name}">${ft.name} — ${formatMoney(ft.amount)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Parent Email</label>
+          <input type="email" id="payEmail" class="form-control" placeholder="parent@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Amount (₦)</label>
+          <input type="number" id="payAmount" class="form-control" placeholder="0">
+        </div>
+      </div>
+      <button class="btn btn--primary" onclick="openPaystack()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span> Open Paystack Checkout</button>
+    </div>
+  `;
+
+  // Load Paystack script
+  if (!document.getElementById('paystackScript')) {
+    const s = document.createElement('script');
+    s.id = 'paystackScript';
+    s.src = 'https://js.paystack.co/v1/inline.js';
+    document.head.appendChild(s);
+  }
+}
+
+let allStudents = [];
+async function searchPayStudent() {
+  const q = document.getElementById('payStudentSearch').value.toLowerCase();
+  if (q.length < 2) { document.getElementById('payStudentSuggest').innerHTML = ''; return; }
+  if (!allStudents.length) {
+    const { data } = await db.from('students').select('id,full_name,admission_no').eq('school_id', currentUser.school_id).eq('is_active', true).order('full_name');
+    allStudents = data || [];
+  }
+  const matches = allStudents.filter(s => s.full_name.toLowerCase().includes(q)).slice(0, 6);
+  document.getElementById('payStudentSuggest').innerHTML = matches.length ? `
+    <div style="position:absolute;left:0;right:0;z-index:10;background:white;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow);top:2px;">
+      ${matches.map(s => `
+        <div onclick="selectPayStudent('${s.id}','${s.full_name}')"
+          style="padding:10px 14px;cursor:pointer;font-size:14px;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+          <strong>${s.full_name}</strong> <span style="color:var(--ink-3);font-size:12px;">${s.admission_no || ''}</span>
+        </div>`).join('')}
+    </div>` : '';
+}
+
+function selectPayStudent(id, name) {
+  document.getElementById('payStudentSearch').value = name;
+  document.getElementById('payStudentId').value = id;
+  document.getElementById('payStudentSuggest').innerHTML = '';
+}
+
+function updatePayAmount() {
+  const sel = document.getElementById('payFeeType');
+  const opt = sel.selectedOptions[0];
+  if (opt?.dataset.amount) document.getElementById('payAmount').value = opt.dataset.amount;
+}
+
+function openPaystack() {
+  const email = document.getElementById('payEmail').value;
+  const amount = Number(document.getElementById('payAmount').value);
+  const studentId = document.getElementById('payStudentId').value;
+  const feeTypeId = document.getElementById('payFeeType').value;
+  const feeName = document.getElementById('payFeeType').selectedOptions[0]?.dataset.name;
+
+  if (!email) { toast('Enter parent email address.', 'error'); return; }
+  if (!amount || amount <= 0) { toast('Enter fee amount.', 'error'); return; }
+  if (!studentId) { toast('Select a student.', 'error'); return; }
+  if (!paystackKey) { toast('Configure Paystack key first.', 'error'); return; }
+
+  const handler = PaystackPop.setup({
+    key: paystackKey,
+    email,
+    amount: amount * 100, // Paystack uses kobo
+    currency: 'NGN',
+    ref: 'EDT_' + Date.now(),
+    metadata: {
+      student_id: studentId,
+      fee_type_id: feeTypeId,
+      school_id: currentUser.school_id,
+      custom_fields: [
+        { display_name: 'Student', variable_name: 'student', value: document.getElementById('payStudentSearch').value },
+        { display_name: 'Fee Type', variable_name: 'fee_type', value: feeName }
+      ]
+    },
+    callback: async (response) => {
+      toast('Payment successful! Recording...', 'success');
+      await recordOnlinePayment(studentId, feeTypeId, amount, response.reference, email);
+    },
+    onClose: () => toast('Payment cancelled.', 'info')
+  });
+  handler.openIframe();
+}
+
+async function recordOnlinePayment(studentId, feeTypeId, amount, reference, email) {
+  if (!currentTerm) { toast('No current term set. Payment recorded in Paystack but not linked to a term.', 'info'); return; }
+  const { error } = await db.from('payments').insert({
+    school_id: currentUser.school_id,
+    student_id: studentId,
+    fee_type_id: feeTypeId,
+    term_id: currentTerm.id,
+    amount_paid: amount,
+    payment_method: 'online',
+    reference,
+    notes: `Online payment via Paystack. Email: ${email}`,
+    received_by: currentUser.id
+  });
+  if (error) { toast('Payment recorded in Paystack but DB save failed: ' + error.message, 'error'); return; }
+  toast(`₦${amount.toLocaleString()} payment recorded! Ref: ${reference}`, 'success');
+}
+
+function initiatePayment(feeTypeId, feeName, amount) {
+  document.getElementById('payFeeType').value = feeTypeId;
+  document.getElementById('payAmount').value = amount;
+  document.querySelector('.tab:nth-child(2)').click();
+  setTimeout(() => document.getElementById('payEmail').focus(), 100);
+}
+
+function copyPayLink(feeTypeId, feeName, amount) {
+  const link = `${window.location.origin}/pay.html?fee=${feeTypeId}&amount=${amount}&school=${currentUser.school_id}&name=${encodeURIComponent(feeName)}`;
+  navigator.clipboard.writeText(link).then(() => toast('Payment link copied! Share with parents.', 'success'));
+}
+
+// ── TRANSACTIONS ──────────────────────────────────────────────
+async function renderTransactions(c) {
+  showLoader(c, 'Loading transactions...');
+  const { data: payments } = await db.from('payments')
+    .select('id,amount_paid,payment_method,reference,paid_at,students(full_name),fee_types(name)')
+    .eq('school_id', currentUser.school_id)
+    .eq('payment_method', 'online')
+    .order('paid_at', { ascending: false })
+    .limit(50);
+
+  if (!payments?.length) {
+    c.innerHTML = `<div class="card"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span></div><p>No online payments yet. Share payment links with parents to get started.</p></div></div>`;
+    return;
+  }
+
+  const total = payments.reduce((s, p) => s + Number(p.amount_paid), 0);
+  c.innerHTML = `
+    <div class="stat-grid" style="margin-bottom:20px;">
+      <div class="stat-card"><div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span></div><div class="stat-card__value" style="color:var(--success);font-size:20px;">${formatMoney(total)}</div><div class="stat-card__label">Total Online Collections</div></div>
+      <div class="stat-card"><div class="stat-card__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span></div><div class="stat-card__value">${payments.length}</div><div class="stat-card__label">Online Transactions</div></div>
+    </div>
+    <div class="card" style="padding:0;">
+      <div class="table-wrap" style="border:none;">
+        <table>
+          <thead><tr><th>Student</th><th>Fee</th><th>Amount</th><th>Reference</th><th>Date</th><th>Status</th></tr></thead>
+          <tbody>
+            ${payments.map(p => `
+              <tr>
+                <td style="font-weight:600;">${p.students?.full_name || '—'}</td>
+                <td>${p.fee_types?.name || '—'}</td>
+                <td style="color:var(--success);font-weight:700;">${formatMoney(p.amount_paid)}</td>
+                <td style="font-family:var(--mono);font-size:12px;">${p.reference || '—'}</td>
+                <td style="font-size:13px;color:var(--ink-3);">${formatDate(p.paid_at)}</td>
+                <td><span class="pay-success"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Success</span></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── VERIFY ────────────────────────────────────────────────────
+function renderVerify(c) {
+  c.innerHTML = `
+    <div class="card" style="max-width:520px;">
+      <div class="card__header"><span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Verify & Record Payment</span></div>
+      <p style="font-size:13px;color:var(--ink-3);margin-bottom:16px;">
+        If a parent paid online but it wasn't automatically recorded, enter the Paystack reference below to verify and record it manually.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Paystack Reference</label>
+        <input type="text" id="verifyRef" class="form-control" placeholder="e.g. EDT_1234567890">
+      </div>
+      <button class="btn btn--primary" onclick="verifyPayment()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span> Verify Payment</button>
+      <div id="verifyResult" style="margin-top:16px;"></div>
+    </div>`;
+}
+
+async function verifyPayment() {
+  const ref = document.getElementById('verifyRef').value.trim();
+  if (!ref) { toast('Enter a reference.', 'error'); return; }
+  const result = document.getElementById('verifyResult');
+
+  // Check if already recorded
+  const { data: existing } = await db.from('payments').select('id,amount_paid,students(full_name)').eq('reference', ref).maybeSingle();
+  if (existing) {
+    result.innerHTML = `<div class="card" style="background:var(--success-light);border-color:var(--success);padding:14px;">
+      <p style="color:var(--success);font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> This payment is already recorded for ${existing.students?.full_name || 'a student'} — ${formatMoney(existing.amount_paid)}</p>
+    </div>`;
+    return;
+  }
+  result.innerHTML = `<div class="card" style="padding:14px;"><p style="font-size:13px;color:var(--ink-3);">⏳ Checking with Paystack... (Configure webhook in your Paystack dashboard for automatic verification)</p></div>`;
+}
+</script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

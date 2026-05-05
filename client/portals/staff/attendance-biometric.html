@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Biometric Attendance</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    /* ── Camera / capture area ─────────────────────────── */
+    .capture-area{background:var(--ink);border-radius:var(--radius);padding:20px;display:flex;flex-direction:column;align-items:center;gap:14px;position:relative;}
+    .camera-feed{width:100%;max-width:480px;height:300px;background:#000;border-radius:var(--radius-sm);overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;}
+    .camera-feed video{width:100%;height:100%;object-fit:cover;display:block;}
+    .camera-feed canvas{position:absolute;top:0;left:0;width:100%;height:100%;}
+    .camera-feed__placeholder{text-align:center;color:#6b7280;}
+    .camera-overlay{position:absolute;inset:0;pointer-events:none;}
+    /* Face outline guide */
+    .face-guide{width:180px;height:220px;border:3px solid rgba(0,255,0,.5);border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-55%);box-shadow:0 0 0 9999px rgba(0,0,0,.35);}
+    /* Method tabs */
+    .method-tabs{display:flex;gap:8px;margin-bottom:16px;}
+    .method-tab{flex:1;padding:10px;border:2px solid var(--border);border-radius:var(--radius-sm);text-align:center;cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-3);transition:var(--transition);}
+    .method-tab:hover{border-color:var(--primary);}
+    .method-tab.active{background:var(--primary-light);border-color:var(--primary);color:var(--primary-dark);}
+    .method-tab__icon{font-size:22px;display:block;margin-bottom:4px;}
+    /* Status banner */
+    .status-banner{padding:12px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:10px;}
+    .status-banner.success{background:var(--success-light);color:#166534;}
+    .status-banner.error{background:var(--danger-light);color:#991b1b;}
+    .status-banner.info{background:var(--info-light);color:#1d4ed8;}
+    .status-banner.warning{background:var(--warning-light);color:#92400e;}
+    /* Attendance list */
+    .att-student-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);border-radius:0;transition:background .1s;}
+    .att-student-row:hover{background:var(--surface-2);}
+    .att-student-row.marked-P{background:#f0fdf4;}
+    .att-student-row.marked-A{background:#fef2f2;}
+    .att-student-row.marked-L{background:#fef9c3;}
+    .att-status-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+    .att-status-btn{padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:var(--transition);}
+    .att-btn-P{background:var(--success-light);color:#166534;}
+    .att-btn-P.active{background:var(--success);color:white;}
+    .att-btn-A{background:var(--danger-light);color:#991b1b;}
+    .att-btn-A.active{background:var(--danger);color:white;}
+    .att-btn-L{background:var(--warning-light);color:#92400e;}
+    .att-btn-L.active{background:var(--warning);color:white;}
+    /* Scan result flash */
+    .scan-flash{position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:1000;padding:12px 24px;border-radius:var(--radius);font-size:14px;font-weight:700;box-shadow:var(--shadow-lg);transition:opacity .3s;pointer-events:none;}
+    /* Stats bar */
+    .att-stats{display:flex;gap:16px;padding:12px 16px;background:var(--surface-2);border-bottom:1px solid var(--border);font-size:13px;}
+    .att-stat{display:flex;align-items:center;gap:5px;}
+    .offline-banner{background:var(--warning);color:white;text-align:center;padding:8px;font-size:12px;font-weight:700;display:none;position:sticky;top:var(--header-h);z-index:40;}
+    .offline-banner.show{display:block;}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<div class="offline-banner" id="offlineBanner"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Offline Mode — Attendance saved locally, will sync on reconnect</div>
+<div id="scanFlash" class="scan-flash" style="opacity:0;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let user, term, classes=[], students=[], gradingScale=[];
+let selectedClassId='', todayAttendance={};
+let activeMethod='manual';   // manual | face | qr
+let stream=null, videoEl=null, faceModelsLoaded=false;
+let pendingOffline={}, isOnline=navigator.onLine;
+const today=new Date().toISOString().split('T')[0];
+const deviceId=localStorage.getItem('et_device_id')||crypto.randomUUID();
+localStorage.setItem('et_device_id',deviceId);
+
+window.addEventListener('online',()=>{isOnline=true;updateOfflineBanner();syncOffline();});
+window.addEventListener('offline',()=>{isOnline=false;updateOfflineBanner();});
+function updateOfflineBanner(){document.getElementById('offlineBanner')?.classList.toggle('show',!isOnline);}
+
+(async()=>{
+  user = await initPage(['teacher','admin','exam_officer'],'Biometric Attendance','attendance-biometric');
+  if(!user) return;
+
+  document.getElementById('topbarActions').innerHTML=`
+    <span id="syncStatus" style="font-size:12px;color:var(--ink-3);"></span>
+    <button class="btn btn--secondary btn--sm" id="syncBtn" style="display:none;" onclick="syncOffline()">⬆ Sync</button>
+  `;
+
+  const ctx=await loadSchoolContext(user.school_id);
+  term=ctx.term; classes=ctx.classes;
+
+  loadOfflinePending();
+  updateOfflineBanner();
+  renderPage();
+})();
+
+function renderPage(){
+  document.getElementById('pageBody').innerHTML=`
+    <div class="page-header">
+      <div><h1 class="page-title">Attendance — ${today}</h1>
+      <p class="page-subtitle">${term?.name||'No active term'} · Mark attendance using manual, face recognition, or QR scan</p></div>
+    </div>
+
+    <!-- Method tabs -->
+    <div class="method-tabs">
+      <div class="method-tab ${activeMethod==='manual'?'active':''}" onclick="setMethod('manual')">
+        <span class="method-tab__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>️</span>Manual
+      </div>
+      <div class="method-tab ${activeMethod==='face'?'active':''}" onclick="setMethod('face')">
+        <span class="method-tab__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1"/></svg></span></span>Face ID
+      </div>
+      <div class="method-tab ${activeMethod==='qr'?'active':''}" onclick="setMethod('qr')">
+        <span class="method-tab__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span></span>QR Scan
+      </div>
+    </div>
+
+    <!-- Class selector -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+          <label class="form-label">Class</label>
+          <select class="form-control" id="classSelect" onchange="onClassChange(this.value)">
+            <option value="">— Select Class —</option>
+            ${classes.map(c=>`<option value="${c.id}" ${c.id===selectedClassId?'selected':''}>${c.name}</option>`).join('')}
+          </select>
+        </div>
+        <button class="btn btn--secondary btn--sm" onclick="markAll('P')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> All Present</button>
+        <button class="btn btn--secondary btn--sm" onclick="markAll('A')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> All Absent</button>
+      </div>
+    </div>
+
+    <!-- Method-specific panel -->
+    <div id="methodPanel"></div>
+
+    <!-- Status -->
+    <div id="statusBanner"></div>
+
+    <!-- Student list -->
+    <div id="studentList">
+      ${selectedClassId?'<div class="et-loader"><div class="et-spinner"></div></div>':'<div class="et-empty" style="padding:40px 0;"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span></div><p>Select a class to mark attendance</p></div>'}
+    </div>
+
+    <!-- Save bar -->
+    <div id="saveBar" style="display:none;position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:14px 0;display:none;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 -4px 16px rgba(0,0,0,.07);z-index:20;">
+      <span id="saveBarInfo" style="font-size:13px;color:var(--ink-3);"></span>
+      <button class="btn btn--primary" onclick="saveAttendance()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save Attendance</button>
+    </div>
+  `;
+
+  renderMethodPanel();
+  if(selectedClassId) loadStudents(selectedClassId);
+}
+
+function setMethod(m){
+  activeMethod=m;
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  renderMethodPanel();
+}
+
+function renderMethodPanel(){
+  const panel=document.getElementById('methodPanel');
+  if(!panel) return;
+  if(activeMethod==='face'){
+    panel.innerHTML=`
+      <div class="capture-area" style="margin-bottom:16px;">
+        <div class="camera-feed" id="cameraFeed">
+          <div class="camera-feed__placeholder"><div style="font-size:40px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1"/></svg></span></div><p style="font-size:13px;margin-top:8px;">Camera not started</p></div>
+          <div class="face-guide"></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn--primary" onclick="startCamera()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span> Start Camera</button>
+          <button class="btn btn--secondary" onclick="captureAndMatch()" id="captureBtn" disabled><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span> Capture & Match</button>
+          <button class="btn btn--ghost btn--sm" onclick="stopCamera()">Stop</button>
+        </div>
+        <div id="faceStatus" style="font-size:12px;color:#9ca3af;text-align:center;"></div>
+      </div>`;
+  } else if(activeMethod==='qr'){
+    panel.innerHTML=`
+      <div class="capture-area" style="margin-bottom:16px;">
+        <div class="camera-feed" id="cameraFeed">
+          <div class="camera-feed__placeholder"><div style="font-size:40px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span></div><p style="font-size:13px;margin-top:8px;">Point camera at student QR code</p></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn--primary" onclick="startQRScan()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span> Start QR Scanner</button>
+          <button class="btn btn--ghost btn--sm" onclick="stopCamera()">Stop</button>
+        </div>
+        <div id="qrStatus" style="font-size:12px;color:#9ca3af;text-align:center;">Or enter QR code manually:</div>
+        <div style="display:flex;gap:8px;width:100%;max-width:400px;">
+          <input class="form-control" id="qrManual" placeholder="Scan or paste QR code…" style="font-family:var(--mono);">
+          <button class="btn btn--primary btn--sm" onclick="processQR(document.getElementById('qrManual').value)">Mark</button>
+        </div>
+      </div>`;
+  } else {
+    panel.innerHTML=''; // Manual: no camera panel needed
+  }
+}
+
+async function onClassChange(classId){
+  selectedClassId=classId;
+  if(!classId) return;
+  todayAttendance={};
+  await loadStudents(classId);
+}
+
+async function loadStudents(classId){
+  if(!term) return;
+  showLoader('#studentList','Loading students…');
+  students = await getEnrolledStudents(classId, term.id, user.school_id);
+  if(!students.length){showEmpty('#studentList','No students enrolled in this class.','<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>');return;}
+
+  // Load today's existing attendance
+  const {data:existing} = await db.from('attendance')
+    .select('student_id,status,method')
+    .eq('class_id',classId).eq('date',today).eq('school_id',user.school_id);
+  todayAttendance={};
+  (existing||[]).forEach(r=>{todayAttendance[r.student_id]={status:r.status,method:r.method||'manual'};});
+
+  // Merge offline pending
+  Object.assign(todayAttendance, pendingOffline[classId]||{});
+
+  renderStudentList();
+  const saveBar=document.getElementById('saveBar');
+  if(saveBar) saveBar.style.display='flex';
+}
+
+function renderStudentList(){
+  const present=Object.values(todayAttendance).filter(r=>r.status==='P').length;
+  const absent=Object.values(todayAttendance).filter(r=>r.status==='A').length;
+  const late=Object.values(todayAttendance).filter(r=>r.status==='L').length;
+  const unmarked=students.length-Object.keys(todayAttendance).length;
+
+  const saveInfo=document.getElementById('saveBarInfo');
+  if(saveInfo) saveInfo.textContent=`${students.length} students · Present: ${present} · Absent: ${absent} · Late: ${late} · Unmarked: ${unmarked}`;
+
+  document.getElementById('studentList').innerHTML=`
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="att-stats">
+        <div class="att-stat"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e;display:inline-block;"></span> Present: <strong>${present}</strong></div>
+        <div class="att-stat"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444;display:inline-block;"></span> Absent: <strong>${absent}</strong></div>
+        <div class="att-stat"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;display:inline-block;"></span> Late: <strong>${late}</strong></div>
+        <div class="att-stat"><span style="width:10px;height:10px;border-radius:50%;background:#d1d5db;display:inline-block;"></span> Unmarked: <strong>${unmarked}</strong></div>
+      </div>
+      ${students.map((s,i)=>{
+        const rec=todayAttendance[s.id];
+        const st=rec?.status||'';
+        const method=rec?.method||'';
+        const dotColor=st==='P'?'#22c55e':st==='A'?'#ef4444':st==='L'?'#f59e0b':'#d1d5db';
+        const methodIcon=method==='face'?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1"/></svg></span>':method==='qr_scan'?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>':method==='biometric'?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg></span>':st?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>️':'';
+        return `
+          <div class="att-student-row ${st?'marked-'+st:''}" id="row-${s.id}">
+            <span style="color:var(--ink-4);font-size:12px;width:24px;text-align:center;">${i+1}</span>
+            <div class="att-status-dot" style="background:${dotColor};"></div>
+            <div style="flex:1;">
+              <div style="font-weight:600;font-size:14px;">${s.full_name} ${methodIcon?`<span style="font-size:11px;color:var(--ink-4);">${methodIcon}</span>`:''}</div>
+              <div style="font-size:11px;color:var(--ink-4);">${s.admission_no||'—'}</div>
+            </div>
+            <div style="display:flex;gap:5px;">
+              <button class="att-status-btn att-btn-P ${st==='P'?'active':''}" onclick="markStudent('${s.id}','P','manual')">P</button>
+              <button class="att-status-btn att-btn-L ${st==='L'?'active':''}" onclick="markStudent('${s.id}','L','manual')">L</button>
+              <button class="att-status-btn att-btn-A ${st==='A'?'active':''}" onclick="markStudent('${s.id}','A','manual')">A</button>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function markStudent(studentId, status, method){
+  todayAttendance[studentId]={status,method:method||'manual'};
+  // Update row styling without full re-render
+  const row=document.getElementById('row-'+studentId);
+  if(row){
+    row.className='att-student-row marked-'+status;
+    const dotColor=status==='P'?'#22c55e':status==='A'?'#ef4444':'#f59e0b';
+    row.querySelector('.att-status-dot').style.background=dotColor;
+    row.querySelectorAll('.att-status-btn').forEach(btn=>{
+      btn.classList.remove('active');
+      if(btn.textContent===status) btn.classList.add('active');
+    });
+    const methodIcon=method==='face'?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1"/></svg></span>':method==='qr_scan'?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>':method==='biometric'?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg></span>':'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>️';
+    const nameEl=row.querySelector('div[style*="font-weight:600"]');
+    if(nameEl){
+      const stu=students.find(s=>s.id===studentId);
+      nameEl.innerHTML=stu.full_name+' <span style="font-size:11px;color:var(--ink-4);">'+methodIcon+'</span>';
+    }
+  }
+  updateSaveBarStats();
+  if(method!=='manual') flashScan(students.find(s=>s.id===studentId)?.full_name, status);
+}
+
+function markAll(status){
+  students.forEach(s=>markStudent(s.id,status,'manual'));
+  renderStudentList();
+}
+
+function updateSaveBarStats(){
+  const present=Object.values(todayAttendance).filter(r=>r.status==='P').length;
+  const absent=Object.values(todayAttendance).filter(r=>r.status==='A').length;
+  const late=Object.values(todayAttendance).filter(r=>r.status==='L').length;
+  const unmarked=students.length-Object.keys(todayAttendance).length;
+  const el=document.getElementById('saveBarInfo');
+  if(el) el.textContent=`${students.length} students · P:${present} A:${absent} L:${late} Unmarked:${unmarked}`;
+}
+
+async function saveAttendance(){
+  if(!term||!selectedClassId) return;
+  const rows=students.map(s=>{
+    const rec=todayAttendance[s.id];
+    if(!rec) return null;
+    return{
+      school_id:user.school_id, student_id:s.id,
+      class_id:selectedClassId, term_id:term.id,
+      date:today, status:rec.status,
+      method:rec.method||'manual',
+      verified:rec.method!=='manual',
+      device_id:deviceId,
+      recorded_by:user.id,
+      captured_offline:!isOnline,
+    };
+  }).filter(Boolean);
+
+  if(!rows.length){toast('No attendance marked yet.','error');return;}
+
+  if(isOnline){
+    const {error} = await db.from('attendance').upsert(rows,{onConflict:'student_id,class_id,date,school_id',ignoreDuplicates:false});
+    if(error){
+      saveOffline(rows);
+      toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Saved offline — will sync on reconnect.','info');
+    } else {
+      delete pendingOffline[selectedClassId];
+      saveOfflineCacheToStorage();
+      toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Attendance saved for '+rows.length+' students!','success');
+    }
+  } else {
+    saveOffline(rows);
+    toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span> Saved offline — will sync when connected.','info');
+  }
+}
+
+function saveOffline(rows){
+  if(!pendingOffline[selectedClassId]) pendingOffline[selectedClassId]={};
+  rows.forEach(r=>{pendingOffline[selectedClassId][r.student_id]={status:r.status,method:r.method};});
+  saveOfflineCacheToStorage();
+  document.getElementById('syncBtn').style.display='inline-flex';
+  document.getElementById('syncStatus').textContent='Offline pending';
+}
+function saveOfflineCacheToStorage(){try{localStorage.setItem('et_offline_att_v2',JSON.stringify(pendingOffline));}catch{}}
+function loadOfflinePending(){try{const c=localStorage.getItem('et_offline_att_v2');if(c)pendingOffline=JSON.parse(c);const count=Object.keys(pendingOffline).length;if(count>0){document.getElementById('syncBtn').style.display='inline-flex';document.getElementById('syncStatus').textContent=count+' class(es) pending';}}catch{}}
+
+async function syncOffline(){
+  if(!isOnline){toast('Still offline.','error');return;}
+  let synced=0;
+  for(const[classId,records] of Object.entries(pendingOffline)){
+    const rows=Object.entries(records).map(([sid,rec])=>({
+      school_id:user.school_id,student_id:sid,class_id:classId,
+      term_id:term?.id,date:today,status:rec.status,method:rec.method||'manual',
+      device_id:deviceId,recorded_by:user.id,captured_offline:true,
+    }));
+    const{error}=await db.from('attendance').upsert(rows,{onConflict:'student_id,class_id,date,school_id',ignoreDuplicates:false});
+    if(!error){delete pendingOffline[classId];synced+=rows.length;}
+  }
+  saveOfflineCacheToStorage();
+  if(!Object.keys(pendingOffline).length){document.getElementById('syncBtn').style.display='none';document.getElementById('syncStatus').textContent='';}
+  toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Synced '+synced+' records!','success');
+}
+
+// ── Face recognition ─────────────────────────────────────
+async function startCamera(){
+  const feedEl=document.getElementById('cameraFeed');
+  if(!feedEl) return;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:480,height:300}});
+    videoEl=document.createElement('video');
+    videoEl.srcObject=stream;videoEl.autoplay=true;videoEl.playsInline=true;
+    feedEl.innerHTML='';
+    feedEl.appendChild(videoEl);
+    const guide=document.createElement('div');guide.className='face-guide';
+    feedEl.appendChild(guide);
+    document.getElementById('captureBtn').disabled=false;
+    document.getElementById('faceStatus').textContent='Camera ready — position student\'s face in the oval';
+  }catch(e){
+    document.getElementById('faceStatus').textContent='Camera error: '+e.message+'. Use manual mode.';
+  }
+}
+
+function stopCamera(){
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  const feedEl=document.getElementById('cameraFeed');
+  if(feedEl) feedEl.innerHTML='<div class="camera-feed__placeholder"><div style="font-size:40px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1"/></svg></span></div><p style="font-size:13px;margin-top:8px;">Camera stopped</p></div>';
+}
+
+async function captureAndMatch(){
+  // Face recognition requires face-api.js — show setup guidance
+  const btn=document.getElementById('captureBtn');
+  if(!videoEl||!stream){alert('Start the camera first.');return;}
+
+  document.getElementById('faceStatus').textContent='Capturing…';
+  // Capture frame
+  const canvas=document.createElement('canvas');
+  canvas.width=videoEl.videoWidth||480;
+  canvas.height=videoEl.videoHeight||300;
+  canvas.getContext('2d').drawImage(videoEl,0,0);
+
+  // ── NOTE: Full face recognition requires face-api.js models ──
+  // The face_descriptor is stored in students.face_descriptor (JSONB).
+  // To enable: load face-api.js and compare descriptors using
+  // faceapi.euclideanDistance(descriptor, storedDescriptor) < 0.6
+  // For now we simulate a match and show guidance:
+  document.getElementById('faceStatus').innerHTML=`
+    <span style="color:#f59e0b;font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Face-api.js models not loaded.</span><br>
+    To enable: add face-api.js CDN + model files, then call <code>matchFaceToStudent(descriptor)</code>.
+    <a href="https://github.com/justadudewhohacks/face-api.js" target="_blank" style="color:var(--primary);">Setup guide →</a>
+  `;
+}
+
+// Called after face-api.js is set up and a descriptor is captured
+async function matchFaceToStudent(capturedDescriptor){
+  if(!students.length){toast('Load a class first.','error');return;}
+  // Load stored face descriptors for this class
+  const{data:stuData}=await db.from('students').select('id,full_name,face_descriptor')
+    .in('id',students.map(s=>s.id)).not('face_descriptor','is',null);
+  let bestMatch=null, bestDist=Infinity;
+  (stuData||[]).forEach(s=>{
+    if(!s.face_descriptor) return;
+    const stored=Array.isArray(s.face_descriptor)?s.face_descriptor:Object.values(s.face_descriptor);
+    // faceapi.euclideanDistance requires face-api.js
+    if(typeof faceapi!=='undefined'){
+      const dist=faceapi.euclideanDistance(capturedDescriptor,stored);
+      if(dist<bestDist){bestDist=dist;bestMatch=s;}
+    }
+  });
+  const THRESHOLD=0.6;
+  if(bestMatch&&bestDist<THRESHOLD){
+    markStudent(bestMatch.id,'P','face');
+    flashScan(bestMatch.full_name,'P');
+    document.getElementById('faceStatus').innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Matched: '+bestMatch.full_name+' (distance: '+bestDist.toFixed(3)+')';
+  } else {
+    document.getElementById('faceStatus').innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> No match found (best distance: '+bestDist.toFixed(3)+'). Try manual.';
+    toast('Face not recognized','error');
+  }
+}
+
+// ── QR scan ──────────────────────────────────────────────
+async function startQRScan(){
+  const feedEl=document.getElementById('cameraFeed');
+  if(!feedEl) return;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    videoEl=document.createElement('video');
+    videoEl.srcObject=stream;videoEl.autoplay=true;videoEl.playsInline=true;
+    feedEl.innerHTML='';feedEl.appendChild(videoEl);
+    document.getElementById('qrStatus').textContent='Scanning for QR codes…';
+    // Use BarcodeDetector API if available
+    if('BarcodeDetector' in window){
+      const detector=new BarcodeDetector({formats:['qr_code']});
+      const scan=async()=>{
+        if(!stream) return;
+        try{
+          const codes=await detector.detect(videoEl);
+          if(codes.length>0){processQR(codes[0].rawValue);return;}
+        }catch{}
+        requestAnimationFrame(scan);
+      };
+      requestAnimationFrame(scan);
+    } else {
+      document.getElementById('qrStatus').textContent='BarcodeDetector not supported — use manual input below.';
+    }
+  }catch(e){
+    document.getElementById('qrStatus').textContent='Camera error: '+e.message;
+  }
+}
+
+function processQR(rawValue){
+  if(!rawValue) return;
+  // QR format: ET-STUDENT-<uuid>
+  const match=rawValue.match(/ET-STUDENT-([0-9a-f-]{36})/i);
+  if(!match){toast('Invalid QR code format','error');return;}
+  const studentId=match[1];
+  const stu=students.find(s=>s.id===studentId);
+  if(!stu){toast('Student not in this class','error');return;}
+  markStudent(studentId,'P','qr_scan');
+  document.getElementById('qrManual').value='';
+  document.getElementById('qrStatus').innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Scanned: '+stu.full_name;
+}
+
+// ── Flash indicator ──────────────────────────────────────
+function flashScan(name, status){
+  const el=document.getElementById('scanFlash');
+  if(!el) return;
+  const colors={P:'#22c55e',A:'#ef4444',L:'#f59e0b'};
+  el.style.background=colors[status]||'#22c55e';
+  el.style.color='white';
+  el.innerHTML=(status==='P'?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>':status==='A'?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>':'⏱️')+' '+(name||'Student')+' marked '+{P:'Present',A:'Absent',L:'Late'}[status];
+  el.style.opacity='1';
+  setTimeout(()=>{el.style.opacity='0';},2500);
+}
+</script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

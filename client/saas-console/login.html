@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Platform Admin Login</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    body { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .login-card { background:white; border-radius:16px; padding:40px 36px; width:100%; max-width:400px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+    .login-logo { display:flex;align-items:center;gap:12px;margin-bottom:32px; }
+    .login-logo-icon { width:48px;height:48px;border-radius:12px;background:#6d28d9;display:flex;align-items:center;justify-content:center;font-size:24px; }
+    .login-logo-text .brand { font-size:18px;font-weight:800;color:#1e1b4b; }
+    .login-logo-text .tag { font-size:11px;color:#6d28d9;font-weight:700;text-transform:uppercase;letter-spacing:.5px; }
+    .login-title { font-size:22px;font-weight:800;color:#1e1b4b;margin-bottom:6px; }
+    .login-sub { font-size:13px;color:#64748b;margin-bottom:28px; }
+    .login-divider { text-align:center;color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin:20px 0;display:flex;align-items:center;gap:10px; }
+    .login-divider::before, .login-divider::after { content:'';flex:1;height:1px;background:#e2e8f0; }
+    .error-box { background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none; }
+    .back-link { text-align:center;margin-top:20px;font-size:13px;color:#64748b; }
+    .back-link a { color:#6d28d9;font-weight:600;text-decoration:none; }
+    .security-note { background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;padding:10px 14px;border-radius:8px;font-size:12px;margin-top:16px;display:flex;gap:8px;align-items:flex-start; }
+    .btn--login { background:linear-gradient(135deg,#6d28d9,#4f46e5);color:white;border:none;width:100%;padding:13px;font-size:15px;font-weight:700;border-radius:var(--radius-sm);cursor:pointer;transition:opacity .2s; }
+    .btn--login:hover { opacity:.92; }
+    .btn--login:disabled { opacity:.6;cursor:not-allowed; }
+  </style>
+</head>
+<body>
+<div class="login-card">
+  <div class="login-logo">
+    <div class="login-logo-icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span></div>
+    <div class="login-logo-text">
+      <div class="brand">EduTrack NG</div>
+      <div class="tag">Platform Admin</div>
+    </div>
+  </div>
+
+  <div class="login-title">SaaS Owner Login</div>
+  <div class="login-sub">Access the platform control panel. School staff should use the main login page.</div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <div class="form-group">
+    <label class="form-label">Email Address</label>
+    <input class="form-input" type="email" id="email" placeholder="owner@edutrack.ng" autocomplete="email">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Password</label>
+    <input class="form-input" type="password" id="password" placeholder="Your password" autocomplete="current-password">
+  </div>
+
+  <button class="btn--login" id="loginBtn" onclick="doLogin()">Login to Platform</button>
+
+  <div class="security-note">
+    <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> This portal is restricted to authorised platform owners only. Unauthorised access attempts are logged.
+  </div>
+
+  <div class="back-link">
+    School admin? <a href="../login.html">Go to school login →</a>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script>
+// Redirect if already logged in as saas_owner
+(async () => {
+  const session = await getSession();
+  if (!session) return;
+  const user = await getCurrentUser();
+  if (user?.role === 'saas_owner') window.location.href = 'index.html';
+})();
+
+document.getElementById('password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+async function doLogin() {
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const btn      = document.getElementById('loginBtn');
+  const errBox   = document.getElementById('errorBox');
+
+  errBox.style.display = 'none';
+  if (!email || !password) { showError('Please enter your email and password.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  if (error) { showError(error.message); btn.disabled = false; btn.textContent = 'Login to Platform'; return; }
+
+  // Verify role
+  const user = await getCurrentUser();
+  if (!user || user.role !== 'saas_owner') {
+    await db.auth.signOut();
+    showError('Access denied. This portal is for SaaS owners only.');
+    btn.disabled = false; btn.textContent = 'Login to Platform';
+    return;
+  }
+
+  window.location.href = 'index.html';
+}
+
+function showError(msg) {
+  const b = document.getElementById('errorBox');
+  b.textContent = msg; b.style.display = 'block';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Register your school on EduTrack NG — Smart School Management System for Nigerian Schools">
+<title>Register Your School — EduTrack NG</title>
+<link rel="icon" type="image/x-icon" href="/icons/logo.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="js/config.js"></script>
+<script src="js/supabase.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --G:#0a6e3f;--G2:#07512e;--G3:#12a05a;--GL:#e6f4ed;--GL2:#c8e8d6;
+  --AU:#f0a500;--AUL:#fff8e6;
+  --INK:#080c10;--T:#0d1a14;--T2:#3a5245;--T3:#7a9488;
+  --W:#ffffff;--S:#f4f7f5;--S2:#eaeff0;--BD:#dde4e8;
+  --ERR:#dc2626;--ERL:#fef2f2;
+  --H:'Plus Jakarta Sans',system-ui,sans-serif;
+  --B:'DM Sans',system-ui,sans-serif;
+  --rad:14px;--rad-sm:9px;
+}
+html{scroll-behavior:smooth;font-size:16px}
+body{font-family:var(--B);color:var(--T);background:var(--S);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{text-decoration:none;color:inherit}
+input,select,textarea{font-family:var(--B)}
+button{font-family:var(--B);cursor:pointer;border:none}
+
+/* ── TOPBAR ── */
+.topbar{
+  position:fixed;top:0;left:0;right:0;z-index:900;
+  height:58px;display:flex;align-items:center;
+  padding:0 clamp(12px,4vw,56px);
+  background:rgba(8,12,16,.93);
+  backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(255,255,255,.06);
+  justify-content:space-between;
+  box-shadow:0 4px 24px rgba(0,0,0,.25);
+}
+.top-brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.top-logo{
+  width:36px;height:36px;border-radius:9px;
+  overflow:hidden;background:white;padding:3px;flex-shrink:0;
+}
+.top-logo img{width:100%;height:100%;object-fit:cover;border-radius:6px}
+.top-name{font-family:var(--H);font-size:17px;font-weight:800;color:white;letter-spacing:-.2px}
+.top-name em{color:var(--AU);font-style:normal}
+.top-back{
+  font-size:13px;font-weight:500;color:rgba(255,255,255,.6);
+  padding:7px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.12);
+  background:transparent;transition:all .18s;display:flex;align-items:center;gap:6px;
+  white-space:nowrap;
+}
+.top-back:hover{color:white;border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.07)}
+@media(max-width:400px){.top-back span{display:none}}
+
+/* ── LAYOUT ── */
+.page-wrap{
+  min-height:100vh;
+  padding:80px clamp(12px,4vw,48px) 60px;
+  display:grid;
+  grid-template-columns:340px 1fr;
+  gap:28px;
+  max-width:1140px;
+  margin:0 auto;
+}
+@media(max-width:860px){
+  .page-wrap{
+    grid-template-columns:1fr;
+    padding:78px 14px 60px;
+    gap:16px;
+  }
+  .sidebar{position:static;height:auto}
+  .sidebar-card{padding:20px 16px}
+  .steps-list{display:none} /* hide step list on mobile, save space */
+  .info-box{display:none}
+}
+@media(max-width:480px){
+  .page-wrap{padding:72px 12px 60px}
+  .step-panel{padding:24px 16px 20px}
+  .form-nav{padding:16px 16px 24px}
+  .step-h{font-size:18px}
+  .sidebar-h{font-size:18px}
+}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  position:sticky;top:80px;height:fit-content;
+}
+.sidebar-card{
+  background:white;border-radius:var(--rad);
+  border:1px solid var(--BD);
+  padding:28px 24px;
+  box-shadow:0 2px 12px rgba(0,0,0,.05);
+}
+.sidebar-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--GL);border:1px solid var(--GL2);
+  padding:6px 14px 6px 10px;border-radius:100px;
+  font-size:12px;font-weight:700;color:var(--G);
+  margin-bottom:20px;
+}
+.sidebar-badge-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--G3);
+  animation:blink 2s ease-in-out infinite;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.sidebar-h{font-family:var(--H);font-size:22px;font-weight:800;color:var(--INK);line-height:1.25;margin-bottom:12px}
+.sidebar-p{font-size:14px;color:var(--T3);line-height:1.75;margin-bottom:24px}
+.steps-list{display:flex;flex-direction:column;gap:0}
+.step-item{
+  display:flex;gap:14px;padding:14px 0;
+  border-bottom:1px solid var(--S2);position:relative;
+}
+.step-item:last-child{border-bottom:none}
+.step-num{
+  width:30px;height:30px;border-radius:50%;
+  background:var(--GL);border:2px solid var(--GL2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:800;color:var(--G);flex-shrink:0;
+  transition:all .3s;
+}
+.step-num.active{background:var(--G);border-color:var(--G);color:white}
+.step-num.done{background:var(--G3);border-color:var(--G3);color:white}
+.step-txt{flex:1}
+.step-label{font-size:13px;font-weight:700;color:var(--T);margin-bottom:2px}
+.step-desc{font-size:12px;color:var(--T3)}
+
+.info-box{
+  margin-top:20px;padding:16px;border-radius:var(--rad-sm);
+  background:var(--AUL);border:1px solid rgba(240,165,0,.25);
+}
+.info-box-h{font-size:12px;font-weight:700;color:var(--AU);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.info-box p{font-size:12px;color:var(--T2);line-height:1.6}
+
+/* ── FORM CARD ── */
+.form-card{
+  background:white;border-radius:var(--rad);
+  border:1px solid var(--BD);
+  box-shadow:0 2px 16px rgba(0,0,0,.06);
+  overflow:hidden;
+}
+.form-progress{
+  height:4px;background:var(--S2);
+  position:relative;
+}
+.form-progress-bar{
+  height:100%;background:linear-gradient(90deg,var(--G),var(--G3));
+  border-radius:0 2px 2px 0;
+  transition:width .4s ease;
+}
+
+.step-panel{display:none;padding:36px clamp(20px,4vw,44px) 32px}
+.step-panel.active{display:block;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+.step-header{margin-bottom:28px}
+.step-tag{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--G);margin-bottom:8px;
+}
+.step-h{font-family:var(--H);font-size:22px;font-weight:800;color:var(--INK);line-height:1.2;margin-bottom:8px}
+.step-sub{font-size:14px;color:var(--T3);line-height:1.65}
+
+/* Fields */
+.field-grid{display:grid;gap:18px}
+.field-grid-2{grid-template-columns:1fr 1fr}
+@media(max-width:560px){.field-grid-2{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:13px;font-weight:600;color:var(--T)}
+.field label .req{color:var(--ERR);margin-left:2px}
+.field input,.field select,.field textarea{
+  padding:11px 14px;border-radius:var(--rad-sm);
+  border:1.5px solid var(--BD);background:var(--S);
+  font-size:14px;color:var(--T);
+  transition:border-color .18s,box-shadow .18s,background .18s;
+  outline:none;
+}
+.field input::placeholder,.field textarea::placeholder{color:var(--T3)}
+.field input:focus,.field select:focus,.field textarea:focus{
+  border-color:var(--G);background:white;
+  box-shadow:0 0 0 3px rgba(10,110,63,.1);
+}
+.field input.err,.field select.err,.field textarea.err{
+  border-color:var(--ERR);background:var(--ERL);
+}
+.field-hint{font-size:11px;color:var(--T3)}
+.field-err{font-size:11px;color:var(--ERR);display:none}
+.field input.err ~ .field-err,.field select.err ~ .field-err,.field textarea.err ~ .field-err{display:block}
+
+/* School type cards */
+.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+@media(max-width:640px){.type-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:340px){.type-grid{grid-template-columns:1fr}}
+.type-card{
+  border:2px solid var(--BD);border-radius:var(--rad-sm);
+  padding:14px 12px;cursor:pointer;transition:all .18s;
+  text-align:center;background:var(--S);position:relative;
+}
+.type-card:hover{border-color:var(--G);background:var(--GL)}
+.type-card.selected{border-color:var(--G);background:var(--GL)}
+.type-card.selected::after{
+  content:'✓';position:absolute;top:6px;right:8px;
+  font-size:11px;font-weight:800;color:var(--G);
+}
+.type-icon{font-size:26px;margin-bottom:6px;line-height:1}
+.type-label{font-size:12px;font-weight:700;color:var(--T)}
+.type-sub{font-size:10px;color:var(--T3);margin-top:2px}
+.type-hidden{display:none}
+
+/* Review section */
+.review-grid{display:grid;gap:16px}
+.review-section{border:1px solid var(--BD);border-radius:var(--rad-sm);overflow:hidden}
+.review-section-h{
+  padding:10px 16px;background:var(--S);
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--T2);border-bottom:1px solid var(--BD);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.review-edit{font-size:11px;font-weight:600;color:var(--G);cursor:pointer;text-transform:none;letter-spacing:0}
+.review-edit:hover{text-decoration:underline}
+.review-rows{padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.review-row{display:flex;justify-content:space-between;gap:12px;font-size:13px}
+.review-key{color:var(--T3);flex-shrink:0}
+.review-val{color:var(--T);font-weight:600;text-align:right}
+
+/* Terms */
+.terms-box{
+  padding:14px;border-radius:var(--rad-sm);
+  background:var(--S);border:1.5px solid var(--BD);
+  font-size:12px;color:var(--T2);line-height:1.7;
+  max-height:120px;overflow-y:auto;
+}
+.terms-check{display:flex;align-items:flex-start;gap:10px;margin-top:14px;cursor:pointer}
+.terms-check input[type=checkbox]{
+  width:18px;height:18px;border-radius:5px;
+  accent-color:var(--G);flex-shrink:0;margin-top:1px;cursor:pointer;
+}
+.terms-check span{font-size:13px;color:var(--T);line-height:1.5}
+.terms-check a{color:var(--G);font-weight:600}
+
+/* Nav buttons */
+.form-nav{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:20px clamp(16px,4vw,44px) 28px;
+  border-top:1px solid var(--S2);
+  gap:12px;
+}
+@media(max-width:480px){
+  .form-nav{flex-direction:column-reverse;gap:10px}
+  .btn-next,.btn-prev{width:100%;justify-content:center}
+  .btn-prev{visibility:visible!important}
+}
+.btn-prev{
+  padding:10px 22px;border-radius:var(--rad-sm);
+  border:1.5px solid var(--BD);background:white;
+  color:var(--T2);font-size:14px;font-weight:600;
+  transition:all .18s;display:flex;align-items:center;gap:7px;
+}
+.btn-prev:hover{border-color:var(--T3);color:var(--T)}
+.btn-next{
+  padding:11px 28px;border-radius:var(--rad-sm);
+  background:var(--G);color:white;
+  font-size:14px;font-weight:700;
+  transition:all .2s;display:flex;align-items:center;gap:8px;
+  box-shadow:0 4px 14px rgba(10,110,63,.3);
+}
+.btn-next:hover{background:var(--G3);transform:translateY(-1px);box-shadow:0 6px 18px rgba(10,110,63,.4)}
+.btn-next:disabled{background:var(--T3);box-shadow:none;transform:none;cursor:not-allowed}
+.btn-next.loading::after{
+  content:'';width:16px;height:16px;border:2px solid rgba(255,255,255,.4);
+  border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;margin-left:4px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Success screen */
+.success-screen{
+  padding:60px clamp(20px,4vw,44px) 52px;
+  text-align:center;display:none;
+}
+.success-screen.show{display:block;animation:fadeIn .5s ease}
+.success-icon{
+  width:80px;height:80px;border-radius:50%;
+  background:linear-gradient(135deg,var(--G),var(--G3));
+  margin:0 auto 24px;display:flex;align-items:center;justify-content:center;
+  font-size:36px;box-shadow:0 8px 28px rgba(10,110,63,.35);
+}
+.success-h{font-family:var(--H);font-size:26px;font-weight:800;color:var(--INK);margin-bottom:12px}
+.success-p{font-size:15px;color:var(--T3);line-height:1.75;max-width:460px;margin:0 auto 32px}
+.success-ref{
+  display:inline-block;padding:10px 22px;border-radius:var(--rad-sm);
+  background:var(--GL);border:1px solid var(--GL2);
+  font-size:13px;font-weight:700;color:var(--G);letter-spacing:.5px;
+  margin-bottom:32px;
+}
+.success-steps{
+  display:flex;flex-direction:column;gap:10px;max-width:400px;margin:0 auto 36px;text-align:left;
+}
+.s-step{
+  display:flex;gap:12px;padding:12px 14px;border-radius:var(--rad-sm);
+  background:var(--S);border:1px solid var(--BD);font-size:13px;
+}
+.s-step-n{font-size:18px;flex-shrink:0}
+.s-step-t{font-weight:600;color:var(--T);margin-bottom:2px}
+.s-step-p{color:var(--T3);font-size:12px}
+.btn-home{
+  padding:12px 30px;border-radius:var(--rad-sm);
+  background:var(--G);color:white;font-size:14px;font-weight:700;
+  box-shadow:0 4px 14px rgba(10,110,63,.3);transition:all .2s;
+}
+.btn-home:hover{background:var(--G3);transform:translateY(-1px)}
+
+/* Error toast */
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--ERR);color:white;padding:12px 20px;border-radius:var(--rad-sm);
+  font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.25);
+  transition:transform .3s;z-index:9999;white-space:nowrap;max-width:90vw;
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- ── TOPBAR ── -->
+<nav class="topbar">
+  <a class="top-brand" href="index.html">
+    <div class="top-logo"><img src="icons/logo.jpg" alt="EduTrack NG" onerror="this.parentElement.style.background='var(--G)';this.parentElement.innerHTML='🏫'"></div>
+    <span class="top-name">EduTrack <em>NG</em></span>
+  </a>
+  <a href="index.html" class="top-back"><span>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    </span> Back to Home
+  </a>
+</nav>
+
+<!-- ── MAIN LAYOUT ── -->
+<div class="page-wrap">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-card">
+      <div class="sidebar-badge">
+        <span class="sidebar-badge-dot"></span>
+        Free to register
+      </div>
+      <h2 class="sidebar-h">Register your school on EduTrack NG</h2>
+      <p class="sidebar-p">Complete the form to submit your school for onboarding. Our team reviews every application and responds within 24–48 hours.</p>
+
+      <div class="steps-list">
+        <div class="step-item">
+          <div class="step-num active" id="sn1">1</div>
+          <div class="step-txt">
+            <div class="step-label">Admin Information</div>
+            <div class="step-desc">Your personal contact details</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num" id="sn2">2</div>
+          <div class="step-txt">
+            <div class="step-label">School Profile</div>
+            <div class="step-desc">School name, type & details</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num" id="sn3">3</div>
+          <div class="step-txt">
+            <div class="step-label">Location</div>
+            <div class="step-desc">Address, state & LGA</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num" id="sn4">4</div>
+          <div class="step-txt">
+            <div class="step-label">Review & Submit</div>
+            <div class="step-desc">Confirm and send application</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <div class="info-box-h">⏱ What happens next?</div>
+        <p>After submission, the EduTrack NG team reviews your application and sets up your school account. You'll receive login credentials via email within 24–48 hours.</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- FORM CARD -->
+  <div class="form-card" id="formCard">
+    <div class="form-progress">
+      <div class="form-progress-bar" id="progressBar" style="width:25%"></div>
+    </div>
+
+    <!-- ── STEP 1: Admin Info ── -->
+    <div class="step-panel active" id="step1">
+      <div class="step-header">
+        <div class="step-tag">Step 1 of 4</div>
+        <h2 class="step-h">Admin Personal Information</h2>
+        <p class="step-sub">Tell us about the school administrator who will manage the EduTrack NG account.</p>
+      </div>
+      <div class="field-grid">
+        <div class="field-grid field-grid-2">
+          <div class="field">
+            <label>First Name <span class="req">*</span></label>
+            <input type="text" id="adminFirstName" placeholder="e.g. Adaeze" autocomplete="given-name">
+            <span class="field-err">First name is required</span>
+          </div>
+          <div class="field">
+            <label>Last Name <span class="req">*</span></label>
+            <input type="text" id="adminLastName" placeholder="e.g. Okonkwo" autocomplete="family-name">
+            <span class="field-err">Last name is required</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Email Address <span class="req">*</span></label>
+          <input type="email" id="adminEmail" placeholder="admin@yourschool.edu.ng" autocomplete="email">
+          <span class="field-hint">This will be your EduTrack NG login email</span>
+          <span class="field-err">Valid email address is required</span>
+        </div>
+        <div class="field">
+          <label>Phone Number <span class="req">*</span></label>
+          <input type="tel" id="adminPhone" placeholder="e.g. 08012345678" autocomplete="tel">
+          <span class="field-err">Valid phone number is required</span>
+        </div>
+        <div class="field">
+          <label>Your Role / Title <span class="req">*</span></label>
+          <select id="adminRole">
+            <option value="">-- Select your role --</option>
+            <option value="Principal">Principal / Head Teacher</option>
+            <option value="Proprietor">Proprietor / Owner</option>
+            <option value="Headmaster">Headmaster / Headmistress</option>
+            <option value="Director">Director of Studies</option>
+            <option value="Bursar">Bursar / Administrator</option>
+            <option value="ICT Coordinator">ICT Coordinator</option>
+            <option value="Other">Other</option>
+          </select>
+          <span class="field-err">Please select your role</span>
+        </div>
+        <div class="field">
+          <label>WhatsApp Number</label>
+          <input type="tel" id="adminWhatsApp" placeholder="Same as phone or different" autocomplete="tel">
+          <span class="field-hint">Optional — for quick support notifications</span>
+        </div>
+        <div class="field">
+          <label>Password <span class="req">*</span></label>
+          <input type="password" id="adminPassword" placeholder="Min. 8 characters" autocomplete="new-password">
+          <span class="field-hint">You'll use this to log in after approval</span>
+          <span class="field-err">Password must be at least 8 characters</span>
+        </div>
+        <div class="field">
+          <label>Confirm Password <span class="req">*</span></label>
+          <input type="password" id="adminPasswordConfirm" placeholder="Repeat password" autocomplete="new-password">
+          <span class="field-err">Passwords do not match</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 2: School Info ── -->
+    <div class="step-panel" id="step2">
+      <div class="step-header">
+        <div class="step-tag">Step 2 of 4</div>
+        <h2 class="step-h">School Profile</h2>
+        <p class="step-sub">Tell us about your school — its name, type, and key details.</p>
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label>School Name <span class="req">*</span></label>
+          <input type="text" id="schoolName" placeholder="e.g. Greenfield Academy">
+          <span class="field-err">School name is required</span>
+        </div>
+        <div class="field">
+          <label>School Type <span class="req">*</span></label>
+          <div class="type-grid" id="typeGrid">
+            <div class="type-card" data-val="primary" onclick="selectType(this)">
+              <div class="type-icon">🏫</div>
+              <div class="type-label">Primary School</div>
+              <div class="type-sub">Basic 1–6 / Nursery</div>
+            </div>
+            <div class="type-card" data-val="secondary" onclick="selectType(this)">
+              <div class="type-icon">🏛️</div>
+              <div class="type-label">Secondary School</div>
+              <div class="type-sub">JSS / SSS / High School</div>
+            </div>
+            <div class="type-card" data-val="both" onclick="selectType(this)">
+              <div class="type-icon">🏣</div>
+              <div class="type-label">Primary & Secondary</div>
+              <div class="type-sub">Combined / All-through</div>
+            </div>
+            <div class="type-card" data-val="islamiyya" onclick="selectType(this)">
+              <div class="type-icon">🕌</div>
+              <div class="type-label">Islamiyya / Tahfeez</div>
+              <div class="type-sub">Islamic School / Qur'anic</div>
+            </div>
+            <div class="type-card" data-val="vocational" onclick="selectType(this)">
+              <div class="type-icon">🔧</div>
+              <div class="type-label">Vocational / Technical</div>
+              <div class="type-sub">Skills & Trade Training</div>
+            </div>
+            <div class="type-card" data-val="other" onclick="selectType(this)">
+              <div class="type-icon">📚</div>
+              <div class="type-label">Other / Institute</div>
+              <div class="type-sub">Tutorial / Coaching etc.</div>
+            </div>
+          </div>
+          <input type="hidden" id="schoolType">
+          <span class="field-err" id="typeErr" style="display:none;margin-top:6px">Please select a school type</span>
+        </div>
+        <div class="field">
+          <label>Ownership Type <span class="req">*</span></label>
+          <select id="schoolOwnership">
+            <option value="">-- Select ownership --</option>
+            <option value="Private">Private</option>
+            <option value="Government">Government / Public</option>
+            <option value="Mission">Mission / Church / Faith-Based</option>
+            <option value="Community">Community</option>
+          </select>
+          <span class="field-err">Please select ownership type</span>
+        </div>
+        <div class="field-grid field-grid-2">
+          <div class="field">
+            <label>Year Established</label>
+            <input type="number" id="schoolYear" placeholder="e.g. 2005" min="1800" max="2025">
+          </div>
+          <div class="field">
+            <label>Approx. No. of Students <span class="req">*</span></label>
+            <select id="schoolSize">
+              <option value="">-- Select range --</option>
+              <option value="<100">Less than 100</option>
+              <option value="100-300">100 – 300</option>
+              <option value="300-600">300 – 600</option>
+              <option value="600-1000">600 – 1,000</option>
+              <option value="1000+">Over 1,000</option>
+            </select>
+            <span class="field-err">Please select student count</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Official School Email</label>
+          <input type="email" id="schoolEmail" placeholder="info@yourschool.edu.ng">
+          <span class="field-hint">Optional — public contact email for the school</span>
+        </div>
+        <div class="field">
+          <label>School Website / Social Media</label>
+          <input type="url" id="schoolWebsite" placeholder="https://yourschool.ng or Facebook page URL">
+        </div>
+        <div class="field">
+          <label>Brief Description</label>
+          <textarea id="schoolDesc" rows="3" placeholder="Tell us a bit about your school's mission, programs, or anything else relevant…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 3: Location ── -->
+    <div class="step-panel" id="step3">
+      <div class="step-header">
+        <div class="step-tag">Step 3 of 4</div>
+        <h2 class="step-h">School Location</h2>
+        <p class="step-sub">Provide your school's physical address in Nigeria.</p>
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label>Street Address <span class="req">*</span></label>
+          <input type="text" id="schoolAddress" placeholder="e.g. 12 Adeola Odeku Street, Victoria Island">
+          <span class="field-err">Street address is required</span>
+        </div>
+        <div class="field">
+          <label>City / Town <span class="req">*</span></label>
+          <input type="text" id="schoolCity" placeholder="e.g. Abuja">
+          <span class="field-err">City is required</span>
+        </div>
+        <div class="field-grid field-grid-2">
+          <div class="field">
+            <label>State <span class="req">*</span></label>
+            <select id="schoolState">
+              <option value="">-- Select state --</option>
+              <option>Abia</option><option>Adamawa</option><option>Akwa Ibom</option>
+              <option>Anambra</option><option>Bauchi</option><option>Bayelsa</option>
+              <option>Benue</option><option>Borno</option><option>Cross River</option>
+              <option>Delta</option><option>Ebonyi</option><option>Edo</option>
+              <option>Ekiti</option><option>Enugu</option><option>FCT Abuja</option>
+              <option>Gombe</option><option>Imo</option><option>Jigawa</option>
+              <option>Kaduna</option><option>Kano</option><option>Katsina</option>
+              <option>Kebbi</option><option>Kogi</option><option>Kwara</option>
+              <option>Lagos</option><option>Nasarawa</option><option>Niger</option>
+              <option>Ogun</option><option>Ondo</option><option>Osun</option>
+              <option>Oyo</option><option>Plateau</option><option>Rivers</option>
+              <option>Sokoto</option><option>Taraba</option><option>Yobe</option>
+              <option>Zamfara</option>
+            </select>
+            <span class="field-err">Please select a state</span>
+          </div>
+          <div class="field">
+            <label>LGA <span class="req">*</span></label>
+            <input type="text" id="schoolLGA" placeholder="Enter your LGA">
+            <span class="field-err">LGA is required</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Postal Code / ZIP</label>
+          <input type="text" id="schoolPostal" placeholder="e.g. 900001">
+        </div>
+        <div class="field">
+          <label>How did you hear about EduTrack NG?</label>
+          <select id="referralSource">
+            <option value="">-- Select one --</option>
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Facebook">Facebook</option>
+            <option value="Instagram">Instagram</option>
+            <option value="Google">Google Search</option>
+            <option value="Colleague">Colleague / Another School</option>
+            <option value="Conference">Education Conference / Event</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Additional Notes</label>
+          <textarea id="additionalNotes" rows="2" placeholder="Any questions or special requirements?"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 4: Review ── -->
+    <div class="step-panel" id="step4">
+      <div class="step-header">
+        <div class="step-tag">Step 4 of 4</div>
+        <h2 class="step-h">Review & Submit</h2>
+        <p class="step-sub">Please review your information before submitting. You can go back to edit any section.</p>
+      </div>
+      <div class="review-grid" id="reviewContent"></div>
+
+      <div style="margin-top:24px">
+        <div class="terms-box">
+          <strong>Terms & Conditions Summary:</strong> By registering, you agree that the information provided is accurate and that your school will comply with EduTrack NG's fair-use policy. Student data is stored securely and never shared with third parties. Approval is subject to verification. EduTrack NG reserves the right to suspend accounts that violate usage terms.
+        </div>
+        <label class="terms-check">
+          <input type="checkbox" id="termsCheck">
+          <span>I confirm that all information is accurate and I agree to the <a href="#" onclick="return false">Terms of Service</a> and <a href="#" onclick="return false">Privacy Policy</a> of EduTrack NG.</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- ── SUCCESS ── -->
+    <div class="success-screen" id="successScreen">
+      <div class="success-icon">✅</div>
+      <h2 class="success-h">Application Submitted!</h2>
+      <p class="success-p">Your school registration has been received. Our team will review your application and reach out within <strong>24–48 hours</strong> with your login credentials.</p>
+      <div class="success-ref" id="successRef">REF: ...</div>
+      <div class="success-steps">
+        <div class="s-step">
+          <div class="s-step-n">📧</div>
+          <div>
+            <div class="s-step-t">Check your email</div>
+            <div class="s-step-p">A confirmation has been sent to your registered email</div>
+          </div>
+        </div>
+        <div class="s-step">
+          <div class="s-step-n">🔍</div>
+          <div>
+            <div class="s-step-t">Application under review</div>
+            <div class="s-step-p">EduTrack NG team verifies all school applications</div>
+          </div>
+        </div>
+        <div class="s-step">
+          <div class="s-step-n">🔑</div>
+          <div>
+            <div class="s-step-t">Credentials delivered</div>
+            <div class="s-step-p">You'll receive your login details within 24–48 hours</div>
+          </div>
+        </div>
+      </div>
+      <a href="index.html" class="btn-home">← Back to Homepage</a>
+    </div>
+
+    <!-- NAV BUTTONS -->
+    <div class="form-nav" id="formNav">
+      <button class="btn-prev" id="btnPrev" onclick="goPrev()" style="visibility:hidden">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back
+      </button>
+      <button class="btn-next" id="btnNext" onclick="goNext()">
+        Continue
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let currentStep = 1;
+const totalSteps = 4;
+let selectedType = '';
+
+// ── Supabase: use shared db from supabase.js ──
+// db is already initialized in js/supabase.js
+
+function selectType(card){
+  document.querySelectorAll('.type-card').forEach(c=>c.classList.remove('selected'));
+  card.classList.add('selected');
+  selectedType = card.dataset.val;
+  document.getElementById('schoolType').value = selectedType;
+  document.getElementById('typeErr').style.display = 'none';
+}
+
+function showToast(msg, duration=3500){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), duration);
+}
+
+function val(id){ return (document.getElementById(id)||{}).value?.trim()||''; }
+function field(id){ return document.getElementById(id); }
+function markErr(id, show=true){
+  const el = field(id);
+  if(!el) return;
+  if(show) el.classList.add('err'); else el.classList.remove('err');
+}
+
+function validateStep(step){
+  let ok = true;
+  const check = (id, test)=>{
+    const el = field(id); if(!el) return;
+    const pass = test(el.value.trim());
+    markErr(id, !pass);
+    if(!pass) ok = false;
+  };
+
+  if(step===1){
+    check('adminFirstName', v=>v.length>0);
+    check('adminLastName',  v=>v.length>0);
+    check('adminEmail',     v=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
+    check('adminPhone',     v=>v.length>=10);
+    check('adminRole',      v=>v.length>0);
+    check('adminPassword',  v=>v.length>=8);
+    const pw  = val('adminPassword');
+    const pw2 = val('adminPasswordConfirm');
+    if(pw !== pw2){ markErr('adminPasswordConfirm',true); ok=false; }
+    else markErr('adminPasswordConfirm',false);
+  } else if(step===2){
+    check('schoolName',      v=>v.length>0);
+    check('schoolOwnership', v=>v.length>0);
+    check('schoolSize',      v=>v.length>0);
+    if(!selectedType){ document.getElementById('typeErr').style.display='block'; ok=false; }
+  } else if(step===3){
+    check('schoolAddress', v=>v.length>0);
+    check('schoolCity',    v=>v.length>0);
+    check('schoolState',   v=>v.length>0);
+    check('schoolLGA',     v=>v.length>0);
+  }
+  return ok;
+}
+
+function updateSidebar(){
+  for(let i=1;i<=totalSteps;i++){
+    const el = document.getElementById('sn'+i);
+    if(i < currentStep) el.className='step-num done', el.textContent='✓';
+    else if(i===currentStep) el.className='step-num active', el.textContent=i;
+    else el.className='step-num', el.textContent=i;
+  }
+}
+
+function updateProgress(){
+  document.getElementById('progressBar').style.width = (currentStep/totalSteps*100)+'%';
+}
+
+function showStep(n){
+  document.querySelectorAll('.step-panel').forEach(p=>p.classList.remove('active'));
+  const panel = document.getElementById('step'+n);
+  if(panel) panel.classList.add('active');
+  const prev = document.getElementById('btnPrev');
+  prev.style.visibility = n>1 ? 'visible':'hidden';
+  const next = document.getElementById('btnNext');
+  if(n===totalSteps){
+    next.innerHTML = 'Submit Application <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+  } else {
+    next.innerHTML = 'Continue <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>';
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function buildReview(){
+  const typeLabels = {
+    primary:'Primary School',secondary:'Secondary School',both:'Primary & Secondary',
+    islamiyya:'Islamiyya / Tahfeez',vocational:'Vocational / Technical',other:'Other / Institute'
+  };
+  const html = `
+    <div class="review-section">
+      <div class="review-section-h">Admin Information <span class="review-edit" onclick="goToStep(1)">Edit</span></div>
+      <div class="review-rows">
+        <div class="review-row"><span class="review-key">Name</span><span class="review-val">${val('adminFirstName')} ${val('adminLastName')}</span></div>
+        <div class="review-row"><span class="review-key">Email</span><span class="review-val">${val('adminEmail')}</span></div>
+        <div class="review-row"><span class="review-key">Phone</span><span class="review-val">${val('adminPhone')}</span></div>
+        <div class="review-row"><span class="review-key">Role</span><span class="review-val">${val('adminRole')}</span></div>
+      </div>
+    </div>
+    <div class="review-section">
+      <div class="review-section-h">School Profile <span class="review-edit" onclick="goToStep(2)">Edit</span></div>
+      <div class="review-rows">
+        <div class="review-row"><span class="review-key">Name</span><span class="review-val">${val('schoolName')}</span></div>
+        <div class="review-row"><span class="review-key">Type</span><span class="review-val">${typeLabels[selectedType]||selectedType}</span></div>
+        <div class="review-row"><span class="review-key">Ownership</span><span class="review-val">${val('schoolOwnership')}</span></div>
+        <div class="review-row"><span class="review-key">Students</span><span class="review-val">${val('schoolSize')}</span></div>
+        ${val('schoolYear') ? `<div class="review-row"><span class="review-key">Est.</span><span class="review-val">${val('schoolYear')}</span></div>` : ''}
+      </div>
+    </div>
+    <div class="review-section">
+      <div class="review-section-h">Location <span class="review-edit" onclick="goToStep(3)">Edit</span></div>
+      <div class="review-rows">
+        <div class="review-row"><span class="review-key">Address</span><span class="review-val">${val('schoolAddress')}</span></div>
+        <div class="review-row"><span class="review-key">City</span><span class="review-val">${val('schoolCity')}</span></div>
+        <div class="review-row"><span class="review-key">LGA</span><span class="review-val">${val('schoolLGA')}</span></div>
+        <div class="review-row"><span class="review-key">State</span><span class="review-val">${val('schoolState')}</span></div>
+      </div>
+    </div>`;
+  document.getElementById('reviewContent').innerHTML = html;
+}
+
+function goToStep(n){
+  currentStep = n;
+  updateSidebar();
+  updateProgress();
+  showStep(n);
+}
+
+function goPrev(){
+  if(currentStep > 1) goToStep(currentStep-1);
+}
+
+async function goNext(){
+  if(!validateStep(currentStep)){
+    showToast('⚠️ Please fill in all required fields');
+    return;
+  }
+  if(currentStep < totalSteps){
+    if(currentStep === totalSteps - 1) buildReview();
+    goToStep(currentStep + 1);
+  } else {
+    // Submit
+    if(!document.getElementById('termsCheck').checked){
+      showToast('⚠️ Please accept the Terms & Conditions');
+      return;
+    }
+    await submitApplication();
+  }
+}
+
+async function submitApplication(){
+  const btn = document.getElementById('btnNext');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.textContent = 'Submitting…';
+
+  const payload = {
+    admin_first_name: val('adminFirstName'),
+    admin_last_name:  val('adminLastName'),
+    admin_email:      val('adminEmail'),
+    admin_phone:      val('adminPhone'),
+    admin_whatsapp:   val('adminWhatsApp'),
+    admin_role:       val('adminRole'),
+    school_name:      val('schoolName'),
+    school_type:      selectedType,
+    school_ownership: val('schoolOwnership'),
+    school_size:      val('schoolSize'),
+    school_year:      val('schoolYear')||null,
+    school_email:     val('schoolEmail'),
+    school_website:   val('schoolWebsite'),
+    school_desc:      val('schoolDesc'),
+    school_address:   val('schoolAddress'),
+    school_city:      val('schoolCity'),
+    school_state:     val('schoolState'),
+    school_lga:       val('schoolLGA'),
+    school_postal:    val('schoolPostal'),
+    referral_source:  val('referralSource'),
+    additional_notes: val('additionalNotes'),
+    status:           'pending',
+    submitted_at:     new Date().toISOString(),
+  };
+
+  try {
+    let refId = 'EDT-' + Date.now().toString(36).toUpperCase();
+
+    try {
+      const { data, error } = await db
+        .from('school_applications')
+        .insert([{ ...payload, ref_id: refId }])
+        .select();
+      if(error){
+        console.error('Supabase insert error:', JSON.stringify(error));
+        throw new Error(error.message || error.details || JSON.stringify(error));
+      }
+      if(data && data[0] && data[0].ref_id) refId = data[0].ref_id;
+    } catch(dbErr) {
+      // Re-throw so outer catch can handle it
+      throw dbErr;
+    }
+
+    // Show success
+    document.querySelectorAll('.step-panel').forEach(p=>p.classList.remove('active'));
+    document.getElementById('formNav').style.display = 'none';
+    document.getElementById('progressBar').style.width = '100%';
+    document.getElementById('successRef').textContent = 'REF: ' + refId;
+    document.getElementById('successScreen').classList.add('show');
+
+    // Update sidebar steps all done
+    for(let i=1;i<=4;i++){
+      const el = document.getElementById('sn'+i);
+      el.className='step-num done'; el.textContent='✓';
+    }
+
+  } catch(err){
+    console.error('🔴 EduTrack submission error:', err);
+    // Show the real error message to help diagnose
+    const msg = err?.message || err?.toString() || 'Unknown error';
+    showToast('❌ ' + msg, 6000);
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.innerHTML = 'Submit Application <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+  }
+}
+
+// Init
+updateSidebar();
+updateProgress();
+showStep(1);
+</script>
+
+<script src="js/ai-assistant.js" defer></script>
+</body>
+</html>

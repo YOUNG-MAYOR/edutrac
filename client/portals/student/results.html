@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>EduTrack NG — My Results</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    .grade-chip{display:inline-block;padding:3px 10px;border-radius:100px;font-size:12px;font-weight:700;}
+    .grade-chip.A1{background:#dcfce7;color:#16a34a;}
+    .grade-chip.B2,.grade-chip.B3{background:#dbeafe;color:#1d4ed8;}
+    .grade-chip.C4,.grade-chip.C5,.grade-chip.C6{background:#fef9c3;color:#854d0e;}
+    .grade-chip.D7,.grade-chip.E8{background:#fed7aa;color:#9a3412;}
+    .grade-chip.F9{background:#fee2e2;color:#991b1b;}
+    .subj-row{padding:13px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+    .subj-row:last-child{border-bottom:none;}
+    .subj-row:hover{background:var(--primary-light);}
+    .subj-row__name{flex:1;font-weight:600;font-size:14px;color:var(--ink);}
+    .subj-row__compulsory{font-size:10px;color:var(--danger);font-weight:700;margin-left:4px;}
+    .subj-row__scores{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+    .score-chip{background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;text-align:center;min-width:52px;}
+    .score-chip__label{font-size:9px;color:var(--ink-4);display:block;margin-bottom:1px;}
+    .total-chip{background:var(--ink);color:white;border-radius:6px;padding:6px 14px;font-size:14px;font-weight:800;min-width:60px;text-align:center;}
+    .pbar-wrap{width:70px;}
+    .combo-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#1a2e6e;color:#f0c040;}
+  </style>
+</head>
+<body>
+<div id="app">
+  <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px;font-family:sans-serif;color:#666;">
+    <div style="width:36px;height:36px;border:4px solid #e5e7eb;border-top-color:#0a6e3f;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+    <p style="margin:0;font-size:14px;">Loading results…</p>
+  </div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+  <script src="../../js/supabase.js"></script>
+<script src="layout.js"></script>
+<script>
+let ctx, gradingScale=[], allTerms=[], subjectMaps=null;
+
+(async()=>{
+  try {
+  ctx = await initStudentLayout('results','My Results');
+  if(!ctx) return;
+  const {session,student,term} = ctx;
+  const schoolId=session.school_id, studentId=session.id;
+
+  var initData, initErr;
+  try {
+    var ir = await db.rpc('get_student_results', {
+      p_student_id: session.id,
+      p_school_id:  session.school_id
+    });
+    initData = ir.data; initErr = ir.error;
+  } catch(ex) { initErr = { message: ex && ex.message || String(ex) }; }
+
+  if (initErr || !initData || !initData.ok) {
+    document.getElementById('pageBody').innerHTML =
+      '<p style="color:red;padding:2rem;">Failed to load results data. Please try again.<br><small style="color:#999;">' + (initErr && initErr.message || '') + '</small></p>';
+    return;
+  }
+
+  allTerms     = initData.terms   || [];
+  gradingScale = initData.grading || [];
+
+  subjectMaps = window._stuSubjectMaps || await loadStudentSubjectMaps(schoolId,ctx.classId,term&&term.id);
+
+  // ── Determine current term for default selection
+  const currentTerm = allTerms.find(t=>t.is_current) || allTerms[0] || null;
+
+  document.getElementById('pageBody').innerHTML=`
+    <div class="page-header"><h1 class="page-title">My Results</h1></div>
+
+    <!-- STEP 1: Select Term -->
+    <div id="termStep" style="max-width:420px;margin:40px auto;">
+      <div style="padding:24px;background:white;border-radius:14px;border:1px solid var(--border);box-shadow:0 4px 20px rgba(0,0,0,.08);">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+          <div style="width:42px;height:42px;background:var(--primary-light,#e6f4ed);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span></div>
+          <div>
+            <div style="font-size:16px;font-weight:800;color:var(--ink);">Select Term</div>
+            <div style="font-size:12px;color:var(--ink-3);">Choose the term you want to view results for</div>
+          </div>
+        </div>
+        <select id="gateTermSel" class="form-control" style="font-size:15px;font-weight:600;margin-bottom:6px;">
+          ${allTerms.map(t=>`<option value="${t.id}" ${t.is_current?'selected':''}>${t.name}${t.is_current?' (Current)':''}</option>`).join('')}
+        </select>
+        <div style="font-size:12px;color:var(--ink-3);margin-bottom:18px;">
+          <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Your scratch card PIN will be <strong>locked to this term</strong> once used. It cannot be used for a different term.
+        </div>
+        <button class="btn btn--primary btn--full" onclick="goToPinStep()">Continue →</button>
+      </div>
+      <!-- Step indicator -->
+      <div style="display:flex;align-items:center;gap:8px;margin-top:16px;padding:0 4px;">
+        <div style="width:24px;height:24px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;">1</div>
+        <div style="flex:1;height:2px;background:var(--border);"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:var(--border);color:var(--ink-3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;">2</div>
+        <div style="font-size:11px;color:var(--ink-3);margin-left:4px;">Select Term → Enter PIN</div>
+      </div>
+    </div>
+
+    <!-- STEP 2: PIN Gate (hidden until term chosen) -->
+    <div id="pinGate" style="max-width:420px;margin:40px auto;display:none;">
+      <!-- Selected term badge -->
+      <div id="termBadge" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--primary-light,#e6f4ed);border:1px solid var(--primary);border-radius:10px;margin-bottom:16px;">
+        <span style="font-size:16px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span></span>
+        <div style="flex:1;">
+          <div style="font-size:11px;color:var(--primary);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Checking Results For</div>
+          <div id="termBadgeName" style="font-size:14px;font-weight:800;color:var(--ink);"></div>
+        </div>
+        <button onclick="backToTermStep()" style="font-size:11px;color:var(--primary);background:none;border:none;cursor:pointer;font-weight:600;">Change</button>
+      </div>
+
+      <div style="padding:28px;background:white;border-radius:14px;border:1px solid var(--border);box-shadow:0 4px 20px rgba(0,0,0,.08);text-align:center;">
+        <div style="font-size:44px;margin-bottom:10px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><line x1="9" y1="12" x2="15" y2="12"/></svg></span></div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:6px;">Enter Scratch Card PIN</div>
+        <p style="font-size:13px;color:var(--ink-3);margin-bottom:16px;">Enter your school-issued scratch card PIN to view results for the selected term.</p>
+        <input type="text" id="sPinInput" class="form-control" maxlength="14"
+          style="font-family:var(--mono);font-size:22px;font-weight:700;letter-spacing:5px;text-align:center;margin-bottom:6px;"
+          placeholder="0000-0000-00" autofocus
+          oninput="formatPin(this)">
+        <div style="font-size:11px;color:var(--ink-3);margin-bottom:14px;">Each PIN allows up to <strong>3 checks</strong>. One check per view. Locked to one term.</div>
+        <button class="btn btn--primary btn--full" onclick="verifyPin()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg></span> View My Results</button>
+        <div id="sPinErr" style="margin-top:10px;font-size:13px;color:var(--danger);display:none;"></div>
+      </div>
+
+      <!-- Step indicator -->
+      <div style="display:flex;align-items:center;gap:8px;margin-top:16px;padding:0 4px;">
+        <div style="width:24px;height:24px;border-radius:50%;background:#d1fae5;color:#065f46;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+        <div style="flex:1;height:2px;background:var(--primary);"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:var(--primary);color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;">2</div>
+        <div style="font-size:11px;color:var(--ink-3);margin-left:4px;">Select Term → Enter PIN</div>
+      </div>
+    </div>
+
+    <div id="resultsBody" style="display:none;"></div>
+  `;
+
+  // Store selected termId globally for verifyPin to read
+  window._selectedGateTermId = currentTerm ? currentTerm.id : null;
+  } catch(err) {
+    var el = document.getElementById('pageBody') || document.getElementById('app');
+    if (el) el.innerHTML = '<div style="padding:2rem;color:red;font-family:sans-serif;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Results failed to load. <a href="login.html">Log in again</a>.<br><small>' + (err && err.message || '') + '</small></div>';
+    console.error('[EduTrack] Results error:', err);
+  }
+})();
+
+function formatPin(inp){
+  let v=inp.value.replace(/\D/g,'');
+  if(v.length>4) v=v.slice(0,4)+'-'+v.slice(4);
+  if(v.length>9) v=v.slice(0,9)+'-'+v.slice(9);
+  inp.value=v.slice(0,14);
+}
+
+function goToPinStep(){
+  const sel = document.getElementById('gateTermSel');
+  if(!sel||!sel.value){alert('Please select a term first.');return;}
+  window._selectedGateTermId = sel.value;
+  const termName = sel.options[sel.selectedIndex].text;
+  document.getElementById('termBadgeName').textContent = termName;
+  document.getElementById('termStep').style.display='none';
+  document.getElementById('pinGate').style.display='block';
+  setTimeout(()=>document.getElementById('sPinInput')?.focus(),100);
+}
+
+function backToTermStep(){
+  document.getElementById('pinGate').style.display='none';
+  document.getElementById('termStep').style.display='block';
+  document.getElementById('sPinInput').value='';
+  document.getElementById('sPinErr').style.display='none';
+}
+
+async function verifyPin(){
+  // Strip ALL non-digits — DB stores raw 10-digit strings e.g. "9609942663" NOT "9609-9426-63"
+  const raw=(document.getElementById('sPinInput')?.value||'').replace(/\D/g,'');
+  const errEl=document.getElementById('sPinErr');
+  errEl.style.display='none';
+  if(!raw||raw.length<10){errEl.textContent='PIN must be 10 digits (XXXX-XXXX-XX).';errEl.style.display='block';return;}
+
+  // Term must have been selected in step 1
+  const chosenTermId = window._selectedGateTermId;
+  if(!chosenTermId){errEl.textContent='Please go back and select a term first.';errEl.style.display='block';return;}
+
+  const btn=document.querySelector('#pinGate .btn--primary');
+  btn.textContent='Verifying…';btn.disabled=true;
+
+  const {data:result,error} = await db.rpc('use_scratch_card',{
+    p_pin:        raw,             // raw digits — matches DB storage format
+    p_school_id:  ctx.session.school_id,
+    p_card_type:  'result',
+    p_student_id: ctx.session.id,
+    p_term_id:    chosenTermId     // lock card to the chosen term
+  });
+  btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg></span> View My Results';btn.disabled=false;
+  if(error||result?.error){errEl.textContent=(result&&result.error)||(error&&error.message)||'Invalid PIN. Please check and try again.';errEl.style.display='block';return;}
+
+  // Determine final term (RPC may return the locked term_id)
+  const finalTermId = result.term_id || chosenTermId;
+  const termObj = allTerms.find(t=>t.id===finalTermId) || allTerms.find(t=>t.is_current) || allTerms[0];
+
+  document.getElementById('pinGate').style.display='none';
+  document.getElementById('resultsBody').style.display='block';
+
+  const usesLeft=result.uses_left||0;
+  const banner = result.now_expired
+    ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#991b1b;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ <strong>Scratch card expired</strong> — all ${result.max_uses} checks used. Contact admin for a new card.</div>`
+    : `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:9px 14px;margin-bottom:16px;font-size:13px;color:#166534;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Viewing results for <strong>${termObj?.name||'selected term'}</strong>. <strong>${usesLeft}</strong> check${usesLeft!==1?'s':''} remaining on this card.</div>`;
+
+  document.getElementById('resultsBody').innerHTML=`
+    ${banner}
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+      <select class="form-control" id="termSel" style="max-width:220px;" disabled title="Term is locked to this card. Use a new card to view a different term.">
+        ${allTerms.map(t=>`<option value="${t.id}" ${t.id===finalTermId?'selected':''}>${t.name}${t.is_current?' (Current)':''}</option>`).join('')}
+      </select>
+      <span style="font-size:11px;color:var(--ink-3);"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Term locked to this card</span>
+      <a id="rcLink" href="../../report-card/index.html?student=${ctx.session.id}&term=${finalTermId}" target="_blank" class="btn btn--secondary btn--sm"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>️ Report Card</a>
+    </div>
+    <div id="subjectResults"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span></div><p>Loading…</p></div></div>
+  `;
+  loadResults(finalTermId);
+}
+
+async function loadResults(forcedTermId){
+  const termId=forcedTermId||document.getElementById('termSel')?.value;
+  if(!termId) return;
+  const link=document.getElementById('rcLink');
+  if(link) link.href=`../../report-card/index.html?student=${ctx.session.id}&term=${termId}`;
+  showLoader('#subjectResults','Loading your results…');
+
+  const studentId=ctx.session.id;
+  const student=ctx.student;
+  const enrollment = student?.enrollments?.find(e=>e.term_id===termId)||student?.enrollments?.[0];
+  const classId=enrollment?.class_id||ctx.classId;
+  const comboId=student?.combination_id||enrollment?.classes?.combination_id;
+  const section=((enrollment?.classes?.section||enrollment?.classes?.level||'')).toUpperCase();
+
+  // Load results + class info via RPC
+  var res, resErr;
+  try {
+    var rr = await db.rpc('get_student_results', {
+      p_student_id: ctx.session.id,
+      p_school_id:  ctx.session.school_id,
+      p_term_id:    termId
+    });
+    res = rr.data; resErr = rr.error;
+  } catch(ex) { resErr = { message: ex && ex.message || String(ex) }; }
+
+  if (resErr || !res || !res.ok) {
+    showEmpty('#subjectResults', 'Failed to load results for this term.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️');
+    return;
+  }
+
+  const results   = res.results || [];
+  const classInfo = res.class   || null;
+
+  if(!results?.length){showEmpty('#subjectResults','No results published yet for this term.','<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span>');return;}
+
+  // Re-load subject maps for this term if classId changed
+  if(classId && (!subjectMaps||(classId!==ctx.classId))){
+    subjectMaps = await loadStudentSubjectMaps(ctx.session.school_id,classId,termId);
+  }
+
+  // Resolve assigned subjects
+  let assignedSubjects=null;
+  const resolvedSection=section||(classInfo?.section||classInfo?.level||'').toUpperCase();
+  if(resolvedSection.includes('SENIOR')){
+    const useCombo=comboId||(classInfo&&classInfo.combination_id);
+    if(useCombo&&subjectMaps?.comboSubjectMap[useCombo]?.length){
+      assignedSubjects=subjectMaps.comboSubjectMap[useCombo];
+    }
+  } else if(classId&&subjectMaps?.classSubjectMap[classId]?.length){
+    assignedSubjects=subjectMaps.classSubjectMap[classId];
+  }
+
+  // Build score map
+  const scoreMap={};
+  (results||[]).forEach(r=>{
+    if(!scoreMap[r.subject_id])scoreMap[r.subject_id]={rows:[]};
+    scoreMap[r.subject_id].rows.push(r);
+  });
+
+  // Get unique exams
+  const examMap={};
+  (results||[]).forEach(r=>{if(r.exams)examMap[r.exams.id]=r.exams;});
+  const exams=Object.values(examMap).sort((a,b)=>a.name.localeCompare(b.name));
+
+  // Subject list to display
+  let displaySubjects;
+  if(assignedSubjects?.length){
+    displaySubjects=assignedSubjects.filter(s=>scoreMap[s.id]);
+    // Also add any subjects with scores that aren't in the combo (shouldn't happen but safe fallback)
+    Object.keys(scoreMap).forEach(sid=>{
+      if(!displaySubjects.find(s=>s.id===sid)){
+        const sub=results.find(r=>r.subject_id===sid)?.subjects;
+        if(sub) displaySubjects.push(sub);
+      }
+    });
+  } else {
+    // Fallback: all subjects that have scores
+    const seen={};
+    displaySubjects=[];
+    (results||[]).forEach(r=>{
+      if(r.subjects&&!seen[r.subjects.id]){seen[r.subjects.id]=true;displaySubjects.push(r.subjects);}
+    });
+  }
+  displaySubjects.sort((a,b)=>a.name.localeCompare(b.name));
+
+  if(!displaySubjects.length){showEmpty('#subjectResults','No results found for this term.','<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span>');return;}
+
+  // Compute per-subject totals
+  let grandSum=0, subCount=0, passCount=0, failCount=0;
+  const subjectRows=displaySubjects.map(sub=>{
+    const rows=scoreMap[sub.id]?.rows||[];
+    const tw=rows.reduce((s,r)=>s+(r.exams?.weight||1),0);
+    const ws=rows.reduce((s,r)=>s+(r.score/(r.exams?.max_score||100))*100*(r.exams?.weight||1),0);
+    const total=tw>0?Math.round(ws/tw*10)/10:null;
+    const gObj=total!==null?gradeFromScale(total,gradingScale):{grade:'—',remark:'—'};
+    if(total!==null){grandSum+=total;subCount++;if(total>=40)passCount++;else failCount++;}
+    return {sub,rows,total,gObj,exams};
+  });
+  const overall=subCount?Math.round(grandSum/subCount*10)/10:null;
+  const oGrade=overall!==null?gradeFromScale(overall,gradingScale):{grade:'—',remark:'—'};
+  const oColor=overall!==null?(overall>=60?'var(--success)':overall>=40?'var(--warning)':'var(--danger)'):'var(--ink-3)';
+  const comboName=comboId&&subjectMaps?.comboNameMap?.[comboId];
+
+  document.getElementById('subjectResults').innerHTML=`
+    <!-- Summary header -->
+    <div class="card" style="margin-bottom:18px;background:var(--ink);color:white;border:none;">
+      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+        <div class="avatar avatar--lg" style="background:var(--primary);font-size:22px;">${ctx.session.full_name.charAt(0)}</div>
+        <div style="flex:1;">
+          <div style="font-size:18px;font-weight:800;">${ctx.session.full_name}</div>
+          <div style="font-size:12px;color:#9ca3af;margin-top:2px;">
+            ${classInfo?.name||enrollment?.classes?.name||'—'} 
+            ${resolvedSection?'· '+resolvedSection+' SECTION':''}
+            ${comboName?`<span style="background:rgba(255,255,255,.15);color:#f0c040;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:5px;">${comboName}</span>`:''}
+          </div>
+          <div style="margin-top:6px;display:flex;gap:12px;flex-wrap:wrap;">
+            <span style="font-size:12px;color:#9ca3af;">Subjects: <strong style="color:white;">${subCount}</strong></span>
+            <span style="font-size:12px;color:#9ca3af;">Passed: <strong style="color:#4ade80;">${passCount}</strong></span>
+            <span style="font-size:12px;color:#9ca3af;">Failed: <strong style="color:#f87171;">${failCount}</strong></span>
+          </div>
+        </div>
+        ${overall!==null?`
+        <div style="text-align:center;background:rgba(255,255,255,.1);padding:14px 20px;border-radius:var(--radius);border:1px solid rgba(255,255,255,.15);">
+          <div style="font-size:36px;font-weight:900;color:#f0c040;">${overall}%</div>
+          <div style="font-size:18px;font-weight:800;">${oGrade.grade}</div>
+          <div style="font-size:11px;color:#9ca3af;">${oGrade.remark}</div>
+        </div>`:''}
+      </div>
+    </div>
+
+    <!-- Subject breakdown -->
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div style="background:var(--surface-2);padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:13px;font-weight:700;">Subject Breakdown</span>
+        <span style="font-size:12px;color:var(--ink-3);">${exams.map(e=>e.name+' /'+e.max_score).join(' · ')}</span>
+      </div>
+      ${subjectRows.map(({sub,rows,total,gObj})=>{
+        const barColor=total===null?'#e5e7eb':total>=70?'#22c55e':total>=50?'#f59e0b':'#ef4444';
+        const isCompulsory=sub.is_compulsory;
+        return `
+          <div class="subj-row">
+            <div class="subj-row__name">
+              ${sub.name}${isCompulsory?'<span class="subj-row__compulsory">*</span>':''}
+            </div>
+            <div class="subj-row__scores">
+              ${exams.map(e=>{
+                const row=rows.find(r=>r.exams?.id===e.id);
+                return `<div class="score-chip"><span class="score-chip__label">${e.name}</span>${row?row.score:'—'}</div>`;
+              }).join('')}
+              <div class="total-chip" style="background:${total!==null?(total>=50?'#16a34a':total>=40?'#d97706':'#dc2626'):'#6b7280'};">
+                ${total!==null?total:'—'}
+              </div>
+              <span class="grade-chip ${gObj.grade}">${gObj.grade}</span>
+            </div>
+            <div class="pbar-wrap" style="width:60px;">
+              <div style="height:5px;background:var(--surface-3);border-radius:100px;overflow:hidden;margin-top:2px;">
+                <div style="height:100%;width:${total?Math.min(100,total)+'%':'0%'};background:${barColor};border-radius:100px;"></div>
+              </div>
+            </div>
+          </div>`;
+      }).join('')}
+      <!-- Overall row -->
+      <div style="background:var(--surface-2);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--border);">
+        <span style="font-weight:700;font-size:14px;">Overall Average</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:22px;font-weight:900;color:${oColor};">${overall!==null?overall+'%':'—'}</span>
+          <span class="grade-chip ${oGrade.grade}" style="font-size:14px;">${oGrade.grade}</span>
+          <span style="font-size:12px;color:var(--ink-3);">${oGrade.remark}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grading key -->
+    ${gradingScale.length?`
+    <div style="margin-top:12px;padding:12px 16px;background:var(--surface-3);border-radius:var(--radius-sm);font-size:12px;display:flex;flex-wrap:wrap;gap:8px;">
+      <strong>Grading Scale:</strong>
+      ${gradingScale.map(g=>`<span><strong>${g.grade}</strong> ${g.min_score}–${g.max_score} (${g.remark})</span>`).join(' · ')}
+    </div>`:''}
+  `;
+}
+</script>
+<script src="../../js/pwa.js"></script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

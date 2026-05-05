@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>EduTrack NG — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --G:#0a6e3f;--G2:#07512e;--G3:#12a05a;--GL:#e6f4ed;--GL2:#c8e8d6;
+      --AU:#f0a500;--AUL:#fff8e6;
+      --INK:#080c10;--INK2:#0f1820;
+      --T2:#3a5245;--T3:#7a9488;--BD:#dde4e8;--S:#f4f7f5;
+      --H:'Plus Jakarta Sans',system-ui,sans-serif;
+      --B:'DM Sans',system-ui,sans-serif;
+      --radius:14px;--radius-sm:10px;--transition:all .18s ease;
+    }
+    html,body{height:100%;font-family:var(--B);-webkit-font-smoothing:antialiased;}
+    body{display:flex;min-height:100vh;background:var(--INK2);}
+
+    /* Left pane */
+    .l-pane{flex:1;display:flex;flex-direction:column;padding:48px 56px;position:relative;overflow:hidden;
+      background-image: linear-gradient(rgba(5,10,8,0.62), rgba(7,20,14,0.72)), url('icons/student_2.jpg');
+      background-size: cover;
+      background-position: center top;
+    }
+    .l-pane::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 70% at 20% 80%,rgba(10,110,63,.22) 0%,transparent 60%),radial-gradient(ellipse 60% 50% at 80% 20%,rgba(240,165,0,.08) 0%,transparent 55%);}
+    .l-dots{position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(circle,rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px;mask-image:radial-gradient(ellipse 80% 80% at 30% 70%,black 10%,transparent 85%);}
+    .l-top{position:relative;z-index:1;display:flex;align-items:center;gap:11px;}
+    .l-logo{width:42px;height:42px;border-radius:11px;background:white;padding:3px;overflow:hidden;flex-shrink:0;}
+    .l-logo img{width:100%;height:100%;object-fit:cover;border-radius:8px;}
+    .l-brand{font-family:var(--H);font-size:19px;font-weight:800;color:white;}
+    .l-brand em{color:var(--AU);font-style:normal;}
+    .l-body{flex:1;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:1;max-width:400px;}
+    .l-eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(10,110,63,.15);border:1px solid rgba(10,110,63,.4);padding:5px 14px 5px 10px;border-radius:100px;font-size:12px;font-weight:700;color:#6ee7a7;margin-bottom:24px;width:fit-content;}
+    .l-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;animation:pulse 2.2s ease-in-out infinite;}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.5)}}
+    .l-h{font-family:var(--H);font-size:clamp(26px,3.2vw,42px);font-weight:900;color:white;line-height:1.08;letter-spacing:-1.5px;margin-bottom:16px;}
+    .l-h .au{color:var(--AU);}
+    .l-p{font-size:14px;color:rgba(255,255,255,.42);line-height:1.75;margin-bottom:32px;}
+    .portals-list{display:flex;flex-direction:column;gap:9px;}
+    .portal-item{display:flex;align-items:center;gap:12px;padding:11px 15px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.025);transition:var(--transition);}
+    .portal-item:hover{background:rgba(255,255,255,.04);border-color:rgba(10,110,63,.3);}
+    .pi-ico{width:34px;height:34px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;}
+    .pi-ico.admin{background:rgba(10,110,63,.2);}
+    .pi-ico.teacher{background:rgba(59,130,246,.15);}
+    .pi-ico.parent{background:rgba(240,165,0,.15);}
+    .pi-ico.exam{background:rgba(168,85,247,.15);}
+    .pi-text h4{font-family:var(--H);font-size:12px;font-weight:700;color:white;margin-bottom:1px;}
+    .pi-text p{font-size:10px;color:rgba(255,255,255,.32);}
+    .l-bottom{position:relative;z-index:1;font-size:12px;color:rgba(255,255,255,.2);margin-top:32px;}
+    .l-bottom a{color:rgba(255,255,255,.38);text-decoration:none;transition:color .15s;}
+    .l-bottom a:hover{color:white;}
+    .flag-stripe{position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--G) 33.33%,rgba(255,255,255,.6) 33.33%,rgba(255,255,255,.6) 66.66%,var(--G) 66.66%);}
+
+    /* Right pane */
+    .r-pane{width:480px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px;background:var(--S);}
+    .r-inner{width:100%;max-width:380px;}
+    .r-title{font-family:var(--H);font-size:26px;font-weight:800;color:var(--INK);letter-spacing:-.5px;margin-bottom:6px;}
+    .r-sub{font-size:14px;color:var(--T3);margin-bottom:28px;line-height:1.6;}
+    .form-grp{margin-bottom:16px;}
+    .form-lbl{display:block;font-size:13px;font-weight:600;color:var(--T2);margin-bottom:6px;}
+    .form-lbl .req{color:#ef4444;margin-left:2px;}
+    .form-ctrl{width:100%;padding:11px 14px;border:1.5px solid var(--BD);border-radius:var(--radius-sm);background:white;font-family:var(--B);font-size:14px;color:var(--INK);transition:var(--transition);outline:none;}
+    .form-ctrl::placeholder{color:var(--T3);}
+    .form-ctrl:focus{border-color:var(--G);box-shadow:0 0 0 3px rgba(10,110,63,.1);}
+    .pwd-wrap{position:relative;}
+    .pwd-toggle{position:absolute;right:11px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--T3);font-size:14px;padding:4px;transition:color .15s;}
+    .pwd-toggle:hover{color:var(--G);}
+    .form-err{background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius-sm);color:#b91c1c;font-size:13px;padding:10px 14px;margin-bottom:14px;display:none;line-height:1.5;}
+    .btn-sign-in{width:100%;padding:13px;border-radius:var(--radius-sm);background:var(--G);color:white;font-family:var(--H);font-size:15px;font-weight:700;border:none;cursor:pointer;position:relative;overflow:hidden;transition:all .22s;margin-top:4px;}
+    .btn-sign-in::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.15),transparent);pointer-events:none;}
+    .btn-sign-in:hover:not(:disabled){background:var(--G3);transform:translateY(-1px);box-shadow:0 8px 24px rgba(10,110,63,.35);}
+    .btn-sign-in:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+    .demo-section{margin-top:22px;padding-top:20px;border-top:1px solid var(--BD);}
+    .demo-label{font-size:11px;font-weight:700;color:var(--T3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;}
+    .demo-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+    .demo-btn{padding:9px 12px;background:white;border:1.5px solid var(--BD);border-radius:var(--radius-sm);cursor:pointer;text-align:left;font-family:var(--B);transition:var(--transition);}
+    .demo-btn:hover{background:var(--GL);border-color:var(--G);}
+    .demo-btn strong{display:block;font-size:12px;font-weight:700;color:var(--G);}
+    .demo-btn span{font-size:10px;color:var(--T3);}
+    .student-link{margin-top:16px;padding:13px 15px;border-radius:var(--radius-sm);background:var(--AUL);border:1px solid #fde68a;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+    .student-link p{font-size:12px;color:#78350f;line-height:1.5;}
+    .student-link p strong{font-weight:700;display:block;font-size:13px;}
+    .student-link a{flex-shrink:0;padding:8px 13px;border-radius:8px;background:var(--AU);color:white;font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;transition:var(--transition);}
+    .student-link a:hover{background:#d97706;}
+    .result-link{margin-top:10px;padding:13px 15px;border-radius:var(--radius-sm);background:#eff6ff;border:1px solid #bfdbfe;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+    .result-link p{font-size:12px;color:#1e3a5f;line-height:1.5;}
+    .result-link p strong{font-weight:700;display:block;font-size:13px;}
+    .result-link a{flex-shrink:0;padding:8px 13px;border-radius:8px;background:#2563eb;color:white;font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;transition:var(--transition);}
+    .result-link a:hover{background:#1d4ed8;}
+    .r-footer{margin-top:24px;font-size:12px;color:var(--T3);text-align:center;}
+    .r-footer a{color:var(--G);font-weight:600;text-decoration:none;}
+    .r-footer a:hover{text-decoration:underline;}
+
+    /* Floating demo button */
+    .demo-float-btn{position:fixed;top:22px;right:24px;z-index:1000;display:flex;align-items:center;gap:9px;background:var(--G);color:white;padding:11px 20px;border-radius:50px;box-shadow:0 4px 20px rgba(10,110,63,.30);border:none;font-family:var(--H);font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;}
+    .demo-float-btn:hover{background:var(--G3);transform:translateY(-2px);box-shadow:0 8px 28px rgba(10,110,63,.38);}
+    .demo-float-btn svg{width:16px;height:16px;}
+    /* Demo modal overlay */
+    .demo-modal-overlay{display:none;position:fixed;inset:0;z-index:2000;background:rgba(8,12,16,.42);align-items:center;justify-content:center;}
+    .demo-modal-overlay.open{display:flex;}
+    .demo-modal-box{background:white;width:90vw;max-width:340px;padding:26px 22px 20px;border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.18);position:relative;}
+    .demo-modal-title{font-size:11px;font-weight:800;color:var(--T3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px;display:flex;align-items:center;gap:7px;}
+    .demo-modal-close{position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;color:var(--T3);cursor:pointer;line-height:1;padding:2px 6px;border-radius:6px;transition:background .15s;}
+    .demo-modal-close:hover{background:var(--GL);color:var(--G);}
+    @media(max-width:860px){.demo-float-btn{top:14px;right:14px;padding:9px 15px;font-size:13px;}}
+
+    @media(max-width:860px){.l-pane{display:none;}.r-pane{width:100%;padding:36px 24px;background:white;}body{background:white;}}
+    @media(max-width:480px){.demo-grid{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+  <!-- Left Pane -->
+  <div class="l-pane">
+    <div class="l-dots"></div>
+    <div class="l-top">
+      <div class="l-logo">
+        <img src="images/logo.jpg" alt="EduTrack NG" onerror="this.parentElement.style.background='#0a6e3f';this.parentElement.innerHTML='<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>'">
+      </div>
+      <div class="l-brand">EduTrack <em>NG</em></div>
+    </div>
+    <div class="l-body">
+      <div class="l-eyebrow"><span class="l-dot"></span>Nigerian School Management</div>
+      <h1 class="l-h">School admin,<br>simplified<br>for <span class="au">Nigeria</span></h1>
+      <p class="l-p">One platform, four powerful portals. Every user sees exactly what they need — with full Nigerian grading (A1–F9) and Naira fee tracking.</p>
+      <div class="portals-list">
+        <div class="portal-item"><div class="pi-ico admin"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>️</div><div class="pi-text"><h4>Administrator</h4><p>Full school management — students, staff, fees, results</p></div></div>
+        <div class="portal-item"><div class="pi-ico teacher"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span></div><div class="pi-text"><h4>Teacher Portal</h4><p>Attendance, scores & timetable for assigned classes</p></div></div>
+        <div class="portal-item"><div class="pi-ico parent"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span></div><div class="pi-text"><h4>Parent Portal</h4><p>Track child's results, attendance and fee balance</p></div></div>
+        <div class="portal-item"><div class="pi-ico exam"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span></div><div class="pi-text"><h4>Exam Officer</h4><p>Manage exams, enter scores, publish report cards</p></div></div>
+      </div>
+    </div>
+    <div class="l-bottom">
+      <p>© 2025 EduTrack NG &nbsp;·&nbsp;<a href="index.html">Home</a> &nbsp;·&nbsp;<a href="index.html#pricing">Pricing</a></p>
+    </div>
+    <div class="flag-stripe"></div>
+  </div>
+
+  <!-- Right Pane (Form) -->
+  <div class="r-pane">
+    <div class="r-inner">
+      <!-- Tabs -->
+      <div style="display:flex;gap:0;margin-bottom:24px;border-bottom:2px solid var(--BD);">
+        <button id="tabLogin" onclick="switchTab('login')" style="flex:1;padding:10px;background:none;border:none;cursor:pointer;font-family:var(--H);font-size:13px;font-weight:700;color:var(--G);border-bottom:2px solid var(--G);margin-bottom:-2px;">Sign In</button>
+        <button id="tabReg" onclick="switchTab('register')" style="flex:1;padding:10px;background:none;border:none;cursor:pointer;font-family:var(--H);font-size:13px;font-weight:600;color:var(--T3);border-bottom:2px solid transparent;margin-bottom:-2px;position:relative;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span> Student Registration <span style="font-size:9px;font-weight:800;background:#16a34a;color:white;padding:1px 5px;border-radius:10px;vertical-align:middle;margin-left:3px;">NEW</span></button>
+      </div>
+
+      <!-- LOGIN PANEL -->
+      <div id="loginPanel">
+      <h2 class="r-title" style="margin-bottom:4px;">Welcome back</h2>
+      <p class="r-sub">Sign in to your school portal. Students use the student portal link below.</p>
+      <div class="form-err" id="loginError"></div>
+
+      <div class="form-grp">
+        <label class="form-lbl">Email Address <span class="req">*</span></label>
+        <input type="email" id="email" class="form-ctrl" placeholder="you@school.edu.ng" required autocomplete="username">
+      </div>
+      <div class="form-grp">
+        <label class="form-lbl">Password <span class="req">*</span></label>
+        <div class="pwd-wrap">
+          <input type="password" id="password" class="form-ctrl" placeholder="Enter your password" required autocomplete="current-password">
+          <button type="button" class="pwd-toggle" id="pwdToggle" title="Toggle password"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span></button>
+        </div>
+      </div>
+
+      <button class="btn-sign-in" id="loginBtn" onclick="doLogin()">Sign In to Portal →</button>
+
+
+
+      <div class="student-link">
+        <p><strong>Are you a student?</strong>Use your Admission No. + PIN to log in at the student portal.</p>
+        <a href="portals/student/login.html">Student Login →</a>
+      </div>
+
+      <!-- Apply Now — New student registration -->
+      <div style="margin-top:10px;padding:14px 15px;border-radius:var(--radius-sm);background:linear-gradient(135deg,#052e16,#14532d);border:1px solid rgba(74,222,128,.2);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div>
+          <div style="font-size:13px;font-weight:800;color:#4ade80;margin-bottom:2px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span> New Student?</div>
+          <p style="font-size:11px;color:rgba(255,255,255,.55);line-height:1.5;margin:0;">Register with your school-issued scratch card PIN.</p>
+        </div>
+        <button onclick="switchTab('register')" style="flex-shrink:0;padding:9px 15px;border-radius:8px;background:#16a34a;color:white;font-size:12px;font-weight:800;border:none;cursor:pointer;white-space:nowrap;transition:all .18s;font-family:var(--H);"
+          onmouseover="this.style.background='#15803d'" onmouseout="this.style.background='#16a34a'">Apply Now →</button>
+      </div>
+
+      <div class="result-link">
+        <p><strong><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> Check Term Result</strong>Use your scratch card PIN to view a published result.</p>
+        <a href="portals/parent/result-checker.html">Check Result →</a>
+      </div>
+      </div><!-- /loginPanel -->
+
+      <!-- REGISTRATION PANEL -->
+      <div id="regPanel" style="display:none;">
+        <h2 class="r-title" style="margin-bottom:4px;">Student Registration</h2>
+        <p class="r-sub">Enter your school-issued scratch card PIN to begin enrollment.</p>
+        <div class="form-err" id="regError"></div>
+
+        <div id="regStep1">
+          <div class="form-grp">
+            <label class="form-lbl">School <span class="req">*</span></label>
+            <select id="regSchool" class="form-ctrl"><option value="">Loading schools…</option></select>
+          </div>
+          <div class="form-grp">
+            <label class="form-lbl">Scratch Card PIN <span class="req">*</span></label>
+            <input type="text" id="regPin" class="form-ctrl" placeholder="Enter 10-digit PIN"
+              maxlength="12" style="font-family:monospace;font-size:18px;letter-spacing:4px;text-align:center;"
+              oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+            <div style="font-size:11px;color:var(--T3);margin-top:4px;">You must have a school-issued scratch card to register.</div>
+          </div>
+          <button class="btn-sign-in" onclick="verifyRegPin()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg></span> Verify PIN &amp; Continue</button>
+        </div>
+
+        <div id="regStep2" style="display:none;">
+          <div style="background:#e6f4ed;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:13px;color:#166534;margin-bottom:14px;">
+            <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> PIN verified! Fill in your details below.
+          </div>
+
+          <!-- Passport — COMPULSORY -->
+          <div class="form-grp">
+            <label class="form-lbl">Passport Photo <span class="req">*</span></label>
+            <div id="photoPreviewWrap" onclick="document.getElementById('regPassport').click()"
+              style="width:90px;height:110px;border:2px dashed var(--BD);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;margin-bottom:8px;background:#f9fafb;">
+              <span id="photoPlaceholder" style="font-size:32px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span></span>
+            </div>
+            <input type="file" id="regPassport" accept="image/*" style="display:none;" onchange="previewPassport()">
+            <div style="font-size:11px;color:var(--T3);">Photo appears on ID card &amp; report card. Max 2MB.</div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-grp"><label class="form-lbl">Full Name <span class="req">*</span></label><input type="text" id="regName" class="form-ctrl" placeholder="Surname First"></div>
+            <div class="form-grp"><label class="form-lbl">Admission No. <span class="req">*</span></label><input type="text" id="regAdmNo" class="form-ctrl" placeholder="2025/001"></div>
+            <div class="form-grp"><label class="form-lbl">Gender <span class="req">*</span></label>
+              <select id="regGender" class="form-ctrl"><option value="">Select…</option><option value="M">Male</option><option value="F">Female</option></select>
+            </div>
+            <div class="form-grp"><label class="form-lbl">Date of Birth</label><input type="date" id="regDOB" class="form-ctrl"></div>
+          </div>
+          <div class="form-grp"><label class="form-lbl">Parent Phone <span class="req">*</span></label><input type="tel" id="regParentPhone" class="form-ctrl" placeholder="08012345678"></div>
+          <div class="form-grp"><label class="form-lbl">Parent Name</label><input type="text" id="regParentName" class="form-ctrl" placeholder="Parent full name"></div>
+          <div class="form-grp"><label class="form-lbl">Class</label>
+            <select id="regClass" class="form-ctrl"><option value="">Select class…</option></select>
+          </div>
+          <input type="hidden" id="regVerifiedPin">
+          <input type="hidden" id="regSchoolId">
+          <button class="btn-sign-in" style="margin-top:6px;" onclick="submitRegistration()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Submit Registration</button>
+          <button type="button" onclick="document.getElementById('regStep2').style.display='none';document.getElementById('regStep1').style.display='';"
+            style="width:100%;margin-top:8px;padding:10px;border:1.5px solid var(--BD);border-radius:var(--radius-sm);background:white;cursor:pointer;font-size:13px;font-weight:600;color:var(--T3);">← Back</button>
+        </div>
+      </div><!-- /regPanel -->
+
+      <div class="r-footer">
+        <a href="index.html">← Back to homepage</a> &nbsp;·&nbsp; <a href="saas-console/login.html">Platform Admin</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+  <script src="js/config.js"></script>
+  <script src="js/supabase.js"></script>
+  <script>
+    (async () => {
+      const session = await getSession();
+      if (session) { const user = await getCurrentUser(); if (user) redirectByRole(user.role); }
+    })();
+
+    function redirectByRole(role) {
+      const routes = {
+        admin:        'admin/index.html',
+        teacher:      'portals/staff/index.html',
+        parent:       'portals/parent/index.html',
+        exam_officer: 'portals/academic-office/index.html',
+        vp_academic:  'portals/academic-office/index.html',
+        vp_admin:     'portals/admin-office/student-admission.html',
+        registrar:    'portals/admin-office/student-admission.html',
+        accountant:   'portals/bursary/fee-tracker.html',
+        saas_owner:   'saas-console/index.html'
+      };
+      window.location.href = routes[role] || 'index.html';
+    }
+
+    function fillDemo(email, pwd) {
+      document.getElementById('email').value = email;
+      document.getElementById('password').value = pwd;
+    }
+
+    document.getElementById('pwdToggle').addEventListener('click', () => {
+      const p = document.getElementById('password'), b = document.getElementById('pwdToggle');
+      p.type = p.type === 'password' ? 'text' : 'password';
+      b.innerHTML = p.type === 'password'
+        ? '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+        : '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    });
+
+    document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+    // ── Rate limiting (client-side brute-force protection) ───────
+    const _loginAttempts = new Map();
+    const _MAX_ATTEMPTS  = 5;
+    const _BASE_DELAY_MS = 1000;
+
+    function _getLoginDelay(email) {
+      const attempts = _loginAttempts.get(email) || 0;
+      if (attempts < _MAX_ATTEMPTS) return 0;
+      const delay = _BASE_DELAY_MS * Math.pow(2, attempts - _MAX_ATTEMPTS);
+      return Math.min(delay, 300000); // cap at 5 minutes
+    }
+
+    async function doLogin() {
+      const btn = document.getElementById('loginBtn');
+      const errEl = document.getElementById('loginError');
+      const email = document.getElementById('email').value.trim();
+      const pwd = document.getElementById('password').value;
+      errEl.style.display = 'none';
+      if (!email || !pwd) { errEl.textContent = 'Please enter your email and password.'; errEl.style.display = 'block'; return; }
+
+      // Rate limit check
+      const delay = _getLoginDelay(email);
+      if (delay > 0) {
+        const secs = Math.ceil(delay / 1000);
+        errEl.textContent = `Too many failed attempts. Please wait ${secs} second${secs !== 1 ? 's' : ''} before trying again.`;
+        errEl.style.display = 'block';
+        return;
+      }
+
+      btn.textContent = 'Signing in…'; btn.disabled = true;
+      try {
+        const { error } = await db.auth.signInWithPassword({ email, password: pwd });
+        if (error) {
+          _loginAttempts.set(email, (_loginAttempts.get(email) || 0) + 1);
+          // Generic message — don't reveal whether email or password is wrong
+          throw new Error('Invalid email or password.');
+        }
+        const user = await getCurrentUser();
+        if (!user) throw new Error('Account not found. Contact your school admin.');
+        if (!user.is_active) throw new Error('Your account is deactivated. Contact your school admin.');
+        _loginAttempts.delete(email); // clear on success
+        // Check if user must change password on first login
+        if (user.must_change_password) {
+          showChangePasswordScreen(user);
+          return;
+        }
+        redirectByRole(user.role);
+      } catch (err) {
+        errEl.textContent = err.message || 'Login failed. Check your credentials.';
+        errEl.style.display = 'block';
+        btn.textContent = 'Sign In to Portal →'; btn.disabled = false;
+      }
+    }
+
+    function showChangePasswordScreen(user) {
+      document.querySelector('.r-inner').innerHTML = `
+        <div style="text-align:center;margin-bottom:24px;">
+          <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#0a6e3f,#12a05a);margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:26px;box-shadow:0 4px 14px rgba(10,110,63,.35);">🔑</div>
+          <h2 style="font-family:var(--H);font-size:22px;font-weight:800;color:var(--INK);margin-bottom:6px;">Set Your Password</h2>
+          <p style="font-size:13px;color:var(--T3);line-height:1.65;">Welcome, <strong>${user.full_name}</strong>!<br>Please set a new password before continuing.</p>
+        </div>
+        <div id="pwChangeErr" style="display:none;background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:9px;font-size:13px;margin-bottom:16px;border:1px solid #fca5a5;"></div>
+        <div class="form-grp">
+          <label class="form-lbl">New Password <span class="req">*</span></label>
+          <input type="password" id="newPwd" class="form-ctrl" placeholder="Min. 8 characters" autocomplete="new-password">
+          <div style="font-size:11px;color:var(--T3);margin-top:4px;">At least 8 characters — mix of letters and numbers recommended</div>
+        </div>
+        <div class="form-grp">
+          <label class="form-lbl">Confirm New Password <span class="req">*</span></label>
+          <input type="password" id="newPwd2" class="form-ctrl" placeholder="Repeat new password" autocomplete="new-password">
+        </div>
+        <button class="btn-sign-in" id="pwChangeBtn" onclick="doChangePassword('${user.role}','${user.id}')">
+          Save Password &amp; Continue →
+        </button>
+      `;
+    }
+
+    async function doChangePassword(role, userId) {
+      const btn = document.getElementById('pwChangeBtn');
+      const errEl = document.getElementById('pwChangeErr');
+      const pwd1 = (document.getElementById('newPwd')?.value || '');
+      const pwd2 = (document.getElementById('newPwd2')?.value || '');
+      errEl.style.display = 'none';
+
+      if (pwd1.length < 8) {
+        errEl.textContent = 'Password must be at least 8 characters.';
+        errEl.style.display = 'block'; return;
+      }
+      if (pwd1 !== pwd2) {
+        errEl.textContent = 'Passwords do not match. Please try again.';
+        errEl.style.display = 'block'; return;
+      }
+      btn.textContent = 'Saving…'; btn.disabled = true;
+      try {
+        const { error } = await db.auth.updateUser({ password: pwd1 });
+        if (error) throw new Error(error.message);
+        await db.from('users').update({ must_change_password: false }).eq('id', userId);
+        redirectByRole(role);
+      } catch (err) {
+        errEl.textContent = err.message || 'Failed to update password. Please try again.';
+        errEl.style.display = 'block';
+        btn.textContent = 'Save Password & Continue →'; btn.disabled = false;
+      }
+    }
+  </script>
+  <script src="js/pwa.js"></script>
+
+<script>
+// ── Tab switching ────────────────────────────────────────────
+function switchTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('loginPanel').style.display = isLogin ? '' : 'none';
+  document.getElementById('regPanel').style.display   = isLogin ? 'none' : '';
+  document.getElementById('tabLogin').style.cssText = isLogin
+    ? 'flex:1;padding:10px;background:none;border:none;cursor:pointer;font-family:var(--H);font-size:13px;font-weight:700;color:var(--G);border-bottom:2px solid var(--G);margin-bottom:-2px;'
+    : 'flex:1;padding:10px;background:none;border:none;cursor:pointer;font-family:var(--H);font-size:13px;font-weight:600;color:var(--T3);border-bottom:2px solid transparent;margin-bottom:-2px;';
+  document.getElementById('tabReg').style.cssText = !isLogin
+    ? 'flex:1;padding:10px;background:none;border:none;cursor:pointer;font-family:var(--H);font-size:13px;font-weight:700;color:var(--G);border-bottom:2px solid var(--G);margin-bottom:-2px;'
+    : 'flex:1;padding:10px;background:none;border:none;cursor:pointer;font-family:var(--H);font-size:13px;font-weight:600;color:var(--T3);border-bottom:2px solid transparent;margin-bottom:-2px;';
+  if (!isLogin) loadRegSchools();
+}
+
+// Load schools for registration dropdown
+async function loadRegSchools() {
+  const sel = document.getElementById('regSchool');
+  if (sel.options.length > 1) return;
+  try {
+    const { data } = await db.from('schools').select('id,name').eq('is_active', true).order('name');
+    sel.innerHTML = '<option value="">Select your school…</option>' +
+      (data || []).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  } catch(e) { sel.innerHTML = '<option value="">Failed to load schools</option>'; }
+}
+
+// Verify scratch card PIN
+async function verifyRegPin() {
+  const errEl = document.getElementById('regError');
+  errEl.style.display = 'none';
+  const schoolId = document.getElementById('regSchool').value;
+  const pin = document.getElementById('regPin').value.trim();
+  if (!schoolId) { errEl.textContent = 'Please select your school.'; errEl.style.display = 'block'; return; }
+  if (!pin || pin.length < 6) { errEl.textContent = 'Enter a valid scratch card PIN.'; errEl.style.display = 'block'; return; }
+  try {
+    // Use RPC (SECURITY DEFINER) — direct table query is blocked by RLS for anon users,
+    // which causes valid PINs to return "Invalid PIN". The RPC runs as DB owner and bypasses RLS.
+    const { data: result, error: rpcErr } = await db.rpc('verify_scratch_pin', {
+      p_pin: pin,
+      p_school_id: schoolId
+    });
+    if (rpcErr) throw new Error('Unable to verify PIN. Please try again.');
+    if (!result?.valid) throw new Error(result?.error || 'Invalid PIN. Check your scratch card and try again.');
+    // Load classes for this school
+    const { data: cls } = await db.from('classes').select('id,name').eq('school_id', schoolId).order('name');
+    document.getElementById('regClass').innerHTML = '<option value="">Select class…</option>' +
+      (cls || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    document.getElementById('regVerifiedPin').value = pin;
+    document.getElementById('regSchoolId').value = schoolId;
+    document.getElementById('regStep1').style.display = 'none';
+    document.getElementById('regStep2').style.display = '';
+  } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+}
+
+function previewPassport() {
+  const file = document.getElementById('regPassport').files[0];
+  if (!file) return;
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    toast('Please select an image file (JPG, PNG, etc.).', 'error');
+    document.getElementById('regPassport').value = '';
+    return;
+  }
+  // Validate file size (max 2 MB)
+  if (file.size > 2 * 1024 * 1024) {
+    toast('Image must be under 2 MB.', 'error');
+    document.getElementById('regPassport').value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wrap = document.getElementById('photoPreviewWrap');
+    document.getElementById('photoPlaceholder').style.display = 'none';
+    const existing = wrap.querySelector('img');
+    if (existing) existing.remove();
+    const img = document.createElement('img');
+    img.src = e.target.result;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+    wrap.appendChild(img);
+  };
+  reader.readAsDataURL(file);
+}
+
+async function submitRegistration() {
+  const errEl = document.getElementById('regError');
+  errEl.style.display = 'none';
+  const name = document.getElementById('regName').value.trim();
+  const admNo = document.getElementById('regAdmNo').value.trim();
+  const gender = document.getElementById('regGender').value;
+  const dob = document.getElementById('regDOB').value || null;
+  const parentPhone = document.getElementById('regParentPhone').value.trim();
+  const parentName = document.getElementById('regParentName').value.trim();
+  const classId = document.getElementById('regClass').value || null;
+  const pin = document.getElementById('regVerifiedPin').value;
+  const schoolId = document.getElementById('regSchoolId').value;
+  const passportFile = document.getElementById('regPassport').files[0];
+
+  if (!name) { errEl.textContent = 'Full name is required.'; errEl.style.display = 'block'; return; }
+  if (!admNo) { errEl.textContent = 'Admission number is required.'; errEl.style.display = 'block'; return; }
+  if (!gender) { errEl.textContent = 'Please select gender.'; errEl.style.display = 'block'; return; }
+  if (!parentPhone) { errEl.textContent = 'Parent phone is required.'; errEl.style.display = 'block'; return; }
+  if (!passportFile) { errEl.textContent = 'Passport photo is compulsory. Please upload a photo.'; errEl.style.display = 'block'; return; }
+
+  const btn = document.querySelector('#regStep2 .btn-sign-in');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    // 1. Try to upload passport photo — fails gracefully if storage policy not yet set
+    //    Admin can update the photo later from the students page.
+    let photoUrl = null;
+    if (passportFile) {
+      try {
+        const ext      = passportFile.name.split('.').pop().toLowerCase();
+        const fileName = `students/${schoolId}/${admNo.replace(/\//g,'_')}_${Date.now()}.${ext}`;
+        const { error: uploadErr } = await db.storage.from('passports').upload(fileName, passportFile, { upsert: true });
+        if (!uploadErr) {
+          const { data: urlData } = db.storage.from('passports').getPublicUrl(fileName);
+          photoUrl = urlData?.publicUrl || null;
+        }
+      } catch (_) { /* storage policy may not be set — photo stays null, admin adds later */ }
+    }
+
+    // 2. Call SECURITY DEFINER function — bypasses RLS safely after server-side PIN re-validation
+    const { data: result, error: rpcErr } = await db.rpc('register_student_public', {
+      p_school_id:     schoolId,
+      p_pin:           pin,
+      p_full_name:     name,
+      p_admission_no:  admNo,
+      p_gender:        gender,
+      p_date_of_birth: dob || null,
+      p_parent_phone:  parentPhone,
+      p_parent_name:   parentName || null,
+      p_class_id:      classId || null,
+      p_photo_url:     photoUrl
+    });
+
+    if (rpcErr) throw new Error(rpcErr.message);
+    if (result?.error) throw new Error(result.error);
+
+    // 3. Success screen
+    const photoNote = photoUrl ? '' : '<p style="font-size:11px;color:#d97706;margin-top:8px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span> Photo could not be uploaded — please bring a passport photo to the school office.</p>';
+    document.getElementById('regStep2').innerHTML = `
+      <div style="text-align:center;padding:24px 0;">
+        <div style="font-size:56px;margin-bottom:12px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span></div>
+        <h3 style="font-family:var(--H);font-size:20px;font-weight:800;margin-bottom:8px;">Registration Successful!</h3>
+        <p style="color:var(--T3);font-size:14px;margin-bottom:8px;">Welcome, <strong>${name}</strong>.</p>
+        <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px;margin:12px 0;text-align:left;">
+          <div style="font-size:12px;color:#166534;font-weight:700;margin-bottom:6px;">Your Registration Details</div>
+          <div style="font-size:13px;color:#14532d;">Admission No: <strong>${admNo}</strong></div>
+          <div style="font-size:13px;color:#14532d;margin-top:4px;">Scratch Card PIN saved to your account.</div>
+        </div>
+        ${photoNote}
+        <p style="font-size:12px;color:var(--T3);margin-top:12px;">Please visit your school office to collect your student ID and complete enrollment.</p>
+      </div>`;
+  } catch(e) {
+    errEl.textContent = e.message || 'Registration failed. Please try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Submit Registration';
+  }
+}
+</script>
+
+  <!-- Floating Demo Login Button -->
+  <button class="demo-float-btn" onclick="document.getElementById('demoModalOverlay').classList.add('open')" title="Demo logins">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+    Demo Login
+  </button>
+
+  <!-- Demo Modal -->
+  <div class="demo-modal-overlay" id="demoModalOverlay" onclick="if(event.target===this)this.classList.remove('open')">
+    <div class="demo-modal-box">
+      <button class="demo-modal-close" onclick="document.getElementById('demoModalOverlay').classList.remove('open')">&times;</button>
+      <div class="demo-modal-title">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        Demo accounts — click to fill
+      </div>
+      <div class="demo-grid" style="margin-bottom:0;">
+        <button class="demo-btn" onclick="fillDemoAndClose('admin@demo.school.ng','demo1234')"><strong>Admin</strong><span>admin@demo.school.ng</span></button>
+        <button class="demo-btn" onclick="fillDemoAndClose('teacher@demo.school.ng','demo1234')"><strong>Teacher</strong><span>teacher@demo.school.ng</span></button>
+        <button class="demo-btn" onclick="fillDemoAndClose('examofficer@demo.school.ng','demo1234')"><strong>Exam Officer</strong><span>examofficer@demo.school.ng</span></button>
+        <button class="demo-btn" onclick="fillDemoAndClose('parent@demo.school.ng','demo1234')"><strong>Parent</strong><span>parent@demo.school.ng</span></button>
+      </div>
+    </div>
+  </div>
+  <script>
+    function fillDemoAndClose(email, pwd) {
+      document.getElementById('email').value = email;
+      document.getElementById('password').value = pwd;
+      document.getElementById('demoModalOverlay').classList.remove('open');
+      // Switch to login tab if on register tab
+      if (document.getElementById('loginPanel').style.display === 'none') switchTab('login');
+    }
+  </script>
+
+</body>
+</html>

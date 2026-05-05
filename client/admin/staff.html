@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <title>EduTrack NG — Staff</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    /* ══ ID CARD — Matches King's School Reference ══════════════ */
+    .idc-wrap { display:flex; justify-content:center; padding:24px; background:#f0f4f8; min-height:360px; }
+    .idc {
+      width:360px; font-family:Arial,sans-serif; font-size:12px;
+      border:2.5px solid #1a2e6e; border-radius:4px; overflow:hidden;
+      box-shadow:0 8px 32px rgba(0,0,0,.22); background:white; position:relative;
+    }
+    /* Blue header */
+    .idc-hdr {
+      background:linear-gradient(135deg,#1a2e6e 0%,#2041a3 100%);
+      padding:10px 14px; display:flex; align-items:center; gap:10px; position:relative;
+    }
+    .idc-logo-box {
+      width:54px; height:54px; background:white; border-radius:50%;
+      border:2px solid #f0c040; display:flex; align-items:center; justify-content:center;
+      font-size:28px; flex-shrink:0; overflow:hidden;
+    }
+    .idc-logo-box img { width:100%; height:100%; object-fit:cover; }
+    .idc-hdr-text { flex:1; text-align:center; color:white; }
+    .idc-school-name { font-size:13.5px; font-weight:900; text-transform:uppercase; letter-spacing:.4px; line-height:1.2; }
+    .idc-school-addr { font-size:9px; font-weight:400; color:rgba(255,255,255,.75); margin-top:2px; }
+    /* Gold title bar */
+    .idc-title-bar {
+      background:linear-gradient(90deg,#c8860a,#f0c040,#c8860a);
+      text-align:center; padding:5px; font-size:10px; font-weight:900;
+      letter-spacing:2px; text-transform:uppercase; color:#1a1a00;
+      border-top:1px solid #a0680a; border-bottom:1px solid #a0680a;
+    }
+    /* Body */
+    .idc-body { display:flex; gap:0; padding:10px 12px; position:relative; }
+    /* Watermark */
+    .idc-watermark {
+      position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+      font-size:60px; opacity:.05; pointer-events:none; z-index:0;
+    }
+    .idc-fields { flex:1; z-index:1; }
+    .idc-field { display:flex; gap:4px; margin-bottom:5px; align-items:baseline; }
+    .idc-fl { font-size:10px; font-weight:700; color:#1a2e6e; min-width:82px; }
+    .idc-sep { font-size:10px; color:#333; }
+    .idc-fv { font-size:10px; font-weight:600; color:#111; flex:1; }
+    .idc-photo-box {
+      width:72px; height:88px; border:2px solid #1a2e6e; border-radius:3px;
+      background:#e8edf5; display:flex; align-items:center; justify-content:center;
+      font-size:36px; flex-shrink:0; overflow:hidden; z-index:1;
+    }
+    .idc-photo-box img { width:100%; height:100%; object-fit:cover; }
+    /* Footer */
+    .idc-footer { padding:6px 12px 10px; display:flex; align-items:flex-end; justify-content:space-between; border-top:1px solid #e5e7eb; }
+    .idc-sig-line { border-top:1px solid #333; width:100px; margin-bottom:2px; }
+    .idc-sig-label { font-size:8px; font-weight:700; color:#555; text-align:center; width:100px; }
+    .idc-validity-box { text-align:right; font-size:8px; color:#555; }
+    /* Holo strip at bottom */
+    .idc-holo { height:5px; background:linear-gradient(90deg,#ff0080,#ff8c00,#ffed00,#00ff80,#00c8ff,#a855f7,#ff0080); }
+
+    /* Appointment Letter */
+    .letter-wrap{padding:24px;background:#f8f8f4;min-height:500px;}
+    .letter-doc{background:white;max-width:640px;margin:0 auto;padding:40px 48px;border:1px solid #ddd;box-shadow:0 4px 16px rgba(0,0,0,.08);font-family:Georgia,serif;font-size:14px;line-height:1.7;color:#222;}
+    .letter-header{text-align:center;border-bottom:3px double #0a6e3f;padding-bottom:16px;margin-bottom:20px;}
+    .letter-logo{font-size:40px;margin-bottom:6px;}
+    .letter-school{font-size:18px;font-weight:700;color:#0a6e3f;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.5px;}
+    .letter-address{font-size:12px;color:#666;font-family:Arial,sans-serif;margin-top:4px;}
+    .letter-ref{display:flex;justify-content:space-between;font-size:12px;font-family:Arial,sans-serif;color:#555;margin-bottom:20px;}
+    .letter-title{text-align:center;font-size:16px;font-weight:700;text-decoration:underline;font-family:Arial,sans-serif;margin:16px 0;color:#0a6e3f;text-transform:uppercase;letter-spacing:.5px;}
+    .letter-body p{margin-bottom:12px;}
+    .letter-sig{margin-top:32px;display:grid;grid-template-columns:1fr 1fr;gap:40px;}
+    .letter-sig-box{text-align:center;}
+    .letter-sig-line{border-top:1px solid #333;margin-bottom:4px;margin-top:40px;}
+    .letter-sig-name{font-size:12px;font-weight:700;font-family:Arial,sans-serif;}
+    .letter-sig-title{font-size:11px;color:#666;font-family:Arial,sans-serif;}
+    .letter-stamp{width:80px;height:80px;border:2px dashed #0a6e3f;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#0a6e3f;font-weight:700;text-align:center;margin:0 auto;}
+    .letter-table{width:100%;border-collapse:collapse;margin:12px 0;font-family:Arial,sans-serif;font-size:13px;}
+    .letter-table td{padding:8px 10px;border:1px solid #ddd;}
+    .letter-table td:first-child{font-weight:700;background:#f5f5f0;width:40%;}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- Add/Edit Staff Modal -->
+<div class="modal" id="staffModal">
+  <div class="modal__box">
+    <div class="modal__header">
+      <h2 class="modal__title" id="staffModalTitle">Add Staff Member</h2>
+      <button class="modal__close" onclick="closeModal('staffModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body">
+      <form id="staffForm">
+        <input type="hidden" id="staffId">
+        <div class="form-grid">
+          <!-- Staff Passport Photo -->
+          <div class="form-group col-full" id="staffPhotoGroup">
+            <label class="form-label">Passport Photo <span class="required">*</span></label>
+            <div style="display:flex;align-items:flex-start;gap:14px;">
+              <div id="staffPhotoPreview" onclick="document.getElementById('staffPhotoFile').click()"
+                style="width:80px;height:96px;border:2px dashed var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;background:var(--surface-2);flex-shrink:0;">
+                <span id="staffPhotoIcon" style="font-size:28px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span></span>
+              </div>
+              <div style="flex:1;">
+                <input type="file" id="staffPhotoFile" accept="image/*" style="display:none;" onchange="previewStaffPhoto()">
+                <button type="button" class="btn btn--secondary btn--sm" onclick="document.getElementById('staffPhotoFile').click()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span> Choose Photo</button>
+                <div class="form-hint" style="margin-top:6px;">Photo appears on Staff ID card and Appointment Letter. Max 2MB.</div>
+              </div>
+            </div>
+          </div>
+          <div class="form-group col-full">
+            <label class="form-label">Full Name <span class="required">*</span></label>
+            <input type="text" id="staffName" class="form-control" placeholder="e.g. Mrs. Ngozi Adeyemi" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email <span class="required">*</span></label>
+            <input type="email" id="staffEmail" class="form-control" placeholder="staff@school.ng" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="tel" id="staffPhone" class="form-control" placeholder="08012345678">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role <span class="required">*</span></label>
+            <select id="staffRole" class="form-control" required>
+              <optgroup label="Academic">
+                <option value="teacher">Teacher</option>
+                <option value="exam_officer">Exam Officer</option>
+                <option value="vp_academic">VP Academic</option>
+              </optgroup>
+              <optgroup label="Administration">
+                <option value="admin">Administrator / Principal</option>
+                <option value="vp_admin">VP Admin</option>
+                <option value="registrar">Registrar</option>
+              </optgroup>
+              <optgroup label="Finance">
+                <option value="accountant">Accountant</option>
+                <option value="bursary">Bursary Officer</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="form-group" id="formClassGroup">
+            <label class="form-label">Form Class (class master)</label>
+            <select id="formClass" class="form-control">
+              <option value="">— None —</option>
+            </select>
+          </div>
+          <div class="form-group col-full" id="passwordGroup">
+            <label class="form-label">Temporary Password <span class="required">*</span></label>
+            <input type="text" id="staffPassword" class="form-control" placeholder="Min 8 characters" value="School@123">
+            <div class="form-hint">Staff will use this to log in. Advise them to change it.</div>
+          </div>
+        </div>
+        <div id="staffFormError" class="form-error" style="display:none;"></div>
+      </form>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('staffModal')">Cancel</button>
+      <button class="btn btn--primary" id="saveStaffBtn" onclick="saveStaff()">Save Staff</button>
+    </div>
+  </div>
+</div>
+
+<!-- Staff ID Card Modal -->
+<div class="modal" id="staffIDCardModal">
+  <div class="modal__box" style="max-width:600px;">
+    <div class="modal__header">
+      <h2 class="modal__title">🆔 Staff ID Card</h2>
+      <button class="modal__close" onclick="closeModal('staffIDCardModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body" style="padding:0;">
+      <div class="idc-wrap">
+        <div class="idc" id="staffCard">
+          <div class="idc-hdr">
+            <div class="idc-logo-box" id="idcStaffLogo"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span></div>
+            <div class="idc-hdr-text">
+              <div class="idc-school-name" id="idcStaffSchool">School Name</div>
+              <div class="idc-school-addr" id="idcStaffAddr">Address · Nigeria</div>
+            </div>
+          </div>
+          <div class="idc-title-bar">STAFF IDENTITY CARD</div>
+          <div class="idc-body">
+            <div class="idc-watermark" id="idcStaffWatermark"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span></div>
+            <div class="idc-fields">
+              <div class="idc-field"><span class="idc-fl">Staff ID</span><span class="idc-sep">:</span><span class="idc-fv" id="idcSID">—</span></div>
+              <div class="idc-field"><span class="idc-fl">Surname</span><span class="idc-sep">:</span><span class="idc-fv" id="idcSSurname">—</span></div>
+              <div class="idc-field"><span class="idc-fl">Full Name</span><span class="idc-sep">:</span><span class="idc-fv" id="idcSName">—</span></div>
+              <div class="idc-field"><span class="idc-fl">Phone</span><span class="idc-sep">:</span><span class="idc-fv" id="idcSPhone">—</span></div>
+              <div class="idc-field"><span class="idc-fl">Role</span><span class="idc-sep">:</span><span class="idc-fv" id="idcSRole">—</span></div>
+              <div class="idc-field"><span class="idc-fl">Issue Date</span><span class="idc-sep">:</span><span class="idc-fv" id="idcSIssue">—</span></div>
+              <div class="idc-field"><span class="idc-fl">Expires</span><span class="idc-sep">:</span><span class="idc-fv" id="idcSExpiry">—</span></div>
+            </div>
+            <div class="idc-photo-box" id="idcSPhoto"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span></div>
+          </div>
+          <div class="idc-footer">
+            <div>
+              <div class="idc-sig-line"></div>
+              <div class="idc-sig-label">Staff Signature</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+              <canvas id="staffIDQR" width="48" height="48" style="border-radius:4px;"></canvas>
+              <div style="font-size:7px;color:#666;">Scan to verify</div>
+            </div>
+            <div class="idc-validity-box">
+              <div style="font-size:9px;font-weight:700;color:#1a2e6e;" id="idcSSchoolShort">EduTrack NG</div>
+            </div>
+          </div>
+          <div class="idc-holo"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('staffIDCardModal')">Close</button>
+      <button class="btn btn--ghost" onclick="openAppointmentLetter()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg></span> Appointment Letter</button>
+      <button class="btn btn--primary" onclick="printIDCard('staffCard', 'Staff ID Card')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>️ Print ID Card</button>
+    </div>
+  </div>
+</div>
+
+<!-- Appointment Letter Modal -->
+<div class="modal" id="appointmentLetterModal">
+  <div class="modal__box" style="max-width:720px;">
+    <div class="modal__header">
+      <h2 class="modal__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg></span> Offer of Appointment</h2>
+      <button class="modal__close" onclick="closeModal('appointmentLetterModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body" style="padding:0;">
+      <div class="letter-wrap">
+        <div class="letter-doc" id="appointmentLetterDoc">
+          <div class="letter-header">
+            <div class="letter-logo" id="apptLogo"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span></div>
+            <div class="letter-school" id="apptSchoolName">School Name</div>
+            <div class="letter-address" id="apptSchoolAddr">Address · Nigeria</div>
+          </div>
+          <div class="letter-ref">
+            <div>Ref: <strong id="apptRef">ETN/STF/001</strong></div>
+            <div>Date: <strong id="apptDate"></strong></div>
+          </div>
+          <div class="letter-title">Offer of Appointment</div>
+          <div class="letter-body">
+            <p>Dear <strong id="apptName">—</strong>,</p>
+            <p>Following your application and satisfactory performance in the selection process, we are pleased to offer you appointment as a member of staff of <strong id="apptSchool2">—</strong> on the following terms:</p>
+            <table class="letter-table">
+              <tr><td>Position</td><td><strong id="apptRole">—</strong></td></tr>
+              <tr><td>Staff ID</td><td><strong id="apptStaffID">—</strong></td></tr>
+              <tr><td>Email</td><td id="apptEmail">—</td></tr>
+              <tr><td>Phone</td><td id="apptPhone">—</td></tr>
+              <tr><td>Resumption</td><td>Immediately upon receipt of this letter</td></tr>
+              <tr><td>Probation</td><td>3 months from date of resumption</td></tr>
+            </table>
+            <p><strong>Terms &amp; Conditions:</strong></p>
+            <p>1. Appointment is subject to verification of credentials submitted.<br>
+            2. You are required to abide by the school's rules and code of conduct.<br>
+            3. This appointment may be terminated by either party with one month's written notice.<br>
+            4. You are expected to maintain confidentiality of all school records.</p>
+            <p>Please indicate acceptance by signing and returning a copy within <strong>7 days</strong>.</p>
+            <p>Yours faithfully,</p>
+          </div>
+          <div class="letter-sig">
+            <div class="letter-sig-box">
+              <div class="letter-stamp">OFFICIAL<br>STAMP</div>
+              <div class="letter-sig-line"></div>
+              <div class="letter-sig-name" id="apptPrincipal">Principal / Proprietor</div>
+              <div class="letter-sig-title">Head of Institution</div>
+            </div>
+            <div class="letter-sig-box">
+              <div style="margin-top:40px;"></div>
+              <div class="letter-sig-line"></div>
+              <div class="letter-sig-name" id="apptStaffSig">Staff Signature &amp; Date</div>
+              <div class="letter-sig-title">Acceptance</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('appointmentLetterModal')">Close</button>
+      <button class="btn btn--primary" onclick="printDoc('appointmentLetterDoc', 'Appointment Letter')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>️ Print Letter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Subjects Modal -->
+<div class="modal" id="assignModal">
+  <div class="modal__box" style="max-width:480px;">
+    <div class="modal__header">
+      <h2 class="modal__title">Assign Classes &amp; Subjects</h2>
+      <button class="modal__close" onclick="closeModal('assignModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body">
+      <p style="font-size:14px;color:var(--ink-3);margin-bottom:16px;">Assign subjects to <strong id="assignTeacherName"></strong> for the current term.</p>
+      <div id="assignList"></div>
+      <input type="hidden" id="assignTeacherId">
+      <div id="assignError" class="form-error" style="display:none;"></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('assignModal')">Cancel</button>
+      <button class="btn btn--primary" id="saveAssignBtn" onclick="saveAssignments()">Save Assignments</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, allStaff = [], classes = [], subjects = [], currentTerm;
+
+const ROLE_LABELS = {
+  teacher:'Teacher', admin:'Administrator', exam_officer:'Exam Officer',
+  vp_academic:'VP Academic', vp_admin:'VP Admin', registrar:'Registrar',
+  accountant:'Accountant', bursary:'Bursary Officer'
+};
+
+const ROLE_BADGE = {
+  teacher:'badge--blue', admin:'badge--red', exam_officer:'badge--purple',
+  vp_academic:'badge--purple', vp_admin:'badge--orange', registrar:'badge--teal',
+  accountant:'badge--green', bursary:'badge--green'
+};
+
+const PORTAL_LINKS = {
+  teacher: '../portals/staff/index.html',
+  vp_academic: '../portals/academic-office/index.html',
+  exam_officer: '../portals/academic-office/index.html',
+  vp_admin: '../portals/admin-office/student-admission.html',
+  registrar: '../portals/admin-office/student-admission.html',
+  accountant: '../portals/bursary/fee-tracker.html',
+  bursary: '../portals/bursary/fee-tracker.html'
+};
+
+(async () => {
+  currentUser = await initAdminLayout('staff', 'Staff Management');
+  if (!currentUser) return;
+
+  document.getElementById('topbarActions').innerHTML =
+    `<button class="btn btn--primary" onclick="openAddStaff()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Add Staff</button>`;
+
+  const [{ data: cls }, { data: sub }, { data: term }] = await Promise.all([
+    db.from('classes').select('id, name').eq('school_id', currentUser.school_id).order('name'),
+    db.from('subjects').select('id, name, code').eq('school_id', currentUser.school_id).order('name'),
+    db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current', true).maybeSingle()
+  ]);
+  classes = cls || []; subjects = sub || []; currentTerm = term;
+
+  renderPage();
+  await loadStaff();
+  if (new URLSearchParams(location.search).get('action') === 'add') openAddStaff();
+})();
+
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header"><h1>Staff Management</h1><p>Manage all school staff members</p></div>
+    <div class="filter-bar">
+      <div class="search-box" style="flex:1;max-width:300px;">
+        <input type="text" class="form-control" id="staffSearch" placeholder="Search name…" oninput="filterStaff()">
+      </div>
+      <select class="form-control" id="roleFilter" onchange="filterStaff()" style="max-width:160px;">
+        <option value="">All Roles</option>
+        <option value="teacher">Teachers</option>
+        <option value="exam_officer">Exam Officers</option>
+        <option value="vp_academic">VP Academic</option>
+        <option value="admin">Admins</option>
+        <option value="vp_admin">VP Admin</option>
+        <option value="registrar">Registrar</option>
+        <option value="accountant">Accountant</option>
+        <option value="bursary">Bursary</option>
+      </select>
+    </div>
+    <div class="card" style="padding:0;">
+      <div class="table-wrap" id="staffTable" style="border:none;"></div>
+    </div>
+  `;
+}
+
+async function loadStaff() {
+  showLoader('#staffTable', 'Loading staff…');
+  const { data, error } = await db.from('users')
+    .select('id, full_name, phone, email, role, is_active, created_at')
+    .eq('school_id', currentUser.school_id)
+    .not('role', 'eq', 'saas_owner')
+    .order('full_name');
+  if (error) { showError('#staffTable', error.message); return; }
+  allStaff = data || [];
+  filterStaff();
+}
+
+function filterStaff() {
+  const q = (document.getElementById('staffSearch')?.value || '').toLowerCase();
+  const role = document.getElementById('roleFilter')?.value || '';
+  const filtered = allStaff.filter(s =>
+    s.full_name.toLowerCase().includes(q) && (!role || s.role === role)
+  );
+  renderStaffTable(filtered);
+}
+
+function renderStaffTable(staff) {
+  if (!staff.length) { showEmpty('#staffTable', 'No staff found', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/><line x1="14" y1="10" x2="18" y2="14"/></svg></span>'); return; }
+  document.getElementById('staffTable').innerHTML = `
+    <table>
+      <thead><tr><th>Name</th><th>Role</th><th>Phone</th><th>Status</th><th>Portal</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${staff.map(s => `
+          <tr>
+            <td>
+              <div class="student-cell">
+                <div class="avatar avatar--sm">${s.full_name.charAt(0)}</div>
+                <div class="info"><div class="name">${s.full_name}</div><div class="sub">${s.email || ''}</div></div>
+              </div>
+            </td>
+            <td><span class="badge ${ROLE_BADGE[s.role] || 'badge--gray'}">${ROLE_LABELS[s.role] || s.role}</span></td>
+            <td style="font-size:13px;">${s.phone || '—'}</td>
+            <td><span class="badge ${s.is_active ? 'badge--green' : 'badge--gray'}">${s.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td>
+              ${PORTAL_LINKS[s.role] ? `<a href="${PORTAL_LINKS[s.role]}" class="btn btn--ghost btn--sm" target="_blank">Open →</a>` : '—'}
+            </td>
+            <td>
+              <div class="td-action">
+                <button class="btn btn--secondary btn--sm" onclick="editStaff('${s.id}')">Edit</button>
+                ${['teacher','vp_academic','exam_officer'].includes(s.role) ? `<button class="btn btn--ghost btn--sm" onclick="openAssign('${s.id}','${s.full_name.replace(/'/g,"\\'")}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> Classes</button>` : ''}
+                <button class="btn btn--ghost btn--sm" onclick="viewIDCard('${s.id}')">🆔 ID</button>
+                <button class="btn btn--ghost btn--sm" onclick="resetStaffPassword('${s.id}','${s.full_name.replace(/'/g,'\\&apos;')}','${s.email}')">🔑 Password</button>
+                <button class="btn btn--ghost btn--sm" onclick="toggleStaff('${s.id}',${s.is_active})">${s.is_active ? 'Deactivate' : 'Activate'}</button>
+                <button class="btn btn--danger btn--sm" onclick="deleteStaff('${s.id}','${s.full_name.replace(/'/g,"\\'")}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span>️ Delete</button>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function openAddStaff() {
+  document.getElementById('staffModalTitle').textContent = 'Add Staff Member';
+  document.getElementById('staffId').value = '';
+  document.getElementById('staffForm').reset();
+  document.getElementById('staffPassword').value = 'School@123';
+  document.getElementById('passwordGroup').style.display = '';
+  document.getElementById('staffEmail').closest('.form-group').style.display = '';
+  document.getElementById('staffFormError').style.display = 'none';
+  document.getElementById('formClass').innerHTML = '<option value="">— None —</option>' +
+    classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  openModal('staffModal');
+}
+
+function editStaff(id) {
+  const s = allStaff.find(s => s.id === id);
+  if (!s) return;
+  document.getElementById('staffModalTitle').textContent = 'Edit Staff Member';
+  document.getElementById('staffId').value = s.id;
+  document.getElementById('staffName').value = s.full_name;
+  document.getElementById('staffPhone').value = s.phone || '';
+  document.getElementById('staffRole').value = s.role;
+  document.getElementById('passwordGroup').style.display = 'none';
+  document.getElementById('staffEmail').closest('.form-group').style.display = 'none';
+  document.getElementById('staffFormError').style.display = 'none';
+  document.getElementById('formClass').innerHTML = '<option value="">— None —</option>' +
+    classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  openModal('staffModal');
+}
+
+// ── FIX: Print using Blob URL (no document.write breakage) ────
+
+function printIDCard(cardId, title) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  const styles = [...document.querySelectorAll('style,link[rel="stylesheet"]')]
+    .map(el => el.outerHTML).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">${styles}<style>
+    body{margin:0;padding:20px;background:#f0f4f8;display:flex;align-items:center;justify-content:center;min-height:100vh;}
+    @media print{body{background:white;padding:0;}@page{margin:10mm;size:landscape;}}
+  </style></head><body><div class="idc-wrap">${card.outerHTML}</div>
+<!-- ── Staff Password Reset Modal ─────────────────────────── -->
+<div class="modal" id="pwResetModal">
+  <div class="modal__box" style="max-width:420px;">
+    <div class="modal__header">
+      <h2 class="modal__title">🔑 Reset Staff Password</h2>
+      <button class="modal__close" onclick="closeModal('pwResetModal')">✕</button>
+    </div>
+    <div class="modal__body">
+      <input type="hidden" id="pwResetStaffId">
+      <div style="background:var(--surface-3);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:13px;">
+        <div style="font-weight:700;color:var(--ink);" id="pwResetStaffName">—</div>
+        <div style="color:var(--ink-3);" id="pwResetStaffEmail">—</div>
+      </div>
+      <div id="pwResetErr" style="display:none;background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid #fca5a5;"></div>
+      <div class="form-group">
+        <label class="form-label">New Password <span style="color:red">*</span></label>
+        <input type="password" id="pwResetNew" class="form-control" placeholder="Min. 8 characters">
+        <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">Staff will be required to change this on next login.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password <span style="color:red">*</span></label>
+        <input type="password" id="pwResetConfirm" class="form-control" placeholder="Repeat new password">
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('pwResetModal')">Cancel</button>
+      <button class="btn btn--primary" id="pwResetBtn" onclick="doResetStaffPassword()">Reset Password</button>
+    </div>
+  </div>
+</div>
+
+
+<script src="../js/ai-assistant.js" defer></script>
+</body></html>`;
+  openPrintWindow(html);
+}
+
+function printDoc(docId, title) {
+  const doc = document.getElementById(docId);
+  if (!doc) return;
+  const styles = [...document.querySelectorAll('style,link[rel="stylesheet"]')]
+    .map(el => el.outerHTML).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">${styles}<style>
+    body{margin:0;padding:20px;background:#f8f8f4;}
+    .letter-wrap{padding:0!important;background:none!important;}
+    @media print{body{background:white;padding:0;}@page{margin:20mm;}}
+  </style></head><body><div class="letter-wrap"><div class="letter-doc">${doc.innerHTML}</div></div>
+<!-- ── Staff Password Reset Modal ─────────────────────────── -->
+<div class="modal" id="pwResetModal">
+  <div class="modal__box" style="max-width:420px;">
+    <div class="modal__header">
+      <h2 class="modal__title">🔑 Reset Staff Password</h2>
+      <button class="modal__close" onclick="closeModal('pwResetModal')">✕</button>
+    </div>
+    <div class="modal__body">
+      <input type="hidden" id="pwResetStaffId">
+      <div style="background:var(--surface-3);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:13px;">
+        <div style="font-weight:700;color:var(--ink);" id="pwResetStaffName">—</div>
+        <div style="color:var(--ink-3);" id="pwResetStaffEmail">—</div>
+      </div>
+      <div id="pwResetErr" style="display:none;background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid #fca5a5;"></div>
+      <div class="form-group">
+        <label class="form-label">New Password <span style="color:red">*</span></label>
+        <input type="password" id="pwResetNew" class="form-control" placeholder="Min. 8 characters">
+        <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">Staff will be required to change this on next login.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password <span style="color:red">*</span></label>
+        <input type="password" id="pwResetConfirm" class="form-control" placeholder="Repeat new password">
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('pwResetModal')">Cancel</button>
+      <button class="btn btn--primary" id="pwResetBtn" onclick="doResetStaffPassword()">Reset Password</button>
+    </div>
+  </div>
+</div>
+
+</body></html>`;
+  openPrintWindow(html);
+}
+
+function openPrintWindow(html) {
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank', 'width=800,height=700');
+  setTimeout(() => { if (w) { w.focus(); w.print(); } URL.revokeObjectURL(url); }, 600);
+}
+
+// ── ID Card population ────────────────────────────────────────
+
+let _currentStaffForLetter = null;
+
+function viewIDCard(id) {
+  const s = allStaff.find(s => s.id === id);
+  if (!s) return;
+  _currentStaffForLetter = s;
+  const school = currentUser.schools || {};
+  const staffNum = 'STF-' + s.id.slice(0,6).toUpperCase();
+  const today = new Date();
+  const issueDate = today.toLocaleDateString('en-GB');
+  const expiryDate = new Date(today.getFullYear() + 2, today.getMonth(), today.getDate()).toLocaleDateString('en-GB');
+
+  document.getElementById('idcStaffSchool').textContent = school.name || 'School Name';
+  document.getElementById('idcStaffAddr').textContent = [school.lga, school.state].filter(Boolean).join(', ') || 'Nigeria';
+  document.getElementById('idcStaffWatermark').innerHTML = school.logo_url
+    ? `<img src="${school.logo_url}" style="width:100%;height:100%;object-fit:contain;opacity:.08;" onerror="this.style.display='none'">`
+    : '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>';
+  const logoEl = document.getElementById('idcStaffLogo');
+  if (school.logo_url) logoEl.innerHTML = `<img src="${school.logo_url}" style="width:100%;height:100%;object-fit:cover;border-radius:5px;" onerror="this.parentElement.innerHTML='🏫'">`;
+  else logoEl.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>';
+  document.getElementById('idcSID').textContent = staffNum;
+  const nameParts = s.full_name.trim().split(' ');
+  document.getElementById('idcSSurname').textContent = nameParts[nameParts.length - 1].toUpperCase();
+  document.getElementById('idcSName').textContent = s.full_name;
+  document.getElementById('idcSPhone').textContent = s.phone || '—';
+  document.getElementById('idcSRole').textContent = ROLE_LABELS[s.role] || s.role;
+  document.getElementById('idcSIssue').textContent = issueDate;
+  document.getElementById('idcSExpiry').textContent = expiryDate;
+  document.getElementById('idcSSchoolShort').textContent = school.name || 'EduTrack NG';
+  openModal('staffIDCardModal');
+
+  // Generate QR code after modal opens
+  requestAnimationFrame(() => {
+    const qrCanvas = document.getElementById('staffIDQR');
+    if (qrCanvas && typeof QRCode !== 'undefined') {
+      const qrData = `EDUTRAC|STF|${staffNum}|${s.full_name}|${school.name || ''}`;
+      QRCode.toCanvas(qrCanvas, qrData, { width: 48, margin: 1,
+        color: { dark: '#1a2e6e', light: '#ffffff' }
+      }).catch(() => {});
+    }
+  });
+}
+
+function openAppointmentLetter() {
+  const s = _currentStaffForLetter;
+  if (!s) return;
+  const school = currentUser.schools || {};
+  const staffNum = 'STF-' + s.id.slice(0,6).toUpperCase();
+  const today = new Date().toLocaleDateString('en-NG', { day:'2-digit', month:'long', year:'numeric' });
+  document.getElementById('apptSchoolName').textContent = school.name || 'School Name';
+  document.getElementById('apptSchoolAddr').textContent = [school.address, school.lga, school.state].filter(Boolean).join(', ') || 'Nigeria';
+  // ── Inject school logo into appointment letter ──
+  const apptLogoEl = document.getElementById('apptLogo');
+  if (apptLogoEl) {
+    if (school.logo_url) {
+      apptLogoEl.innerHTML = `<img src="${school.logo_url}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;display:block;margin:0 auto;" onerror="this.parentElement.innerHTML='🏫'">`;
+    } else {
+      apptLogoEl.innerHTML = '🏫';
+      apptLogoEl.style.fontSize = '40px';
+    }
+  }
+  document.getElementById('apptRef').textContent = `ETN/${staffNum}/${new Date().getFullYear()}`;
+  document.getElementById('apptDate').textContent = today;
+  document.getElementById('apptName').textContent = s.full_name;
+  document.getElementById('apptSchool2').textContent = school.name || 'our school';
+  document.getElementById('apptRole').textContent = ROLE_LABELS[s.role] || s.role;
+  document.getElementById('apptStaffID').textContent = staffNum;
+  document.getElementById('apptEmail').textContent = s.email || '—';
+  document.getElementById('apptPhone').textContent = s.phone || '—';
+  document.getElementById('apptPrincipal').textContent = currentUser.full_name || 'Principal';
+  document.getElementById('apptStaffSig').textContent = s.full_name + ' / Date';
+  closeModal('staffIDCardModal');
+  openModal('appointmentLetterModal');
+}
+
+// ── Save / Edit Staff ─────────────────────────────────────────
+
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+async function insertProfileWithRetry(data, maxTries = 5, delay = 600) {
+  for (let i = 1; i <= maxTries; i++) {
+    const { error } = await db.from('users').insert(data);
+    if (!error) return null;
+    if ((error.code === '23503' || error.message?.includes('foreign key')) && i < maxTries) {
+      await wait(delay * i); continue;
+    }
+    return error;
+  }
+  return { message: 'Profile save failed after retries. Please try again.' };
+}
+
+function previewStaffPhoto() {
+  const file = document.getElementById('staffPhotoFile')?.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wrap = document.getElementById('staffPhotoPreview');
+    document.getElementById('staffPhotoIcon').style.display = 'none';
+    const existing = wrap.querySelector('img');
+    if (existing) existing.remove();
+    const img = document.createElement('img');
+    img.src = e.target.result;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+    wrap.appendChild(img);
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveStaff() {
+  const btn = document.getElementById('saveStaffBtn');
+  const errEl = document.getElementById('staffFormError');
+  errEl.style.display = 'none';
+  const id = document.getElementById('staffId').value;
+  const name = document.getElementById('staffName').value.trim();
+  const email = document.getElementById('staffEmail').value.trim();
+  const phone = document.getElementById('staffPhone').value.trim();
+  const role = document.getElementById('staffRole').value;
+  const password = document.getElementById('staffPassword').value;
+  const photoFile = document.getElementById('staffPhotoFile')?.files[0];
+
+  if (!name) { errEl.textContent = 'Full name is required.'; errEl.style.display = 'block'; return; }
+  if (!id && !email) { errEl.textContent = 'Email is required.'; errEl.style.display = 'block'; return; }
+  if (!id && password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+  if (!id && !photoFile) { errEl.textContent = 'Staff passport photo is required.'; errEl.style.display = 'block'; return; }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    if (!id) {
+      btn.textContent = 'Creating account…';
+      const { data: authData, error: authError } = await db.auth.signUp({
+        email, password,
+        options: { data: { full_name: name, school_id: currentUser.school_id, role } }
+      });
+      if (authError) throw authError;
+      if (!authData?.user?.id) throw new Error('Sign-up failed. Is this email already registered?');
+      btn.textContent = 'Creating profile…';
+      // Upload passport photo to storage
+      let photoUrl = null;
+      if (photoFile) {
+        btn.textContent = 'Uploading photo…';
+        const ext = photoFile.name.split('.').pop().toLowerCase();
+        const fileName = `staff/${currentUser.school_id}/${authData.user.id}.${ext}`;
+        const { error: upErr } = await db.storage.from('passports').upload(fileName, photoFile, { upsert: true });
+        if (!upErr) {
+          const { data: urlData } = db.storage.from('passports').getPublicUrl(fileName);
+          photoUrl = urlData?.publicUrl || null;
+        }
+      }
+      btn.textContent = 'Creating profile…';
+      const profileError = await insertProfileWithRetry({
+        id: authData.user.id, school_id: currentUser.school_id,
+        full_name: name, phone: phone || null, email: email || null,
+        role, is_active: true, photo_url: photoUrl
+      });
+      if (profileError) throw profileError;
+    } else {
+      const { error } = await db.from('users').update({ full_name: name, phone: phone || null, role }).eq('id', id);
+      if (error) throw error;
+    }
+    toast(id ? 'Staff updated!' : `${name} added! Login: ${email}`, 'success');
+    closeModal('staffModal');
+    await loadStaff();
+  } catch (err) {
+    let msg = err.message || 'An error occurred.';
+    if (msg.includes('foreign key') || msg.includes('violates')) msg = 'Profile save failed. Disable email confirmation in Supabase Auth settings.';
+    if (msg.includes('already registered') || msg.includes('already been registered')) msg = 'This email is already registered.';
+    errEl.innerHTML = msg; errEl.style.display = 'block';
+  } finally { btn.disabled = false; btn.textContent = 'Save Staff'; }
+}
+
+// ── Reset Staff Password ──────────────────────────────────────
+function resetStaffPassword(id, name, email) {
+  const modal = document.getElementById('pwResetModal');
+  document.getElementById('pwResetStaffName').textContent = name;
+  document.getElementById('pwResetStaffEmail').textContent = email;
+  document.getElementById('pwResetNew').value = '';
+  document.getElementById('pwResetConfirm').value = '';
+  document.getElementById('pwResetErr').style.display = 'none';
+  document.getElementById('pwResetStaffId').value = id;
+  openModal('pwResetModal');
+}
+
+async function doResetStaffPassword() {
+  const id    = document.getElementById('pwResetStaffId').value;
+  const pwd1  = document.getElementById('pwResetNew').value;
+  const pwd2  = document.getElementById('pwResetConfirm').value;
+  const errEl = document.getElementById('pwResetErr');
+  const btn   = document.getElementById('pwResetBtn');
+  errEl.style.display = 'none';
+
+  if (pwd1.length < 8) {
+    errEl.textContent = 'Password must be at least 8 characters.';
+    errEl.style.display = 'block'; return;
+  }
+  if (pwd1 !== pwd2) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.style.display = 'block'; return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Resetting…';
+  try {
+    // Call the server-side password reset edge function
+    const res = await fetch('/api/reset-staff-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: id, new_password: pwd1 }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Reset failed');
+
+    // Force password change on next login
+    await db.from('users').update({ must_change_password: true }).eq('id', id);
+
+    closeModal('pwResetModal');
+    toast('Password reset successfully. Staff must change it on next login.', 'success');
+  } catch (err) {
+    errEl.textContent = err.message || 'Failed to reset password.';
+    errEl.style.display = 'block';
+  }
+  btn.disabled = false; btn.textContent = 'Reset Password';
+}
+
+async function toggleStaff(id, current) {
+  if (!confirm(`${current ? 'Deactivate' : 'Activate'} this staff member?`)) return;
+  const { error } = await db.from('users').update({ is_active: !current }).eq('id', id);
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Updated!', 'success'); await loadStaff();
+}
+
+// ── FIX 7: Delete Staff ────────────────────────────────────────
+async function deleteStaff(id, name) {
+  if (!confirm(`Delete ${name}?\n\nThis will permanently remove their profile and all associated data. Their login account will also be deactivated.\n\nThis action cannot be undone.`)) return;
+  try {
+    const { error } = await db.from('users').delete().eq('id', id);
+    if (error) throw error;
+    toast(`${name} deleted.`, 'success');
+    await loadStaff();
+  } catch (err) {
+    toast('Delete failed: ' + err.message, 'error');
+  }
+}
+
+// ── Assign Subjects ───────────────────────────────────────────
+
+async function openAssign(teacherId, teacherName) {
+  document.getElementById('assignTeacherId').value = teacherId;
+  document.getElementById('assignTeacherName').textContent = teacherName;
+  document.getElementById('assignError').style.display = 'none';
+  if (!currentTerm) {
+    document.getElementById('assignList').innerHTML = `<p style="color:var(--danger);">No current term set. Configure in Settings.</p>`;
+    openModal('assignModal'); return;
+  }
+  const { data: existing } = await db.from('class_subjects')
+    .select('class_id, subject_id').eq('teacher_id', teacherId).eq('term_id', currentTerm.id);
+  const existingSet = new Set((existing || []).map(e => `${e.class_id}::${e.subject_id}`));
+  document.getElementById('assignList').innerHTML = `
+    <div style="max-height:320px;overflow-y:auto;">
+      ${classes.map(cls => `
+        <div style="margin-bottom:12px;">
+          <div style="font-size:13px;font-weight:700;color:var(--ink-2);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border);">${cls.name}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            ${subjects.map(sub => {
+              const key = `${cls.id}::${sub.id}`;
+              return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:${existingSet.has(key)?'var(--primary-light)':'white'}">
+                <input type="checkbox" name="assign" value="${cls.id}::${sub.id}" ${existingSet.has(key)?'checked':''} style="accent-color:var(--primary);">
+                ${sub.name}
+              </label>`;
+            }).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  openModal('assignModal');
+}
+
+async function saveAssignments() {
+  const teacherId = document.getElementById('assignTeacherId').value;
+  const checked = [...document.querySelectorAll('input[name="assign"]:checked')].map(c => c.value);
+  const unchecked = [...document.querySelectorAll('input[name="assign"]:not(:checked)')].map(c => c.value);
+  const btn = document.getElementById('saveAssignBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    // FIX 1: Single bulk delete instead of N sequential round-trips
+    if (unchecked.length) {
+      const uncheckedSubjectIds = [...new Set(unchecked.map(v => v.split('::')[1]))];
+      const uncheckedClassIds   = [...new Set(unchecked.map(v => v.split('::')[0]))];
+      // Delete all unchecked combos for this teacher+term in one query
+      const { error: delError } = await db.from('class_subjects').delete()
+        .eq('teacher_id', teacherId)
+        .eq('term_id', currentTerm.id)
+        .in('class_id', uncheckedClassIds)
+        .in('subject_id', uncheckedSubjectIds);
+      if (delError) throw delError;
+    }
+    // FIX 2: Correct onConflict columns — must include teacher_id so each
+    // teacher's assignment is a distinct row and upsert resolves correctly
+    if (checked.length) {
+      const rows = checked.map(v => {
+        const [class_id, subject_id] = v.split('::');
+        return { school_id: currentUser.school_id, class_id, subject_id, teacher_id: teacherId, term_id: currentTerm.id };
+      });
+      const { error } = await db.from('class_subjects').upsert(rows, { onConflict: 'class_id,subject_id,teacher_id,term_id' });
+      if (error) throw error;
+    }
+    toast(`Assignments saved! ${checked.length} subject(s) assigned.`, 'success');
+    closeModal('assignModal');
+  } catch (err) {
+    document.getElementById('assignError').textContent = err.message;
+    document.getElementById('assignError').style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Assignments';
+  }
+}
+</script>
+<script src="../js/pwa.js"></script>
+
+<!-- ── Staff Password Reset Modal ─────────────────────────── -->
+<div class="modal" id="pwResetModal">
+  <div class="modal__box" style="max-width:420px;">
+    <div class="modal__header">
+      <h2 class="modal__title">🔑 Reset Staff Password</h2>
+      <button class="modal__close" onclick="closeModal('pwResetModal')">✕</button>
+    </div>
+    <div class="modal__body">
+      <input type="hidden" id="pwResetStaffId">
+      <div style="background:var(--surface-3);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:13px;">
+        <div style="font-weight:700;color:var(--ink);" id="pwResetStaffName">—</div>
+        <div style="color:var(--ink-3);" id="pwResetStaffEmail">—</div>
+      </div>
+      <div id="pwResetErr" style="display:none;background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid #fca5a5;"></div>
+      <div class="form-group">
+        <label class="form-label">New Password <span style="color:red">*</span></label>
+        <input type="password" id="pwResetNew" class="form-control" placeholder="Min. 8 characters">
+        <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">Staff will be required to change this on next login.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password <span style="color:red">*</span></label>
+        <input type="password" id="pwResetConfirm" class="form-control" placeholder="Repeat new password">
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('pwResetModal')">Cancel</button>
+      <button class="btn btn--primary" id="pwResetBtn" onclick="doResetStaffPassword()">Reset Password</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

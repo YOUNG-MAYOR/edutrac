@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <title>EduTrack NG — Take Attendance</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    .s-row {
+      display:flex; align-items:center; padding:11px 16px;
+      border-bottom:1px solid var(--border); gap:12px; transition:background .1s;
+      position:relative;
+    }
+    .s-row:last-child { border-bottom:none; }
+    .s-row::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:0; transition:background .15s; }
+    .s-row[data-st="P"]::before { background:var(--success); }
+    .s-row[data-st="A"]::before { background:var(--danger); }
+    .s-row[data-st="L"]::before { background:var(--warning); }
+    .s-row[data-st="E"]::before { background:var(--info); }
+    .s-name { flex:1; font-size:14px; font-weight:500; }
+    .s-num  { font-size:11px; color:var(--ink-3); width:70px; text-align:right; font-family:var(--mono); }
+    .submitted-notice { background:#dcfce7; border:1px solid #86efac; border-radius:8px; padding:12px 16px; display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+    @media print {
+      .no-print { display:none!important; }
+      @page { margin:15mm; }
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let currentUser, myClasses = [], currentTerm, studentsInClass = [], attendanceData = {};
+let isSubmitted = false;
+
+(async () => {
+  currentUser = await initPage(['teacher', 'admin', 'vp_academic', 'exam_officer'], 'Attendance', 'attendance');
+  if (!currentUser) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <button class="btn btn--secondary no-print" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Print</button>
+    <button class="btn btn--secondary no-print" onclick="exportCSV()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Export</button>
+  `;
+
+  const { data: term } = await db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current', true).maybeSingle();
+  currentTerm = term;
+
+  const [{ data: formClasses }, { data: allAssignments }] = await Promise.all([
+    db.from('classes').select('id,name').eq('teacher_id', currentUser.id).eq('school_id', currentUser.school_id),
+    db.from('class_subjects').select('class_id,term_id,classes(id,name)').eq('teacher_id', currentUser.id).eq('school_id', currentUser.school_id)
+  ]);
+
+  let assignments = allAssignments || [];
+  if (currentTerm) assignments = assignments.filter(a => a.term_id === currentTerm.id);
+  const classById = {};
+  (formClasses || []).forEach(c => { classById[c.id] = c; });
+  assignments.forEach(a => { if (a.classes && !classById[a.class_id]) classById[a.class_id] = a.classes; });
+  myClasses = Object.values(classById);
+
+  const today = new Date().toISOString().split('T')[0];
+  const preClass = new URLSearchParams(location.search).get('class') || '';
+
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header"><h1>Student Attendance</h1><p>${currentTerm?.name || '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ No current term'}</p></div>
+    <div class="filter-bar no-print">
+      <select class="form-control" id="classSelect" onchange="loadClass()" style="max-width:220px;">
+        <option value="">Select Class…</option>
+        ${myClasses.map(c => `<option value="${c.id}" ${c.id===preClass?'selected':''}>${c.name}</option>`).join('')}
+      </select>
+      <input type="date" id="dateSelect" class="form-control" value="${today}" onchange="loadClass()" style="max-width:180px;">
+    </div>
+    <div id="attContainer">
+      <div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span></div><p>Select a class to take attendance.</p></div>
+    </div>
+  `;
+
+  if (preClass) loadClass();
+})();
+
+async function loadClass() {
+  const classId = document.getElementById('classSelect').value;
+  const date = document.getElementById('dateSelect').value;
+  isSubmitted = false;
+  if (!classId || !date || !currentTerm) return;
+  showLoader('#attContainer', 'Loading students…');
+
+  const [{ data: enroll }, { data: existing }] = await Promise.all([
+    db.from('enrollments').select('student_id, students(id,full_name,admission_no)')
+      .eq('class_id', classId).eq('term_id', currentTerm.id),
+    db.from('attendance').select('student_id,status,recorded_by')
+      .eq('class_id', classId).eq('date', date).eq('school_id', currentUser.school_id)
+  ]);
+
+  studentsInClass = (enroll || []).map(e => e.students).filter(Boolean)
+    .sort((a, b) => a.full_name.localeCompare(b.full_name));
+  attendanceData = {};
+  (existing || []).forEach(a => attendanceData[a.student_id] = a.status);
+
+  // Show submitted notice if any attendance has been saved for this class+date
+  if (existing?.length) {
+    isSubmitted = true; // already saved — show the submitted notice
+  }
+
+  if (!studentsInClass.length) { showEmpty('#attContainer', 'No students enrolled in this class this term.'); return; }
+  renderList();
+}
+
+function renderList() {
+  const counts = { P:0, A:0, L:0, E:0 };
+  Object.values(attendanceData).forEach(s => { if (counts[s] !== undefined) counts[s]++; });
+  const marked = Object.keys(attendanceData).length;
+
+  document.getElementById('attContainer').innerHTML = `
+    ${isSubmitted ? `<div class="submitted-notice"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> <strong>Attendance submitted to admin.</strong> You can update and re-submit if needed.</div>` : ''}
+    <div class="card" style="padding:0;">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <strong>${studentsInClass.length} students</strong>
+          <span style="color:var(--ink-3);font-size:13px;margin-left:8px;">${marked} marked</span>
+        </div>
+        <div style="display:flex;gap:6px;" class="no-print">
+          <button class="btn btn--secondary btn--sm" onclick="markAll('P')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> All Present</button>
+          <button class="btn btn--secondary btn--sm" onclick="markAll('A')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> All Absent</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;padding:10px 16px;font-size:12px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+        <span id="cP" style="color:var(--success);font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${counts.P} Present</span>
+        <span id="cA" style="color:var(--danger);font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> ${counts.A} Absent</span>
+        <span id="cL" style="color:var(--warning);font-weight:600;">⏰ ${counts.L} Late</span>
+        <span id="cE" style="color:var(--info);font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="10"/></svg></span> ${counts.E} Excused</span>
+      </div>
+      <div id="studentList">
+        ${studentsInClass.map((s, i) => {
+          const status = attendanceData[s.id] || '';
+          return `
+            <div class="s-row" id="sr-${s.id}" data-st="${status}">
+              <span style="color:var(--ink-3);font-size:12px;width:24px;">${i+1}</span>
+              <div class="avatar avatar--sm">${s.full_name.charAt(0)}</div>
+              <span class="s-name">${s.full_name}</span>
+              <span class="s-num">${s.admission_no || ''}</span>
+              <div class="att-toggle no-print">
+                <button class="att-P ${status==='P'?'active':''}" onclick="setAtt('${s.id}','P')">P</button>
+                <button class="att-A ${status==='A'?'active':''}" onclick="setAtt('${s.id}','A')">A</button>
+                <button class="att-L ${status==='L'?'active':''}" onclick="setAtt('${s.id}','L')">L</button>
+                <button class="att-E ${status==='E'?'active':''}" onclick="setAtt('${s.id}','E')">E</button>
+              </div>
+              <span class="print-only" style="font-weight:700;width:30px;text-align:center;">${status || '—'}</span>
+            </div>`;
+        }).join('')}
+      </div>
+      <div style="padding:16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;" class="no-print">
+        <button class="btn btn--secondary" onclick="saveAtt(false)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save Draft</button>
+        <button class="btn btn--primary" onclick="saveAtt(true)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span> Submit to Admin</button>
+      </div>
+    </div>
+  `;
+}
+
+function setAtt(id, s) {
+  attendanceData[id] = s;
+  const row = document.getElementById(`sr-${id}`);
+  if (!row) return;
+  row.dataset.st = s;
+  row.querySelectorAll('.att-toggle button').forEach(btn => {
+    const cls = [...btn.classList].find(c => c.startsWith('att-') && c.length===5);
+    btn.classList.toggle('active', cls?.replace('att-','') === s);
+  });
+  updateCounts();
+}
+
+function updateCounts() {
+  const c = { P:0, A:0, L:0, E:0 };
+  Object.values(attendanceData).forEach(s => { if (c[s]!==undefined) c[s]++; });
+  document.getElementById('cP').innerHTML = `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${c.P} Present`;
+  document.getElementById('cA').innerHTML = `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> ${c.A} Absent`;
+  document.getElementById('cL').innerHTML = `⏰ ${c.L} Late`;
+  document.getElementById('cE').innerHTML = `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="10"/></svg></span> ${c.E} Excused`;
+}
+
+function markAll(status) { studentsInClass.forEach(s => setAtt(s.id, status)); }
+
+async function saveAtt(submit = false) {
+  const classId = document.getElementById('classSelect').value;
+  const date = document.getElementById('dateSelect').value;
+  if (!classId || !date || !currentTerm) { toast('Select a class and date first.', 'info'); return; }
+
+  const rows = studentsInClass.filter(s => attendanceData[s.id]).map(s => ({
+    school_id: currentUser.school_id,
+    student_id: s.id, class_id: classId,
+    term_id: currentTerm.id, date,
+    status: attendanceData[s.id],
+    recorded_by: currentUser.id
+  }));
+
+  if (!rows.length) { toast('Please mark at least one student.', 'info'); return; }
+  const { error } = await db.from('attendance').upsert(rows, { onConflict: 'student_id,class_id,date,school_id' });
+  if (error) { toast(error.message, 'error'); return; }
+
+  isSubmitted = submit;
+  toast(submit ? `✓ Attendance submitted to admin! (${rows.length} students)` : `Saved ${rows.length} records.`, 'success');
+  renderList();
+}
+
+function exportCSV() {
+  if (!studentsInClass.length) { toast('Load a class first.', 'info'); return; }
+  const classId = document.getElementById('classSelect')?.value;
+  const date = document.getElementById('dateSelect')?.value;
+  const cls = myClasses.find(c => c.id === classId);
+  const rows = [['#', 'Name', 'Admission No', 'Status', 'Date']];
+  studentsInClass.forEach((s, i) => {
+    rows.push([i+1, s.full_name, s.admission_no || '', attendanceData[s.id] || 'Not marked', date]);
+  });
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `attendance_${cls?.name || 'class'}_${date}.csv`;
+  a.click();
+}
+</script>
+<script src="../../js/pwa.js"></script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

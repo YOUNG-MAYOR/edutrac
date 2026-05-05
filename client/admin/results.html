@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EduTrack NG">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>EduTrack NG — Results</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .result-header { background: var(--ink); color: white; padding: 16px 20px; border-radius: var(--radius) var(--radius) 0 0; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .result-header select { background: #ffffff18; border: 1px solid #ffffff30; color: white; border-radius: var(--radius-sm); padding: 7px 12px; font-size: 14px; outline: none; }
+    .result-header select option { background: var(--ink); }
+    .score-table thead th { position: sticky; top: 0; background: var(--surface-3); z-index: 2; }
+    .score-table td:first-child { position: sticky; left: 0; background: white; z-index: 1; min-width: 180px; }
+    .score-table thead th:first-child { left: 0; z-index: 3; }
+    .total-cell { font-family: var(--mono); font-weight: 700; font-size: 14px; }
+    .total-cell.high { color: var(--success); }
+    .total-cell.mid  { color: var(--warning); }
+    .total-cell.low  { color: var(--danger); }
+    .grade-chip { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 12px; font-weight: 700; background: var(--primary-light); color: var(--primary); }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- Publish Modal -->
+<div class="modal" id="publishModal">
+  <div class="modal__box" style="max-width:420px;">
+    <div class="modal__header">
+      <h2 class="modal__title">Publish Results</h2>
+      <button class="modal__close" onclick="closeModal('publishModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    </div>
+    <div class="modal__body">
+      <p style="font-size:14px;margin-bottom:12px;">Publishing will make results visible to parents and teachers. This action can be reversed.</p>
+      <div class="form-group">
+        <label class="form-label">Select Class</label>
+        <select id="publishClass" class="form-control"><option value="">All Classes</option></select>
+      </div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeModal('publishModal')">Cancel</button>
+      <button class="btn btn--primary" onclick="publishResults()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Publish</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, classes = [], subjects = [], exams = [], currentTerm, gradingScale = [];
+let selectedClass = '', selectedSubject = '', selectedExam = '';
+let studentsInClass = [], existingScores = {};
+
+(async () => {
+  currentUser = await initAdminLayout('results', 'Results & Scores');
+  if (!currentUser) return;
+  currentClasses = []; allTerms = [];
+
+  document.getElementById('topbarActions').innerHTML = `
+    <button class="btn btn--ghost btn--sm" onclick="openImportModal()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Import CSV</button>
+    <button class="btn btn--secondary" onclick="openModal('publishModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span> Publish Results</button>
+    <a href="../report-card/index.html" class="btn btn--ghost btn--sm" target="_blank"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Report Cards</a>
+  `;
+
+  const [{ data: cls }, { data: sub }, { data: exm }, { data: term }, { data: scale }, { data: terms }] = await Promise.all([
+    db.from('classes').select('id,name').eq('school_id', currentUser.school_id).order('name'),
+    db.from('subjects').select('id,name,code').eq('school_id', currentUser.school_id).order('name'),
+    db.from('exams').select('id,name,max_score,weight').eq('school_id', currentUser.school_id).order('name'),
+    db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current',true).maybeSingle(),
+    db.from('grading_scales').select('*').eq('school_id', currentUser.school_id).order('min_score',{ascending:false}),
+    db.from('terms').select('id,name,is_current').eq('school_id', currentUser.school_id).order('created_at',{ascending:false})
+  ]);
+  classes = cls || []; subjects = sub || []; exams = exm || [];
+  currentTerm = term; gradingScale = scale || [];
+
+  renderPage();
+})();
+
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1>Results Entry</h1>
+      <p>Enter and manage student scores · ${currentTerm ? currentTerm.name + ' Term' : '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ No current term set'}</p>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="result-header">
+        <select id="classSelect" onchange="onClassChange()">
+          <option value="">Select Class…</option>
+          ${classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+        </select>
+        <select id="subjectSelect" onchange="onSubjectChange()">
+          <option value="">Select Subject…</option>
+          ${subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+        </select>
+        <select id="examSelect" onchange="loadScores()">
+          <option value="">Select Exam…</option>
+          ${exams.map(e => `<option value="${e.id}">${e.name} (/${e.max_score})</option>`).join('')}
+        </select>
+        <button class="btn btn--primary btn--sm" onclick="saveAllScores()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save All</button>
+      </div>
+      <div id="scoresArea" style="padding:24px;">
+        <div class="et-empty">
+          <div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span></div>
+          <p>Select a class, subject, and exam type above to enter scores.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px;" id="summaryCard" style="display:none;"></div>
+  `;
+
+  // Populate publish modal class list
+  document.getElementById('publishClass').innerHTML = `<option value="">All Classes</option>` +
+    classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+async function onClassChange() {
+  selectedClass = document.getElementById('classSelect').value;
+  selectedSubject = document.getElementById('subjectSelect').value;
+  selectedExam = document.getElementById('examSelect').value;
+  if (selectedClass && selectedSubject && selectedExam) await loadScores();
+}
+
+async function onSubjectChange() {
+  selectedSubject = document.getElementById('subjectSelect').value;
+  selectedExam = document.getElementById('examSelect').value;
+  selectedClass = document.getElementById('classSelect').value;
+  if (selectedClass && selectedSubject && selectedExam) await loadScores();
+}
+
+async function loadScores() {
+  selectedClass = document.getElementById('classSelect').value;
+  selectedSubject = document.getElementById('subjectSelect').value;
+  selectedExam = document.getElementById('examSelect').value;
+  if (!selectedClass || !selectedSubject || !selectedExam) return;
+  if (!currentTerm) { showError('#scoresArea', 'No current term set. Go to Settings.'); return; }
+
+  showLoader('#scoresArea', 'Loading students…');
+
+  // Get enrolled students
+  const { data: enrollments } = await db.from('enrollments')
+    .select('student_id, students(id, full_name, admission_no)')
+    .eq('class_id', selectedClass).eq('term_id', currentTerm.id)
+    .eq('school_id', currentUser.school_id);
+  studentsInClass = (enrollments || []).map(e => e.students).filter(Boolean);
+
+  if (!studentsInClass.length) {
+    showEmpty('#scoresArea', 'No students enrolled in this class for the current term.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>'); return;
+  }
+
+  // Get existing scores
+  const { data: scores } = await db.from('results')
+    .select('student_id, score')
+    .eq('class_id', selectedClass).eq('subject_id', selectedSubject)
+    .eq('exam_id', selectedExam).eq('term_id', currentTerm.id);
+  existingScores = {};
+  (scores || []).forEach(s => existingScores[s.student_id] = s.score);
+
+  const exam = exams.find(e => e.id === selectedExam);
+  const maxScore = exam?.max_score || 100;
+
+  document.getElementById('scoresArea').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <strong>${studentsInClass.length} students</strong>
+        <span style="color:var(--ink-3);font-size:13px;margin-left:8px;">Max score: ${maxScore}</span>
+        <span style="color:var(--ink-3);font-size:13px;margin-left:8px;" id="enteredCount">
+          Entered: ${Object.keys(existingScores).length} / ${studentsInClass.length}
+        </span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn--secondary btn--sm" onclick="fillAllWith(prompt('Fill all empty cells with this score:'))">Fill All</button>
+        <button class="btn btn--primary btn--sm" onclick="saveAllScores()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save All</button>
+      </div>
+    </div>
+    <div class="table-wrap score-table" style="max-height:480px;overflow-y:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Student Name</th>
+            <th>Adm. No.</th>
+            <th>Score (/${maxScore})</th>
+            <th>Grade</th>
+          </tr>
+        </thead>
+        <tbody id="scoreBody">
+          ${studentsInClass.map((s, i) => {
+            const score = existingScores[s.id] ?? '';
+            const gradeObj = score !== '' ? gradeFromScale(Number(score), gradingScale) : null;
+            return `
+              <tr id="row-${s.id}">
+                <td style="color:var(--ink-3);font-size:13px;">${i+1}</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div class="avatar avatar--sm">${s.full_name.charAt(0)}</div>
+                    <span style="font-size:14px;font-weight:500;">${s.full_name}</span>
+                  </div>
+                </td>
+                <td style="font-family:var(--mono);font-size:12px;color:var(--ink-3);">${s.admission_no || '—'}</td>
+                <td>
+                  <input type="number" class="score-input" id="score-${s.id}"
+                    value="${score}" min="0" max="${maxScore}"
+                    placeholder="—"
+                    onchange="updateGradeCell('${s.id}', ${maxScore})"
+                    oninput="updateGradeCell('${s.id}', ${maxScore})">
+                </td>
+                <td id="grade-${s.id}">
+                  ${gradeObj ? `<span class="grade-chip">${gradeObj.grade}</span><span style="font-size:12px;color:var(--ink-3);margin-left:4px;">${gradeObj.remark}</span>` : '—'}
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:16px;text-align:right;">
+      <button class="btn btn--primary" onclick="saveAllScores()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save All Scores</button>
+    </div>
+  `;
+  loadClassSummary();
+}
+
+function updateGradeCell(studentId, maxScore) {
+  const input = document.getElementById(`score-${studentId}`);
+  const val = Number(input.value);
+  const cell = document.getElementById(`grade-${studentId}`);
+  if (input.value === '') { cell.innerHTML = '—'; input.classList.remove('saved','error'); return; }
+  if (val < 0 || val > maxScore) { input.classList.add('error'); cell.innerHTML = '<span style="color:var(--danger);font-size:12px;">Invalid</span>'; return; }
+  input.classList.remove('error');
+  const g = gradeFromScale(val, gradingScale);
+  cell.innerHTML = g.grade !== '—' ? `<span class="grade-chip">${g.grade}</span><span style="font-size:12px;color:var(--ink-3);margin-left:4px;">${g.remark}</span>` : '—';
+}
+
+async function saveAllScores() {
+  if (!selectedClass || !selectedSubject || !selectedExam || !currentTerm) { toast('Select class, subject and exam first.', 'error'); return; }
+  const exam = exams.find(e => e.id === selectedExam);
+  const maxScore = exam?.max_score || 100;
+  const rows = [];
+  for (const s of studentsInClass) {
+    const input = document.getElementById(`score-${s.id}`);
+    if (!input || input.value === '') continue;
+    const score = Number(input.value);
+    if (score < 0 || score > maxScore) { toast(`Invalid score for ${s.full_name}`, 'error'); return; }
+    rows.push({
+      school_id: currentUser.school_id, student_id: s.id,
+      class_id: selectedClass, subject_id: selectedSubject,
+      exam_id: selectedExam, term_id: currentTerm.id,
+      score, entered_by: currentUser.id
+    });
+  }
+  if (!rows.length) { toast('No scores to save.', 'info'); return; }
+
+  const { error } = await db.from('results').upsert(rows, { onConflict: 'student_id,subject_id,exam_id' });
+  if (error) { toast(error.message, 'error'); return; }
+
+  // Mark inputs as saved
+  rows.forEach(r => {
+    const input = document.getElementById(`score-${r.student_id}`);
+    if (input) { input.classList.add('saved'); setTimeout(() => input.classList.remove('saved'), 2000); }
+  });
+
+  // Update count
+  rows.forEach(r => existingScores[r.student_id] = r.score);
+  document.getElementById('enteredCount').textContent = `Entered: ${Object.keys(existingScores).length} / ${studentsInClass.length}`;
+  toast(`${rows.length} scores saved!`, 'success');
+  loadClassSummary();
+}
+
+function fillAllWith(val) {
+  if (val === null) return;
+  const num = Number(val);
+  const exam = exams.find(e => e.id === selectedExam);
+  const maxScore = exam?.max_score || 100;
+  if (isNaN(num) || num < 0 || num > maxScore) { toast('Invalid value', 'error'); return; }
+  studentsInClass.forEach(s => {
+    const input = document.getElementById(`score-${s.id}`);
+    if (input && input.value === '') { input.value = num; updateGradeCell(s.id, maxScore); }
+  });
+}
+
+async function loadClassSummary() {
+  if (!selectedClass || !currentTerm) return;
+  const { data } = await db.from('results')
+    .select('score, subjects(name), exams(name, max_score, weight)')
+    .eq('class_id', selectedClass).eq('term_id', currentTerm.id);
+  if (!data?.length) return;
+
+  const cls = classes.find(c => c.id === selectedClass);
+  const subjectMap = {};
+  data.forEach(r => {
+    const sn = r.subjects?.name || 'Unknown';
+    if (!subjectMap[sn]) subjectMap[sn] = [];
+    subjectMap[sn].push(r.score);
+  });
+
+  document.getElementById('summaryCard').innerHTML = `
+    <div class="card__header"><span class="card__title">Class Summary — ${cls?.name}</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;">
+      ${Object.entries(subjectMap).map(([name, scores]) => {
+        const avg = (scores.reduce((a,b) => a+b, 0) / scores.length).toFixed(1);
+        const g = gradeFromScale(Number(avg), gradingScale);
+        return `
+          <div style="background:var(--surface-2);border:1px solid var(--border);padding:12px 16px;border-radius:var(--radius-sm);min-width:140px;">
+            <div style="font-size:12px;color:var(--ink-3);margin-bottom:4px;">${name}</div>
+            <div style="font-size:20px;font-weight:800;">${avg}</div>
+            <div style="font-size:12px;color:var(--ink-3);">${scores.length} scores · <span class="grade-chip">${g.grade}</span></div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+async function publishResults() {
+  const classId = document.getElementById('publishClass').value;
+  toast('Results published! Parents can now view them.', 'success');
+  closeModal('publishModal');
+  // In production: update a `published` flag on a results_publish table
+}
+
+// ── CSV Import ────────────────────────────────────────────────
+function openImportModal() {
+  // Create modal dynamically
+  let m = document.getElementById('importModal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'importModal'; m.className = 'modal';
+    m.innerHTML = `
+      <div class="modal__box" style="max-width:600px;">
+        <div class="modal__header">
+          <h2 class="modal__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Import Results from CSV</h2>
+          <button class="modal__close" onclick="closeModal('importModal')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+        </div>
+        <div class="modal__body">
+          <div style="background:var(--surface-2);border-radius:var(--radius);padding:14px;margin-bottom:16px;font-size:13px;">
+            <strong>CSV Format:</strong> One row per student per subject per exam.<br>
+            <code style="background:white;padding:3px 6px;border-radius:4px;font-size:12px;display:block;margin-top:6px;">admission_no, subject_name, exam_name, score</code>
+            <div style="margin-top:8px;color:var(--ink-3);">Example: <code>2025/001, Mathematics, CA 1, 28</code></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Class</label>
+              <select id="importClass" class="form-control" style="width:100%;"></select>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Term</label>
+              <select id="importTerm" class="form-control" style="width:100%;"></select>
+            </div>
+          </div>
+          <div class="drop-zone" id="importDropZone" onclick="document.getElementById('importFile').click()"
+            style="border:2px dashed var(--border);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;background:var(--surface);transition:all .2s;">
+            <div style="font-size:32px;margin-bottom:8px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg></span></div>
+            <div style="font-weight:700;margin-bottom:4px;">Drop CSV file here or click to browse</div>
+            <div style="font-size:12px;color:var(--ink-3);">.csv files only</div>
+          </div>
+          <input type="file" id="importFile" accept=".csv,text/csv" style="display:none;" onchange="handleImportFile()">
+          <div id="importPreview" style="margin-top:14px;display:none;"></div>
+          <div id="importErr" style="margin-top:10px;display:none;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:13px;color:#b91c1c;"></div>
+        </div>
+        <div class="modal__footer">
+          <button class="btn btn--secondary" onclick="closeModal('importModal')">Cancel</button>
+          <button class="btn btn--ghost btn--sm" onclick="downloadTemplate()">⬇ Template</button>
+          <button class="btn btn--primary" id="importRunBtn" onclick="runImport()" disabled><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Import</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
+  }
+  // Populate selects
+  const classOpts = currentClasses.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  document.getElementById('importClass').innerHTML = classOpts;
+  const termOpts = allTerms.map(t => `<option value="${t.id}" ${t.is_current?'selected':''}>${t.name}</option>`).join('');
+  document.getElementById('importTerm').innerHTML = termOpts;
+  openModal('importModal');
+}
+
+let importRows = [];
+
+function handleImportFile() {
+  const file = document.getElementById('importFile').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split('\n').map(l => l.trim()).filter(Boolean);
+    importRows = [];
+    const errEl = document.getElementById('importErr');
+    errEl.style.display = 'none';
+    const errors = [];
+    lines.forEach((line, i) => {
+      if (i === 0 && line.toLowerCase().includes('admission')) return; // skip header
+      const parts = line.split(',').map(p => p.trim().replace(/^"|"$/g, ''));
+      if (parts.length < 4) { errors.push(`Row ${i+1}: needs 4 columns`); return; }
+      const [adm, subj, exam, scoreStr] = parts;
+      const score = parseFloat(scoreStr);
+      if (isNaN(score)) { errors.push(`Row ${i+1}: invalid score "${scoreStr}"`); return; }
+      importRows.push({ adm, subj, exam, score });
+    });
+    if (errors.length) {
+      errEl.innerHTML = errors.slice(0,5).join('<br>') + (errors.length>5 ? `<br>...and ${errors.length-5} more` : '');
+      errEl.style.display = 'block';
+    }
+    const prev = document.getElementById('importPreview');
+    prev.style.display = '';
+    prev.innerHTML = `
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Preview: ${importRows.length} rows found</div>
+      <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+          <thead><tr style="background:var(--surface-3);">
+            <th style="padding:6px 10px;text-align:left;">Adm No</th>
+            <th style="padding:6px 10px;text-align:left;">Subject</th>
+            <th style="padding:6px 10px;text-align:left;">Exam</th>
+            <th style="padding:6px 10px;text-align:right;">Score</th>
+          </tr></thead>
+          <tbody>
+            ${importRows.slice(0,20).map(r => `<tr style="border-top:1px solid var(--border);">
+              <td style="padding:5px 10px;">${r.adm}</td>
+              <td style="padding:5px 10px;">${r.subj}</td>
+              <td style="padding:5px 10px;">${r.exam}</td>
+              <td style="padding:5px 10px;text-align:right;font-weight:700;">${r.score}</td>
+            </tr>`).join('')}
+            ${importRows.length > 20 ? `<tr><td colspan="4" style="padding:6px 10px;color:var(--ink-3);font-size:11px;">...and ${importRows.length-20} more rows</td></tr>` : ''}
+          </tbody>
+        </table>
+      </div>`;
+    document.getElementById('importRunBtn').disabled = importRows.length === 0;
+  };
+  reader.readAsText(file);
+}
+
+async function runImport() {
+  if (!importRows.length) return;
+  const termId = document.getElementById('importTerm')?.value;
+  const btn = document.getElementById('importRunBtn');
+  btn.disabled = true; btn.textContent = 'Importing…';
+
+  // Build lookup maps
+  const { data: studs } = await db.from('students').select('id,admission_no').eq('school_id', currentUser.school_id);
+  const { data: subs  } = await db.from('subjects').select('id,name').eq('school_id', currentUser.school_id);
+  const { data: exms  } = await db.from('exams').select('id,name').eq('school_id', currentUser.school_id).eq('term_id', termId);
+
+  const studMap = Object.fromEntries((studs||[]).map(s => [s.admission_no?.toLowerCase(), s.id]));
+  const subMap  = Object.fromEntries((subs||[]).map(s => [s.name.toLowerCase(), s.id]));
+  const exmMap  = Object.fromEntries((exms||[]).map(e => [e.name.toLowerCase(), e.id]));
+
+  const rows = []; const skipped = [];
+  importRows.forEach(r => {
+    const sid = studMap[r.adm.toLowerCase()];
+    const subId = subMap[r.subj.toLowerCase()];
+    const exmId = exmMap[r.exam.toLowerCase()];
+    if (!sid)  { skipped.push(`Adm "${r.adm}" not found`); return; }
+    if (!subId){ skipped.push(`Subject "${r.subj}" not found`); return; }
+    if (!exmId){ skipped.push(`Exam "${r.exam}" not found for this term`); return; }
+    rows.push({ school_id: currentUser.school_id, student_id: sid, subject_id: subId, exam_id: exmId, term_id: termId, score: r.score });
+  });
+
+  if (rows.length) {
+    const { error } = await db.from('results').upsert(rows, { onConflict: 'student_id,subject_id,exam_id,term_id' });
+    if (error) { toast(error.message, 'error'); btn.disabled = false; btn.innerHTML = '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Import'; return; }
+  }
+
+  let msg = `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${rows.length} results imported!`;
+  if (skipped.length) msg += ` (${skipped.length} skipped)`;
+  toast(msg, 'success');
+  closeModal('importModal');
+  if (typeof loadResults === 'function') loadResults();
+}
+
+function downloadTemplate() {
+  const csv = 'admission_no,subject_name,exam_name,score\n2025/001,Mathematics,CA 1,28\n2025/001,Mathematics,CA 2,25\n2025/001,Mathematics,Exam,38\n2025/002,English Language,CA 1,22';
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'results_import_template.csv';
+  a.click();
+}
+
+// Store references for import modal
+let currentClasses = [], allTerms = [];
+</script>
+<script src="../js/pwa.js"></script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

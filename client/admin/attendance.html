@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <title>EduTrack NG — Staff Attendance</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .att-row {
+      display:flex; align-items:center; padding:11px 16px;
+      border-bottom:1px solid var(--border); gap:12px; transition:background .1s;
+    }
+    .att-row:hover { background:var(--surface-2); }
+    .att-row:last-child { border-bottom:none; }
+    .att-name { flex:1; font-size:14px; font-weight:500; }
+    .att-role { font-size:11px; color:var(--ink-3); width:110px; }
+    .submitted-badge { background:#dcfce7; color:#166534; border:1px solid #86efac; border-radius:20px; padding:2px 10px; font-size:11px; font-weight:700; }
+    @media print {
+      .no-print { display:none!important; }
+      .card { box-shadow:none!important; border:1px solid #ddd!important; }
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+// Admin attendance = STAFF ONLY (Fix 10)
+// Teachers take student attendance from their own portal (Fix 9)
+let currentUser, allStaff = [], attendanceData = {}, currentTerm, viewMode = 'take';
+
+(async () => {
+  currentUser = await initAdminLayout('attendance', 'Staff Attendance');
+  if (!currentUser) return;
+  document.getElementById('topbarActions').innerHTML =
+    `<button class="btn btn--secondary no-print" onclick="exportCSV()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Export CSV</button>`;
+
+  const [{ data: staff }, { data: term }] = await Promise.all([
+    db.from('users').select('id,full_name,role,phone').eq('school_id', currentUser.school_id)
+      .not('role','eq','saas_owner').eq('is_active',true).order('full_name'),
+    db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current',true).maybeSingle()
+  ]);
+  allStaff = staff || []; currentTerm = term;
+  renderPage();
+})();
+
+const ROLE_LABELS = {
+  teacher:'Teacher', admin:'Administrator', exam_officer:'Exam Officer',
+  vp_academic:'VP Academic', vp_admin:'VP Admin', registrar:'Registrar',
+  accountant:'Accountant', bursary:'Bursary Officer'
+};
+
+function renderPage() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1>Staff Attendance</h1>
+      <p class="no-print">${currentTerm ? currentTerm.name : '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Set a current term in Settings'}</p>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:4px;">Admins manage staff attendance here. Teacher attendance is taken by class teachers in their portal.</div>
+    </div>
+    <div class="tabs no-print">
+      <button class="tab active" id="tabTake" onclick="switchTab('take')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> Take Attendance</button>
+      <button class="tab" id="tabReport" onclick="switchTab('report')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span> Attendance Report</button>
+      <button class="tab" id="tabSubmitted" onclick="switchTab('submitted')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span> Submitted by Teachers</button>
+    </div>
+
+    <!-- TAKE -->
+    <div id="takePan">
+      <div class="filter-bar no-print">
+        <input type="date" id="attDate" class="form-control" value="${today}" onchange="loadDate()" style="max-width:180px;">
+        <button class="btn btn--secondary btn--sm no-print" onclick="markAll('P')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> All Present</button>
+        <button class="btn btn--secondary btn--sm no-print" onclick="markAll('A')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> All Absent</button>
+      </div>
+      <div class="card" style="padding:0;" id="attCard">
+        <div class="et-empty" style="padding:40px;"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span></div><p>Loading staff list…</p></div>
+      </div>
+    </div>
+
+    <!-- REPORT -->
+    <div id="reportPan" style="display:none;">
+      <div class="filter-bar no-print">
+        <select class="form-control" id="reportRole" style="max-width:180px;" onchange="loadReport()">
+          <option value="">All Roles</option>
+          ${Object.entries(ROLE_LABELS).map(([k,v]) => `<option value="${k}">${v}</option>`).join('')}
+        </select>
+      </div>
+      <div id="reportContent"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span></div><p>Loading report…</p></div></div>
+    </div>
+
+    <!-- SUBMITTED BY TEACHERS -->
+    <div id="submittedPan" style="display:none;">
+      <div id="submittedContent">
+        <div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span></div><p>Loading submitted attendance records…</p></div>
+      </div>
+    </div>
+  `;
+  // Auto-load today
+  loadDate();
+}
+
+function switchTab(tab) {
+  viewMode = tab;
+  ['take','report','submitted'].forEach(t => {
+    document.getElementById(`tab${t.charAt(0).toUpperCase()+t.slice(1)}`)?.classList.toggle('active', t === tab);
+    document.getElementById(`${t}Pan`).style.display = t === tab ? '' : 'none';
+  });
+  if (tab === 'report') loadReport();
+  if (tab === 'submitted') loadSubmitted();
+}
+
+async function loadDate() {
+  const date = document.getElementById('attDate')?.value;
+  if (!date || !currentTerm) {
+    if (allStaff.length) renderTakeList(date || new Date().toISOString().split('T')[0]);
+    return;
+  }
+  const { data: existing } = await db.from('attendance').select('student_id,status')
+    .eq('school_id', currentUser.school_id).eq('date', date)
+    .in('student_id', allStaff.map(s => s.id));
+  attendanceData = {};
+  (existing || []).forEach(a => attendanceData[a.student_id] = a.status);
+  renderTakeList(date);
+}
+
+function renderTakeList(date) {
+  if (!allStaff.length) { showEmpty('#attCard', 'No active staff found.'); return; }
+  const counts = { P:0, A:0, L:0, E:0 };
+  Object.values(attendanceData).forEach(s => { if (counts[s] !== undefined) counts[s]++; });
+  const marked = Object.keys(attendanceData).length;
+
+  document.getElementById('attCard').innerHTML = `
+    <div style="padding:14px 16px 0;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <div><strong>${allStaff.length} staff</strong> <span style="color:var(--ink-3);font-size:13px;">${marked} marked</span></div>
+      <div style="display:flex;gap:10px;font-size:12px;">
+        <span id="cntP" style="color:var(--success);font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${counts.P}</span>
+        <span id="cntA" style="color:var(--danger);font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> ${counts.A}</span>
+        <span id="cntL" style="color:var(--warning);font-weight:600;">⏰ ${counts.L}</span>
+        <span id="cntE" style="color:var(--info);font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="10"/></svg></span> ${counts.E}</span>
+      </div>
+    </div>
+    <div id="staffList" style="margin-top:8px;">
+      ${allStaff.map(s => {
+        const status = attendanceData[s.id] || '';
+        return `
+          <div class="att-row" id="ar-${s.id}">
+            <div class="avatar avatar--sm">${s.full_name.charAt(0)}</div>
+            <span class="att-name">${s.full_name}</span>
+            <span class="att-role">${ROLE_LABELS[s.role] || s.role}</span>
+            <div class="att-toggle">
+              <button class="att-P ${status==='P'?'active':''}" onclick="setStat('${s.id}','P')">P</button>
+              <button class="att-A ${status==='A'?'active':''}" onclick="setStat('${s.id}','A')">A</button>
+              <button class="att-L ${status==='L'?'active':''}" onclick="setStat('${s.id}','L')">L</button>
+              <button class="att-E ${status==='E'?'active':''}" onclick="setStat('${s.id}','E')">E</button>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>
+    <div style="padding:16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;" class="no-print">
+      <button class="btn btn--secondary" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>️ Print</button>
+      <button class="btn btn--primary" onclick="saveAtt()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save Attendance</button>
+    </div>
+  `;
+}
+
+function setStat(id, s) {
+  attendanceData[id] = s;
+  const row = document.getElementById(`ar-${id}`);
+  if (!row) return;
+  row.querySelectorAll('.att-toggle button').forEach(btn => {
+    const cls = [...btn.classList].find(c => c.startsWith('att-') && c.length===5);
+    btn.classList.toggle('active', cls?.replace('att-','') === s);
+  });
+  const c = { P:0, A:0, L:0, E:0 };
+  Object.values(attendanceData).forEach(s => { if (c[s]!==undefined) c[s]++; });
+  document.getElementById('cntP').innerHTML = `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${c.P}`;
+  document.getElementById('cntA').innerHTML = `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> ${c.A}`;
+  document.getElementById('cntL').textContent = `⏰ ${c.L}`;
+  document.getElementById('cntE').innerHTML = `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="10"/></svg></span> ${c.E}`;
+}
+
+function markAll(status) { allStaff.forEach(s => setStat(s.id, status)); }
+
+async function saveAtt() {
+  const date = document.getElementById('attDate')?.value;
+  if (!date || !currentTerm) { toast('Set a current term first.', 'info'); return; }
+  const rows = allStaff.filter(s => attendanceData[s.id]).map(s => ({
+    school_id: currentUser.school_id, student_id: s.id,
+    term_id: currentTerm.id, date, status: attendanceData[s.id],
+    recorded_by: currentUser.id
+  }));
+  if (!rows.length) { toast('Mark at least one staff member.', 'info'); return; }
+  const { error } = await db.from('attendance').upsert(rows, { onConflict: 'student_id,class_id,date,school_id' });
+  if (error) { toast(error.message, 'error'); return; }
+  toast(`Attendance saved for ${rows.length} staff!`, 'success');
+}
+
+// ── Report ────────────────────────────────────────────────────
+async function loadReport() {
+  if (!currentTerm) return;
+  showLoader('#reportContent', 'Loading report…');
+  const role = document.getElementById('reportRole')?.value || '';
+  const staffList = role ? allStaff.filter(s => s.role === role) : allStaff;
+  const ids = staffList.map(s => s.id);
+  if (!ids.length) { showEmpty('#reportContent', 'No staff for this role.'); return; }
+  const { data: recs } = await db.from('attendance').select('student_id,status,date')
+    .eq('school_id', currentUser.school_id).eq('term_id', currentTerm.id)
+    .in('student_id', ids);
+  const totalDays = new Set((recs || []).map(a => a.date)).size;
+  const rows = staffList.map(s => {
+    const sr = (recs || []).filter(r => r.student_id === s.id);
+    const P = sr.filter(r => r.status === 'P').length;
+    const A = sr.filter(r => r.status === 'A').length;
+    const L = sr.filter(r => r.status === 'L').length;
+    const pct = totalDays > 0 ? Math.round((P + L) / totalDays * 100) : null;
+    return { ...s, P, A, L, pct };
+  }).sort((a, b) => (b.pct || 0) - (a.pct || 0));
+
+  document.getElementById('reportContent').innerHTML = `
+    <div class="card" style="margin-bottom:16px;padding:16px;">
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <div><div style="font-size:12px;color:var(--ink-3);">School Days</div><strong style="font-size:20px;">${totalDays}</strong></div>
+        <div><div style="font-size:12px;color:var(--ink-3);">Staff</div><strong style="font-size:20px;">${staffList.length}</strong></div>
+        <div><div style="font-size:12px;color:var(--ink-3);">Avg Rate</div><strong style="font-size:20px;color:var(--primary);">${rows.length ? Math.round(rows.reduce((s,x) => s + (x.pct || 0), 0) / rows.length) : 0}%</strong></div>
+      </div>
+    </div>
+    <div class="card" style="padding:0;">
+      <div class="table-wrap" style="border:none;">
+        <table>
+          <thead><tr><th>Staff</th><th>Role</th><th>Present</th><th>Absent</th><th>Late</th><th>Rate</th></tr></thead>
+          <tbody>
+            ${rows.map(s => {
+              const pct = s.pct ?? 0;
+              const color = pct >= 75 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+              return `<tr>
+                <td><div class="student-cell"><div class="avatar avatar--sm">${s.full_name.charAt(0)}</div><div class="info"><div class="name">${s.full_name}</div></div></div></td>
+                <td><span style="font-size:12px;color:var(--ink-3);">${ROLE_LABELS[s.role]||s.role}</span></td>
+                <td><span style="color:var(--success);font-weight:600;">${s.P}</span></td>
+                <td><span style="color:var(--danger);font-weight:600;">${s.A}</span></td>
+                <td><span style="color:var(--warning);font-weight:600;">${s.L}</span></td>
+                <td style="min-width:120px;">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div class="progress-bar" style="flex:1;"><div class="progress-bar__fill" style="width:${pct}%;background:${color};"></div></div>
+                    <span style="font-size:12px;font-weight:700;color:${color};min-width:34px;">${s.pct !== null ? s.pct + '%' : '—'}</span>
+                  </div>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ── Submitted by Teachers ─────────────────────────────────────
+async function loadSubmitted() {
+  showLoader('#submittedContent', 'Loading submitted records…');
+  if (!currentTerm) { showEmpty('#submittedContent', 'No current term set.'); return; }
+  // Get student attendance submitted by teachers (recorded_by = teacher)
+  const teacherIds = allStaff.filter(s => ['teacher','vp_academic','exam_officer'].includes(s.role)).map(s => s.id);
+  if (!teacherIds.length) { showEmpty('#submittedContent', 'No teachers found.'); return; }
+
+  const { data: recs } = await db.from('attendance')
+    .select('date, status, recorded_by, students(full_name), users!attendance_recorded_by_fkey(full_name), classes(name)')
+    .eq('school_id', currentUser.school_id).eq('term_id', currentTerm.id)
+    .in('recorded_by', teacherIds)
+    .order('date', { ascending: false }).limit(200);
+
+  if (!recs?.length) { showEmpty('#submittedContent', 'No attendance submitted by teachers yet.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span>'); return; }
+
+  // Group by date+teacher
+  const grouped = {};
+  (recs || []).forEach(r => {
+    const key = `${r.date}::${r.recorded_by}`;
+    if (!grouped[key]) grouped[key] = { date: r.date, teacher: r.users?.full_name || 'Unknown', records: [] };
+    grouped[key].records.push(r);
+  });
+
+  document.getElementById('submittedContent').innerHTML = Object.values(grouped).map(g => `
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card__header">
+        <span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span> ${g.date} — ${g.teacher}</span>
+        <span class="submitted-badge">${g.records.length} records</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px;">
+        ${g.records.map(r => `
+          <span style="font-size:12px;padding:3px 8px;border-radius:4px;background:${r.status==='P'?'#dcfce7':r.status==='A'?'#fef2f2':'#fefce8'};color:${r.status==='P'?'#166534':r.status==='A'?'#991b1b':'#854d0e'};">
+            ${r.students?.full_name || '?'} (${r.status})
+          </span>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Export CSV ────────────────────────────────────────────────
+async function exportCSV() {
+  if (!currentTerm) { toast('No current term.', 'info'); return; }
+  const { data: recs } = await db.from('attendance').select('student_id,date,status')
+    .eq('school_id', currentUser.school_id).eq('term_id', currentTerm.id)
+    .in('student_id', allStaff.map(s => s.id));
+  if (!recs?.length) { toast('No data to export.', 'info'); return; }
+  const staffMap = Object.fromEntries(allStaff.map(s => [s.id, s]));
+  const rows = [['Name', 'Role', 'Date', 'Status']];
+  (recs || []).forEach(r => {
+    const s = staffMap[r.student_id];
+    if (s) rows.push([s.full_name, ROLE_LABELS[s.role]||s.role, r.date, r.status]);
+  });
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `staff_attendance_${currentTerm.name.replace(/\s+/g,'_')}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+</script>
+<script src="../js/pwa.js"></script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

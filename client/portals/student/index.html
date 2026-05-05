@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>EduTrack NG — Student Dashboard</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+  <style>
+    /* ── Hero ───────────────────────────────────────────── */
+    .dash-hero{background:linear-gradient(135deg,#0a6e3f 0%,#065530 60%,#1a2e6e 100%);border-radius:var(--radius);padding:26px 22px;color:white;display:flex;align-items:center;gap:18px;margin-bottom:22px;position:relative;overflow:hidden;}
+    .dash-hero::before{content:'';position:absolute;top:-40px;right:-40px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.05);}
+    .dash-hero__av{width:62px;height:62px;border-radius:50%;border:3px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0;overflow:hidden;position:relative;z-index:1;}
+    .dash-hero__av img{width:100%;height:100%;object-fit:cover;}
+    .dash-hero__text{flex:1;min-width:0;position:relative;z-index:1;}
+    .dash-hero__greeting{font-size:12px;color:rgba(255,255,255,.7);}
+    .dash-hero__name{font-size:20px;font-weight:800;margin:2px 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .dash-hero__meta{font-size:12px;color:rgba(255,255,255,.6);}
+    .dash-hero__badge{display:inline-block;background:rgba(255,255,255,.18);padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;color:#f0c040;margin-left:6px;}
+    .dash-hero__score{text-align:center;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius);padding:12px 18px;flex-shrink:0;position:relative;z-index:1;cursor:pointer;transition:all .2s;}
+    .dash-hero__score:hover{background:rgba(255,255,255,.2);transform:scale(1.03);}
+    .dash-hero__score-val{font-size:28px;font-weight:900;color:#f0c040;line-height:1;}
+    .dash-hero__score-label{font-size:10px;color:rgba(255,255,255,.6);margin-top:3px;}
+    .dash-hero__score-hint{font-size:9px;color:rgba(255,255,255,.4);margin-top:4px;}
+
+    /* ── Stats ──────────────────────────────────────────── */
+    .dash-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:12px;margin-bottom:22px;}
+    .dash-stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:15px 16px;box-shadow:var(--shadow-sm);transition:var(--transition);text-decoration:none;display:block;}
+    .dash-stat:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--primary);}
+    .dash-stat__icon{font-size:24px;margin-bottom:7px;}
+    .dash-stat__val{font-size:22px;font-weight:800;line-height:1;margin-bottom:3px;}
+    .dash-stat__label{font-size:12px;color:var(--ink-3);font-weight:500;}
+    .dash-stat__note{font-size:11px;margin-top:4px;font-weight:600;}
+    .dash-stat__note.good{color:var(--success);}
+    .dash-stat__note.warn{color:var(--warning);}
+    .dash-stat__note.danger{color:var(--danger);}
+
+    /* ── Subject button ─────────────────────────────────── */
+    .subject-trigger-card{background:linear-gradient(135deg,#1a2e6e,#2041a3);border-radius:var(--radius);padding:18px 20px;color:white;display:flex;align-items:center;gap:16px;cursor:pointer;margin-bottom:20px;transition:all .2s;border:none;width:100%;text-align:left;box-shadow:0 4px 16px rgba(26,46,110,.3);}
+    .subject-trigger-card:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(26,46,110,.4);}
+    .subject-trigger-card:active{transform:translateY(0);}
+    .stc-icon{width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;}
+    .stc-text{flex:1;}
+    .stc-title{font-size:17px;font-weight:800;margin-bottom:3px;}
+    .stc-sub{font-size:12px;color:rgba(255,255,255,.65);}
+    .stc-arrow{font-size:22px;color:rgba(255,255,255,.5);}
+    .stc-count{background:rgba(255,255,255,.18);color:#f0c040;padding:3px 10px;border-radius:100px;font-size:12px;font-weight:700;margin-left:8px;display:inline-block;margin-top:4px;}
+
+    /* ── Two-col grid ───────────────────────────────────── */
+    .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
+    @media(max-width:680px){.dash-grid{grid-template-columns:1fr;}}
+    .subj-bar{margin-bottom:11px;}
+    .subj-bar__top{display:flex;justify-content:space-between;margin-bottom:3px;}
+    .subj-bar__name{font-size:13px;font-weight:600;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:68%;}
+    .subj-bar__score{font-size:12px;font-weight:700;}
+    .subj-bar__track{height:7px;background:var(--surface-3);border-radius:100px;overflow:hidden;}
+    .subj-bar__fill{height:100%;border-radius:100px;transition:width .5s ease;}
+    .att-ring-wrap{display:flex;align-items:center;gap:16px;}
+    .att-ring{position:relative;width:96px;height:96px;flex-shrink:0;}
+    .att-ring svg{transform:rotate(-90deg);}
+    .att-ring__pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;}
+    .att-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px;}
+    .att-row:last-child{border-bottom:none;}
+    .att-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;}
+    .notif-prev{display:flex;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);align-items:flex-start;}
+    .notif-prev:last-child{border-bottom:none;padding-bottom:0;}
+    .notif-prev__icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+    .notif-prev__title{font-size:13px;font-weight:700;margin-bottom:2px;}
+    .notif-prev__body{font-size:12px;color:var(--ink-3);line-height:1.4;}
+    .notif-prev__time{font-size:11px;color:var(--ink-4);margin-top:2px;}
+    .notif-unread-dot{width:8px;height:8px;background:var(--primary);border-radius:50%;flex-shrink:0;margin-top:4px;}
+    .quick-actions{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;}
+    .quick-btn{display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px 8px;border-radius:var(--radius);border:1.5px solid var(--border);background:var(--surface);cursor:pointer;text-decoration:none;transition:var(--transition);color:var(--ink-2);text-align:center;}
+    .quick-btn:hover{border-color:var(--primary);background:var(--primary-light);color:var(--primary-dark);}
+    .quick-btn__icon{font-size:22px;}
+    .quick-btn__label{font-size:11px;font-weight:600;}
+    .term-badge{display:inline-block;background:rgba(255,255,255,.18);color:rgba(255,255,255,.9);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;margin-top:6px;}
+
+    /* ── Subject modal (slide-up sheet) ─────────────────── */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .25s;pointer-events:none;}
+    .modal-overlay.open{opacity:1;pointer-events:all;}
+    .modal-sheet{background:var(--surface);width:100%;max-width:680px;max-height:92vh;border-radius:20px 20px 0 0;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,1.25,.5,1);}
+    .modal-overlay.open .modal-sheet{transform:translateY(0);}
+    .modal-handle{width:40px;height:4px;background:var(--border);border-radius:100px;margin:12px auto 0;}
+    .modal-header{padding:16px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
+    .modal-title{font-size:18px;font-weight:800;color:var(--ink);}
+    .modal-subtitle{font-size:13px;color:var(--ink-3);margin-top:2px;}
+    .modal-body{flex:1;overflow-y:auto;padding:16px 20px 24px;-webkit-overflow-scrolling:touch;}
+    .modal-close{position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:50%;background:var(--surface-3);border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink-2);}
+
+    /* ── Term selector inside modal ─────────────────────── */
+    .term-selector{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+    .term-pill{padding:5px 14px;border-radius:100px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--ink-3);transition:var(--transition);}
+    .term-pill.active{background:var(--primary);color:white;border-color:var(--primary);}
+
+    /* ── Summary strip inside modal ─────────────────────── */
+    .modal-summary{display:flex;gap:0;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);margin-bottom:16px;}
+    .modal-summary__cell{flex:1;padding:12px 10px;text-align:center;background:var(--surface-2);border-right:1px solid var(--border);}
+    .modal-summary__cell:last-child{border-right:none;}
+    .modal-summary__val{font-size:20px;font-weight:900;line-height:1;}
+    .modal-summary__label{font-size:10px;color:var(--ink-3);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:3px;}
+
+    /* ── Subject cards inside modal ─────────────────────── */
+    .subj-card{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;transition:var(--transition);}
+    .subj-card:hover{box-shadow:var(--shadow);border-color:var(--primary);}
+    .subj-card__head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;user-select:none;}
+    .subj-card__rank{width:28px;height:28px;border-radius:50%;background:var(--surface-3);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;color:var(--ink-2);flex-shrink:0;}
+    .subj-card__name{flex:1;font-weight:700;font-size:14px;}
+    .subj-card__compulsory{font-size:10px;color:var(--danger);font-weight:700;margin-left:4px;}
+    .subj-card__avg{font-size:18px;font-weight:900;}
+    .subj-card__grade{padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700;margin-left:8px;}
+    .subj-card__chevron{font-size:14px;color:var(--ink-4);margin-left:6px;transition:transform .2s;}
+    .subj-card.open .subj-card__chevron{transform:rotate(180deg);}
+    .subj-card__bar{height:5px;background:var(--surface-3);position:relative;}
+    .subj-card__bar-fill{height:100%;position:absolute;left:0;top:0;border-radius:0 100px 100px 0;transition:width .5s ease;}
+
+    /* ── Score breakdown table inside card ──────────────── */
+    .subj-card__detail{display:none;padding:0 16px 14px;border-top:1px solid var(--border);background:var(--surface-2);}
+    .subj-card.open .subj-card__detail{display:block;}
+    .score-breakdown{display:grid;gap:8px;margin-top:12px;}
+    .score-row{display:flex;align-items:center;gap:10px;}
+    .score-row__label{font-size:12px;font-weight:600;color:var(--ink-3);min-width:80px;flex-shrink:0;}
+    .score-row__bar-wrap{flex:1;height:10px;background:var(--surface-3);border-radius:100px;overflow:hidden;}
+    .score-row__bar{height:100%;border-radius:100px;transition:width .5s ease;}
+    .score-row__val{font-size:13px;font-weight:800;min-width:44px;text-align:right;flex-shrink:0;}
+    .score-row__max{font-size:11px;color:var(--ink-4);margin-left:2px;}
+    .score-row__pct{font-size:11px;color:var(--ink-3);min-width:36px;text-align:right;flex-shrink:0;}
+    .total-divider{border:none;border-top:1.5px dashed var(--border);margin:10px 0;}
+    .total-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--ink);border-radius:var(--radius-sm);color:white;}
+    .total-row__label{font-size:12px;font-weight:600;color:rgba(255,255,255,.7);}
+    .total-row__val{font-size:20px;font-weight:900;color:#f0c040;}
+    .total-row__grade{padding:3px 10px;border-radius:100px;font-size:12px;font-weight:800;}
+    .subj-empty{text-align:center;padding:30px;color:var(--ink-3);font-size:13px;}
+
+    /* ── Print slip ─────────────────────────────────────── */
+    @media print{
+      .modal-overlay{position:static;background:none;display:block;}
+      .modal-sheet{max-height:none;border-radius:0;transform:none;}
+      .modal-close,.term-selector,.no-print{display:none!important;}
+      .subj-card__detail{display:block!important;}
+      .subj-card{break-inside:avoid;}
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px;font-family:sans-serif;color:#666;">
+    <div style="width:36px;height:36px;border:4px solid #e5e7eb;border-top-color:#0a6e3f;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+    <p style="margin:0;font-size:14px;">Loading dashboard…</p>
+  </div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+<!-- Subject Modal -->
+<div class="modal-overlay" id="subjectModal" onclick="handleOverlayClick(event)">
+  <div class="modal-sheet" id="subjectSheet">
+    <div class="modal-handle"></div>
+    <button class="modal-close no-print" onclick="closeSubjectModal()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">My Subjects & Scores</div>
+      <div class="modal-subtitle" id="modalSubtitle">Loading…</div>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <div class="et-loader"><div class="et-spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../../js/config.js"></script>
+  <script src="../../js/supabase.js"></script>
+<script src="layout.js"></script>
+<script>
+// ── Global state ───────────────────────────────────────
+var _ctx, _results=[], _maps=null, _gradingScale=[], _allTerms=[], _allExams=[];
+var _assignedIds=null, _subjectMeta={}, _modalTermId=null;
+
+(async function() {
+  try {
+  _ctx = await initStudentLayout('dashboard', 'My Dashboard');
+  if (!_ctx) return;
+
+  var session=_ctx.session, student=_ctx.student, dashSettings=_ctx.dashSettings, term=_ctx.term;
+  var schoolId=session.school_id, studentId=session.id;
+  var enrollment=_ctx.currentEnrollment;
+  var className=enrollment&&enrollment.classes?enrollment.classes.name:'—';
+  var section=((enrollment&&enrollment.classes&&(enrollment.classes.section||enrollment.classes.level))||'').toUpperCase();
+  var classId=_ctx.classId;
+  var comboId=student&&student.class_combo_id;
+
+  function greet(h){return h<12?'Good morning':h<17?'Good afternoon':'Good evening';}
+  function getGrade(a){return a>=75?'A1':a>=70?'B2':a>=65?'B3':a>=60?'C4':a>=55?'C5':a>=50?'C6':a>=45?'D7':a>=40?'E8':'F9';}
+  function gc(a){return a>=60?'var(--success)':a>=40?'var(--warning)':'var(--danger)';}
+  function bc(a){return a>=60?'#22c55e':a>=40?'#f59e0b':'#ef4444';}
+  function timeAgo(d){
+    var diff=Date.now()-new Date(d).getTime(),m=Math.floor(diff/60000);
+    if(m<1)return'Just now';if(m<60)return m+'m ago';
+    var h=Math.floor(m/60);if(h<24)return h+'h ago';
+    var dy=Math.floor(h/24);if(dy<7)return dy+'d ago';
+    return new Date(d).toLocaleDateString('en-NG',{day:'numeric',month:'short'});
+  }
+  function ns(type){var map={info:{bg:'#dbeafe',ic:'ℹ️'},warning:{bg:'#fef9c3',ic:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️'},urgent:{bg:'#fee2e2',ic:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>'},result:{bg:'#dcfce7',ic:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span>'},fee:{bg:'#fef3c7',ic:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>'},attendance:{bg:'#ede9fe',ic:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span>'},success:{bg:'#dcfce7',ic:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>'}};return map[type]||{bg:'#f3f4f6',ic:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>'};}
+  function donut(pct,color){var r=40,circ=2*Math.PI*r,dash=(pct/100)*circ;return '<svg width="96" height="96" viewBox="0 0 100 100"><circle cx="50" cy="50" r="'+r+'" fill="none" stroke="#e5e7eb" stroke-width="10"/><circle cx="50" cy="50" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="10" stroke-dasharray="'+dash+' '+circ+'" stroke-linecap="round"/></svg>';}
+  function fmt(n){return '₦'+Number(n).toLocaleString('en-NG');}
+
+  // ── Dashboard fetch via RPC (replaces 8 direct db.from() calls) ──
+  var dashData, dashErr;
+  try {
+    var dashRpc = await db.rpc('get_student_dashboard', {
+      p_student_id: session.id,
+      p_school_id:  session.school_id
+    });
+    dashData = dashRpc.data;
+    dashErr  = dashRpc.error;
+  } catch (ex) {
+    dashErr = { message: ex && ex.message || String(ex) };
+  }
+
+  if (dashErr || !dashData || !dashData.ok) {
+    document.getElementById('pageBody').innerHTML =
+      '<div style="padding:2rem;color:red;">Failed to load dashboard data. Please try again.</div>';
+    return;
+  }
+
+  _results       = dashData.results    || [];
+  _gradingScale  = dashData.grading    || [];
+  _allTerms      = dashData.terms      || [];
+  _allExams      = dashData.exams      || [];
+  var attData    = dashData.attendance || [];
+  var payments   = dashData.payments   || [];
+  var feeTypes   = dashData.fee_types  || [];
+  var notifs     = dashData.notifs     || [];
+  _modalTermId   = term && term.id;
+
+  // ── Subject maps ────────────────────────────────────
+  _maps=window._stuSubjectMaps||await loadStudentSubjectMaps(schoolId,classId,term&&term.id);
+
+  // ── Build assigned subject IDs + meta ───────────────
+  var isSenior=section.indexOf('SENIOR')>=0||section.indexOf('SS')>=0;
+  if(isSenior&&comboId&&_maps.comboSubjectMap[comboId]&&_maps.comboSubjectMap[comboId].length){
+    _assignedIds={};
+    _maps.comboSubjectMap[comboId].forEach(function(s){
+      _assignedIds[s.id]=true;
+      _subjectMeta[s.id]={is_compulsory:s.is_compulsory};
+    });
+  } else if(classId&&_maps.classSubjectMap[classId]&&_maps.classSubjectMap[classId].length){
+    _assignedIds={};
+    _maps.classSubjectMap[classId].forEach(function(s){_assignedIds[s.id]=true;});
+  }
+
+  var filteredResults=_assignedIds?_results.filter(function(r){return _assignedIds[r.subject_id];}):_results;
+
+  // ── Subject averages for dashboard bars ─────────────
+  var subMap={};
+  filteredResults.forEach(function(r){
+    var sid=r.subject_id,sn=r.subjects&&r.subjects.name;
+    if(!sid||!sn)return;
+    if(!subMap[sid])subMap[sid]={name:sn,rows:[]};
+    subMap[sid].rows.push(r);
+  });
+  var subjectAvgs=Object.values(subMap).map(function(sub){
+    var tw=sub.rows.reduce(function(s,r){return s+(r.exams&&r.exams.weight||1);},0);
+    var ws=sub.rows.reduce(function(s,r){return s+(r.score/(r.exams&&r.exams.max_score||100))*100*(r.exams&&r.exams.weight||1);},0);
+    return{name:sub.name,avg:tw>0?Math.round(ws/tw*10)/10:0};
+  }).sort(function(a,b){return b.avg-a.avg;});
+  var overallAvg=subjectAvgs.length?Math.round(subjectAvgs.reduce(function(s,x){return s+x.avg;},0)/subjectAvgs.length*10)/10:null;
+
+  // ── Attendance ──────────────────────────────────────
+  var totalDays=attData.length,present=0,late=0,absent=0,excused=0;
+  attData.forEach(function(a){if(a.status==='P')present++;else if(a.status==='L')late++;else if(a.status==='A')absent++;else if(a.status==='E')excused++;});
+  var attPct=totalDays>0?Math.round((present+late)/totalDays*100):null;
+
+  // ── Fees ────────────────────────────────────────────
+  var totalExp=feeTypes.reduce(function(s,f){return s+Number(f.amount);},0);
+  var totalPaid=payments.reduce(function(s,p){return s+Number(p.amount_paid);},0);
+  var balance=Math.max(0,totalExp-totalPaid);
+  var unreadNotifs=notifs.filter(function(n){return !n.is_read;}).length;
+
+  var attColor=attPct===null?'#9ca3af':attPct>=75?'#22c55e':attPct>=50?'#f59e0b':'#ef4444';
+  var comboName=comboId&&_maps.comboNameMap&&_maps.comboNameMap[comboId]?_maps.comboNameMap[comboId]:'';
+  var subjectCount=Object.keys(subMap).length||(_assignedIds?Object.keys(_assignedIds).length:0);
+
+  // ── Store globals for modal ──────────────────────────
+  window._stuDashCtx={session:session,student:student,term:term,classId:classId,
+    comboId:comboId,section:section,schoolId:schoolId,studentId:studentId,className:className};
+
+  // ─────────────────────────────────────────────────────
+  // RENDER DASHBOARD
+  // ─────────────────────────────────────────────────────
+  document.getElementById('pageBody').innerHTML =
+
+    // Hero
+    '<div class="dash-hero">'+
+      '<div class="dash-hero__av">'+(student&&student.photo_url?'<img src="'+student.photo_url+'" alt="">':session.full_name.charAt(0))+'</div>'+
+      '<div class="dash-hero__text">'+
+        '<div class="dash-hero__greeting">'+greet(new Date().getHours())+' <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span></div>'+
+        '<div class="dash-hero__name">'+session.full_name+'</div>'+
+        '<div class="dash-hero__meta">'+className+(section?' &nbsp;· '+section+' SECTION':'')+(comboName?'<span class="dash-hero__badge">'+comboName+'</span>':'')+'</div>'+
+        '<div class="term-badge"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span> '+(term&&term.name||'No active term')+'</div>'+
+      '</div>'+
+      (overallAvg!==null&&dashSettings&&dashSettings.student_see_results!==false?
+        '<div class="dash-hero__score" onclick="openSubjectModal()" title="View my subjects">'+
+          '<div class="dash-hero__score-val">'+overallAvg+'%</div>'+
+          '<div style="font-size:15px;font-weight:800;color:white;">'+getGrade(overallAvg)+'</div>'+
+          '<div class="dash-hero__score-label">Term Average</div>'+
+          '<div class="dash-hero__score-hint">Tap to view subjects ↑</div>'+
+        '</div>':'')+
+    '</div>'+
+
+    // Stats
+    '<div class="dash-stats">'+
+      '<a href="results.html" class="dash-stat" style="border-left:3px solid var(--info);">'+
+        '<div class="dash-stat__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span></div>'+
+        '<div class="dash-stat__val" style="color:var(--info);">'+(overallAvg!==null&&dashSettings&&dashSettings.student_see_results!==false?overallAvg+'%':'—')+'</div>'+
+        '<div class="dash-stat__label">Term Average</div>'+
+        (subjectAvgs.length?'<div class="dash-stat__note good">'+subjectAvgs.length+' subject'+(subjectAvgs.length!==1?'s':'')+'</div>':'')+'</a>'+
+      '<a href="attendance.html" class="dash-stat" style="border-left:3px solid '+attColor+';">'+
+        '<div class="dash-stat__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span></div>'+
+        '<div class="dash-stat__val" style="color:'+attColor+';">'+(dashSettings&&dashSettings.student_see_attendance!==false&&attPct!==null?attPct+'%':'—')+'</div>'+
+        '<div class="dash-stat__label">Attendance</div>'+
+        (attPct!==null&&attPct<75?'<div class="dash-stat__note danger"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Below 75%</div>':(attPct!==null?'<div class="dash-stat__note good"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> '+totalDays+' days</div>':''))+'</a>'+
+      (dashSettings&&dashSettings.student_see_fees!==false?
+        '<a href="fees.html" class="dash-stat" style="border-left:3px solid '+(balance>0?'var(--danger)':'var(--success)')+';">'+
+          '<div class="dash-stat__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span></div>'+
+          '<div class="dash-stat__val" style="font-size:16px;color:'+(balance>0?'var(--danger)':'var(--success)')+';">'+(balance>0?fmt(balance):'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Paid')+'</div>'+
+          '<div class="dash-stat__label">Fee Balance</div>'+
+          '<div class="dash-stat__note '+(balance>0?'danger':'good')+'">'+(balance>0?'Outstanding':'Fully cleared')+'</div></a>':'')+
+      '<a href="notifications.html" class="dash-stat" style="border-left:3px solid '+(unreadNotifs>0?'var(--primary)':'var(--border)')+';">'+
+        '<div class="dash-stat__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span></div>'+
+        '<div class="dash-stat__val" style="color:'+(unreadNotifs>0?'var(--primary)':'var(--ink-3)')+';">'+unreadNotifs+'</div>'+
+        '<div class="dash-stat__label">Notifications</div>'+
+        (unreadNotifs>0?'<div class="dash-stat__note warn">'+unreadNotifs+' unread</div>':'<div class="dash-stat__note good">All read</div>')+
+      '</a>'+
+    '</div>'+
+
+    // ── SUBJECT BUTTON ───────────────────────────────
+    (dashSettings&&dashSettings.student_see_results!==false?
+    '<button class="subject-trigger-card" onclick="openSubjectModal()">'+
+      '<div class="stc-icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span></div>'+
+      '<div class="stc-text">'+
+        '<div class="stc-title">My Subjects & Scores'+
+          (subjectCount>0?'<span class="stc-count">'+subjectCount+' subject'+(subjectCount!==1?'s':'')+'</span>':'')+
+        '</div>'+
+        '<div class="stc-sub">View CA marks, exam scores, grades and performance breakdown</div>'+
+      '</div>'+
+      '<span class="stc-arrow">›</span>'+
+    '</button>':'')+
+
+    // Two-col grid
+    '<div class="dash-grid">'+
+      // Subject bars
+      (dashSettings&&dashSettings.student_see_results!==false?
+      '<div class="card">'+
+        '<div class="card__header"><div><div class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Quick Overview</div><div class="card__subtitle">'+(term&&term.name||'')+'</div></div>'+
+        '<button onclick="openSubjectModal()" class="btn btn--ghost btn--sm" style="white-space:nowrap;">Full Details →</button></div>'+
+        (subjectAvgs.length===0?'<div class="et-empty" style="padding:28px 0;"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span></div><p>No results yet</p></div>':
+          subjectAvgs.slice(0,7).map(function(sub){
+            return '<div class="subj-bar"><div class="subj-bar__top"><span class="subj-bar__name" title="'+sub.name+'">'+sub.name+'</span>'+
+              '<span class="subj-bar__score" style="color:'+gc(sub.avg)+';">'+sub.avg+'% <span style="font-size:10px;font-weight:400;color:var(--ink-4);">'+getGrade(sub.avg)+'</span></span></div>'+
+              '<div class="subj-bar__track"><div class="subj-bar__fill" style="width:'+Math.min(100,sub.avg)+'%;background:'+bc(sub.avg)+';"></div></div></div>';
+          }).join('')+
+          (subjectAvgs.length>7?'<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--ink-3);">+' +(subjectAvgs.length-7)+' more · <span style="color:var(--primary);cursor:pointer;" onclick="openSubjectModal()">View all</span></div>':'')
+        )+'</div>' : '<div></div>')+
+
+      // Attendance ring
+      (dashSettings&&dashSettings.student_see_attendance!==false?
+      '<div class="card">'+
+        '<div class="card__header"><div><div class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span> Attendance</div><div class="card__subtitle">'+totalDays+' school days</div></div><a href="attendance.html" class="btn btn--ghost btn--sm">Details →</a></div>'+
+        (totalDays===0?'<div class="et-empty" style="padding:28px 0;"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span></div><p>No attendance yet</p></div>':
+          '<div class="att-ring-wrap">'+
+            '<div class="att-ring">'+donut(attPct||0,attColor)+'<div class="att-ring__pct" style="color:'+attColor+';">'+(attPct!==null?attPct+'%':'—')+'</div></div>'+
+            '<div style="flex:1;">'+
+              '<div class="att-row"><span><span class="att-dot" style="background:#22c55e;"></span>Present</span><strong>'+present+'</strong></div>'+
+              '<div class="att-row"><span><span class="att-dot" style="background:#3b82f6;"></span>Late</span><strong>'+late+'</strong></div>'+
+              '<div class="att-row"><span><span class="att-dot" style="background:#ef4444;"></span>Absent</span><strong>'+absent+'</strong></div>'+
+              (excused>0?'<div class="att-row"><span><span class="att-dot" style="background:#f59e0b;"></span>Excused</span><strong>'+excused+'</strong></div>':'')+
+            '</div>'+
+          '</div>'+
+          (attPct!==null&&attPct<75?'<div style="margin-top:12px;background:#fee2e2;border-radius:6px;padding:9px 13px;font-size:12px;color:#991b1b;font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Below 75% required minimum. Speak with your class teacher.</div>':
+           attPct!==null&&attPct>=90?'<div style="margin-top:12px;background:#dcfce7;border-radius:6px;padding:9px 13px;font-size:12px;color:#166534;font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span> Excellent attendance! Keep it up.</div>':'')
+        )+'</div>' : '<div></div>')+
+    '</div>'+
+
+    // Notifications preview
+    '<div class="card" style="margin-bottom:18px;">'+
+      '<div class="card__header"><div><div class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Notifications</div>'+
+        (unreadNotifs>0?'<div class="card__subtitle" style="color:var(--primary);">'+unreadNotifs+' unread</div>':'<div class="card__subtitle">All caught up</div>')+
+      '</div><a href="notifications.html" class="btn btn--ghost btn--sm">View All →</a></div>'+
+      (notifs.length===0?'<div class="et-empty" style="padding:20px 0;"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span></div><p>No notifications yet</p></div>':
+        notifs.slice(0,4).map(function(n){
+          var s=ns(n.type);
+          return '<div class="notif-prev">'+
+            (!n.is_read?'<div class="notif-unread-dot"></div>':'<div style="width:8px;"></div>')+
+            '<div class="notif-prev__icon" style="background:'+s.bg+';">'+s.ic+'</div>'+
+            '<div style="flex:1;min-width:0;">'+
+              '<div class="notif-prev__title" style="color:'+(!n.is_read?'var(--primary)':'var(--ink)')+';">'+n.title+'</div>'+
+              '<div class="notif-prev__body">'+(n.body||'').substring(0,80)+(n.body&&n.body.length>80?'…':'')+'</div>'+
+              '<div class="notif-prev__time">'+timeAgo(n.created_at)+'</div>'+
+            '</div></div>';
+        }).join('')
+      )+'</div>'+
+
+    // Quick actions
+    '<div class="card" style="margin-bottom:80px;">'+
+      '<div class="card__header"><div class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Quick Actions</div></div>'+
+      '<div class="quick-actions">'+
+        '<button onclick="openSubjectModal()" class="quick-btn"><span class="quick-btn__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span></span><span class="quick-btn__label">My Subjects</span></button>'+
+        (dashSettings&&dashSettings.student_see_results!==false?'<a href="results.html" class="quick-btn"><span class="quick-btn__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span></span><span class="quick-btn__label">Full Results</span></a>':'')+
+        (dashSettings&&dashSettings.student_see_attendance!==false?'<a href="attendance.html" class="quick-btn"><span class="quick-btn__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span></span><span class="quick-btn__label">Attendance</span></a>':'')+
+        (dashSettings&&dashSettings.student_see_fees!==false?'<a href="fees.html" class="quick-btn"><span class="quick-btn__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span></span><span class="quick-btn__label">Fee Status</span></a>':'')+
+        '<a href="notifications.html" class="quick-btn" style="'+(unreadNotifs>0?'border-color:var(--primary);background:var(--primary-light);':'')+'"><span class="quick-btn__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span></span><span class="quick-btn__label">Alerts'+(unreadNotifs>0?' ('+unreadNotifs+')':'')+'</span></a>'+
+        '<a href="profile.html" class="quick-btn"><span class="quick-btn__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span></span><span class="quick-btn__label">My Profile</span></a>'+
+        '<a href="../../report-card/index.html?student='+studentId+'&term='+(term&&term.id||'')+'" target="_blank" class="quick-btn"><span class="quick-btn__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>️</span><span class="quick-btn__label">Report Card</span></a>'+
+      '</div></div>';
+
+  } catch (err) {
+    // Catches any unhandled JS exception — prevents blank white screen
+    var appEl = document.getElementById('app');
+    if (appEl) {
+      appEl.innerHTML =
+        '<div style="padding:2rem;font-family:sans-serif;">' +
+        '<h3 style="color:#dc2626;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ Dashboard failed to load</h3>' +
+        '<p style="color:#555;">An unexpected error occurred. Please <a href="login.html">log in again</a>.</p>' +
+        '<details style="margin-top:12px;font-size:12px;color:#999;"><summary>Error details</summary><pre>' +
+        (err && (err.message || String(err))) + '</pre></details>' +
+        '</div>';
+    }
+    console.error('[EduTrack] Dashboard IIFE error:', err);
+  }
+})(); // end async IIFE
+
+// ══════════════════════════════════════════════════════
+//  SUBJECT MODAL — all logic is global so it works
+//  even when called from onclick in rendered HTML
+// ══════════════════════════════════════════════════════
+function openSubjectModal(){
+  var modal=document.getElementById('subjectModal');
+  modal.classList.add('open');
+  document.body.style.overflow='hidden';
+  // Render immediately with current term data
+  renderModalContent(_modalTermId||(_ctx&&_ctx.term&&_ctx.term.id));
+}
+
+function closeSubjectModal(){
+  document.getElementById('subjectModal').classList.remove('open');
+  document.body.style.overflow='';
+}
+
+function handleOverlayClick(e){
+  if(e.target===document.getElementById('subjectModal')) closeSubjectModal();
+}
+
+// Close on swipe down
+(function(){
+  var sheet, startY=0, dragging=false;
+  document.addEventListener('touchstart',function(e){
+    sheet=document.getElementById('subjectSheet');
+    if(sheet&&sheet.contains(e.target)&&e.touches[0].clientY<(sheet.getBoundingClientRect().top+60)){
+      startY=e.touches[0].clientY; dragging=true;
+    }
+  });
+  document.addEventListener('touchmove',function(e){
+    if(!dragging)return;
+    var dy=e.touches[0].clientY-startY;
+    if(dy>0) document.getElementById('subjectSheet').style.transform='translateY('+dy+'px)';
+  });
+  document.addEventListener('touchend',function(e){
+    if(!dragging)return;
+    dragging=false;
+    var dy=e.changedTouches[0].clientY-startY;
+    var sheet=document.getElementById('subjectSheet');
+    if(dy>100){closeSubjectModal();sheet.style.transform='';}
+    else{sheet.style.transform='';}
+  });
+})();
+
+async function renderModalContent(termId){
+  var ctx=window._stuDashCtx; if(!ctx) return;
+  _modalTermId=termId;
+
+  // Update modal header
+  var termObj=_allTerms.find(function(t){return t.id===termId;})||(_ctx&&_ctx.term)||{name:'Current Term'};
+  document.getElementById('modalTitle').textContent='My Subjects & Scores';
+  document.getElementById('modalSubtitle').textContent=termObj.name+' · '+ctx.className+(ctx.section?' · '+ctx.section+' SECTION':'');
+
+  var body=document.getElementById('modalBody');
+  body.innerHTML='<div class="et-loader"><div class="et-spinner"></div><p style="margin-top:8px;font-size:13px;color:var(--ink-3);">Loading your scores…</p></div>';
+
+  // Fetch results for selected term (may differ from dashboard term)
+  var resultsToUse;
+  var _session = window._stuDashCtx && window._stuDashCtx.session;
+  if(!_session){body.innerHTML='<div class="subj-empty">Session expired. <a href="login.html">Log in again</a>.</div>';return;}
+  if(termId===(_ctx&&_ctx.term&&_ctx.term.id)){
+    resultsToUse=_results; // already loaded
+  } else {
+    const { data: switchData } = await db.rpc('get_student_results_for_term', {
+      p_student_id: _session.id,
+      p_school_id:  _session.school_id,
+      p_term_id:    termId
+    });
+    resultsToUse = switchData && switchData.results ? switchData.results : [];
+  }
+
+  // Filter to assigned subjects
+  var filtered=_assignedIds?resultsToUse.filter(function(r){return _assignedIds[r.subject_id];}):resultsToUse;
+
+  // Get exams for this term
+  var termExams=_allExams.filter(function(e){return e.term_id===termId;});
+  if(!termExams.length){
+    // Try all exams (some schools don't link exams to terms)
+    termExams=_allExams;
+  }
+
+  // Build subject map
+  var subMap={};
+  filtered.forEach(function(r){
+    var sid=r.subject_id, sn=r.subjects&&r.subjects.name;
+    if(!sid||!sn)return;
+    if(!subMap[sid])subMap[sid]={id:sid,name:sn,rows:[]};
+    subMap[sid].rows.push(r);
+  });
+
+  var subjects=Object.values(subMap);
+
+  // Also include assigned subjects with no scores yet
+  if(_assignedIds){
+    var assignedList=null;
+    if(ctx.section.indexOf('SENIOR')>=0&&ctx.comboId&&_maps.comboSubjectMap[ctx.comboId]){
+      assignedList=_maps.comboSubjectMap[ctx.comboId];
+    } else if(ctx.classId&&_maps.classSubjectMap[ctx.classId]){
+      assignedList=_maps.classSubjectMap[ctx.classId];
+    }
+    if(assignedList){
+      assignedList.forEach(function(s){
+        if(!subMap[s.id]) subjects.push({id:s.id,name:s.name,rows:[],noScores:true});
+      });
+    }
+  }
+  subjects.sort(function(a,b){return a.name.localeCompare(b.name);});
+
+  // Compute averages
+  var computed=subjects.map(function(sub,idx){
+    if(sub.noScores||!sub.rows.length) return{idx:idx,id:sub.id,name:sub.name,rows:[],avg:null,total:null,grade:'—',remark:'—',is_compulsory:_subjectMeta[sub.id]&&_subjectMeta[sub.id].is_compulsory};
+    var tw=sub.rows.reduce(function(s,r){return s+(r.exams&&r.exams.weight||1);},0);
+    var ws=sub.rows.reduce(function(s,r){return s+(r.score/(r.exams&&r.exams.max_score||100))*100*(r.exams&&r.exams.weight||1);},0);
+    var avg=tw>0?Math.round(ws/tw*10)/10:null;
+    var g=avg!==null?gradeFromScale(avg,_gradingScale):{grade:'—',remark:'—'};
+    return{idx:idx,id:sub.id,name:sub.name,rows:sub.rows,avg:avg,grade:g.grade,remark:g.remark,is_compulsory:_subjectMeta[sub.id]&&_subjectMeta[sub.id].is_compulsory};
+  }).sort(function(a,b){return (b.avg||0)-(a.avg||0);}); // sort by average descending
+
+  // Overall stats
+  var withScores=computed.filter(function(s){return s.avg!==null;});
+  var overallAvg=withScores.length?Math.round(withScores.reduce(function(s,x){return s+x.avg;},0)/withScores.length*10)/10:null;
+  var passCount=withScores.filter(function(s){return s.avg>=40;}).length;
+  var failCount=withScores.filter(function(s){return s.avg<40;}).length;
+  var oGrade=overallAvg!==null?gradeFromScale(overallAvg,_gradingScale):{grade:'—',remark:'—'};
+  var oColor=overallAvg!==null?(overallAvg>=60?'#16a34a':overallAvg>=40?'#d97706':'#dc2626'):'var(--ink-3)';
+
+  // ── Term selector pills ──────────────────────────────
+  var termPills=_allTerms.map(function(t){
+    return '<div class="term-pill '+(t.id===termId?'active':'')+'" onclick="renderModalContent(\''+t.id+'\')">'+t.name+'</div>';
+  }).join('');
+
+  // ── Build modal HTML ─────────────────────────────────
+  var html=
+    // Term selector
+    '<div class="term-selector no-print">'+termPills+'</div>'+
+
+    // Summary strip
+    (withScores.length>0?
+    '<div class="modal-summary">'+
+      '<div class="modal-summary__cell"><div class="modal-summary__val" style="color:'+oColor+';">'+(overallAvg!==null?overallAvg+'%':'—')+'</div><div class="modal-summary__label">Average</div></div>'+
+      '<div class="modal-summary__cell"><div class="modal-summary__val">'+(oGrade.grade||'—')+'</div><div class="modal-summary__label">Grade</div></div>'+
+      '<div class="modal-summary__cell"><div class="modal-summary__val" style="color:#16a34a;">'+passCount+'</div><div class="modal-summary__label">Passed</div></div>'+
+      '<div class="modal-summary__cell"><div class="modal-summary__val" style="color:'+(failCount>0?'#dc2626':'var(--ink-3)')+';">'+failCount+'</div><div class="modal-summary__label">Failed</div></div>'+
+      '<div class="modal-summary__cell"><div class="modal-summary__val">'+computed.length+'</div><div class="modal-summary__label">Subjects</div></div>'+
+    '</div>':'');
+
+  // ── Subject cards ────────────────────────────────────
+  if(!computed.length){
+    html+='<div class="subj-empty"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><br><br>No subjects or scores found for this term.<br><span style="font-size:12px;color:var(--ink-4);">Results may not be published yet.</span></div>';
+  } else {
+    var GRADE_COLORS={'A1':'#16a34a','B2':'#1d4ed8','B3':'#1d4ed8','C4':'#854d0e','C5':'#854d0e','C6':'#854d0e','D7':'#9a3412','E8':'#9a3412','F9':'#991b1b'};
+    var GRADE_BG={'A1':'#dcfce7','B2':'#dbeafe','B3':'#dbeafe','C4':'#fef9c3','C5':'#fef9c3','C6':'#fef9c3','D7':'#fed7aa','E8':'#fed7aa','F9':'#fee2e2'};
+
+    computed.forEach(function(sub,rank){
+      var avgColor=sub.avg===null?'var(--ink-3)':sub.avg>=60?'#16a34a':sub.avg>=40?'#d97706':'#dc2626';
+      var barColor=sub.avg===null?'#e5e7eb':sub.avg>=60?'#22c55e':sub.avg>=40?'#f59e0b':'#ef4444';
+      var gradeColor=GRADE_COLORS[sub.grade]||'var(--ink-3)';
+      var gradeBg=GRADE_BG[sub.grade]||'var(--surface-3)';
+
+      // Score rows for each exam
+      var scoreRows='';
+      if(termExams.length>0){
+        scoreRows=termExams.map(function(exam){
+          var row=sub.rows.find(function(r){return r.exams&&r.exams.id===exam.id;});
+          var score=row?row.score:null;
+          var max=exam.max_score||100;
+          var pct=score!==null?Math.round((score/max)*100):null;
+          var sColor=pct===null?'#e5e7eb':pct>=70?'#22c55e':pct>=50?'#f59e0b':'#ef4444';
+          return '<div class="score-row">'+
+            '<span class="score-row__label">'+exam.name+'</span>'+
+            '<div class="score-row__bar-wrap"><div class="score-row__bar" style="width:'+(pct!==null?Math.min(100,pct):0)+'%;background:'+sColor+';"></div></div>'+
+            '<span class="score-row__val" style="color:'+(score!==null?sColor:'var(--ink-4)')+';">'+(score!==null?score:'—')+'</span>'+
+            '<span class="score-row__max">/ '+max+'</span>'+
+            '<span class="score-row__pct">'+(pct!==null?pct+'%':'')+'</span>'+
+          '</div>';
+        }).join('');
+      } else if(sub.rows.length){
+        // No exam config — show raw rows
+        scoreRows=sub.rows.map(function(r){
+          var max=(r.exams&&r.exams.max_score)||100;
+          var pct=Math.round((r.score/max)*100);
+          var sColor=pct>=70?'#22c55e':pct>=50?'#f59e0b':'#ef4444';
+          return '<div class="score-row">'+
+            '<span class="score-row__label">'+(r.exams&&r.exams.name||'Score')+'</span>'+
+            '<div class="score-row__bar-wrap"><div class="score-row__bar" style="width:'+Math.min(100,pct)+'%;background:'+sColor+';"></div></div>'+
+            '<span class="score-row__val" style="color:'+sColor+';">'+r.score+'</span>'+
+            '<span class="score-row__max">/ '+max+'</span>'+
+            '<span class="score-row__pct">'+pct+'%</span>'+
+          '</div>';
+        }).join('');
+      } else {
+        scoreRows='<div style="font-size:12px;color:var(--ink-4);padding:8px 0;">No scores recorded for this subject yet.</div>';
+      }
+
+      html+=
+        '<div class="subj-card" id="scard-'+sub.id+'">'+
+          // Card header (clickable to expand)
+          '<div class="subj-card__head" onclick="toggleSubjectCard(\''+sub.id+'\')">'+
+            '<div class="subj-card__rank" style="background:'+(rank===0?'#fef3c7':rank===1?'#f1f5f9':rank===2?'#fef3c7':'var(--surface-3)')+';color:'+(rank===0?'#92400e':rank===1?'#475569':rank===2?'#78350f':'var(--ink-3)')+';">'+
+              (rank===0?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg></span>':rank===1?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg></span>':rank===2?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg></span>':(rank+1))+
+            '</div>'+
+            '<div style="flex:1;min-width:0;">'+
+              '<div class="subj-card__name">'+sub.name+(sub.is_compulsory?'<span class="subj-card__compulsory"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span> Core</span>':'')+'</div>'+
+            '</div>'+
+            '<div style="display:flex;align-items:center;gap:6px;">'+
+              '<span class="subj-card__avg" style="color:'+avgColor+';">'+(sub.avg!==null?sub.avg+'%':'—')+'</span>'+
+              '<span class="subj-card__grade" style="background:'+gradeBg+';color:'+gradeColor+';">'+sub.grade+'</span>'+
+              '<span class="subj-card__chevron">▾</span>'+
+            '</div>'+
+          '</div>'+
+          // Progress bar (always visible)
+          '<div class="subj-card__bar"><div class="subj-card__bar-fill" style="width:'+(sub.avg!==null?Math.min(100,sub.avg):0)+'%;background:'+barColor+';"></div></div>'+
+          // Expandable detail
+          '<div class="subj-card__detail">'+
+            '<div class="score-breakdown">'+scoreRows+'</div>'+
+            (sub.avg!==null?
+            '<hr class="total-divider">'+
+            '<div class="total-row">'+
+              '<span class="total-row__label">Weighted Total</span>'+
+              '<div style="display:flex;align-items:center;gap:10px;">'+
+                '<span class="total-row__val">'+sub.avg+'%</span>'+
+                '<span class="total-row__grade" style="background:'+gradeBg+';color:'+gradeColor+';">'+sub.grade+'</span>'+
+                '<span style="font-size:12px;color:rgba(255,255,255,.6);">'+sub.remark+'</span>'+
+              '</div>'+
+            '</div>':'')+'</div>'+
+        '</div>';
+    });
+  }
+
+  // ── Print + full results buttons ─────────────────────
+  html+=
+    '<div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;" class="no-print">'+
+      '<button onclick="window.print()" class="btn btn--secondary btn--sm"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>️ Print Result Slip</button>'+
+      '<a href="results.html" class="btn btn--ghost btn--sm"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Full Results Page →</a>'+
+    '</div>'+
+    // Grading scale legend
+    (_gradingScale.length?
+    '<div style="margin-top:14px;padding:10px 14px;background:var(--surface-2);border-radius:var(--radius-sm);font-size:11px;color:var(--ink-3);">'+
+      '<strong style="color:var(--ink-2);">Grading Scale: </strong>'+
+      _gradingScale.map(function(g){return '<span style="margin-right:8px;"><strong>'+g.grade+'</strong> '+g.min_score+'–'+g.max_score+'</span>';}).join('')+
+    '</div>':'');
+
+  body.innerHTML=html;
+
+  // Animate bars after render
+  requestAnimationFrame(function(){
+    document.querySelectorAll('.subj-card__bar-fill,.score-row__bar').forEach(function(el){
+      var w=el.style.width; el.style.width='0'; setTimeout(function(){el.style.width=w;},50);
+    });
+  });
+}
+
+function toggleSubjectCard(subjectId){
+  var card=document.getElementById('scard-'+subjectId);
+  if(card) card.classList.toggle('open');
+}
+
+function expandAll(){
+  document.querySelectorAll('.subj-card').forEach(function(c){c.classList.add('open');});
+}
+
+if(typeof gradeFromScale==='undefined'){
+  window.gradeFromScale=function(score,scale){
+    if(!scale||!scale.length)return{grade:'—',remark:'—'};
+    var g=scale.find(function(s){return score>=s.min_score&&score<=s.max_score;});
+    return g?{grade:g.grade,remark:g.remark||''}:{grade:'—',remark:'—'};
+  };
+}
+</script>
+<script src="../../js/pwa.js"></script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

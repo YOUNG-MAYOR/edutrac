@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Broadsheet</title>
+  <link rel="stylesheet" href="../../assets/css/global.css">
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="../../js/config.js"></script>
+<script src="../../api/database.js"></script>
+<script src="../../api/auth.js"></script>
+<script src="../../api/calculations.js"></script>
+<script src="../../assets/js/sidebar.js"></script>
+<script>
+let user, term, classes = [], subjects = [], exams = [], grading = [];
+let selectedClass = '', broadsheetData = null;
+
+(async () => {
+  user = await initPage(['admin','exam_officer','vp_academic'], 'Broadsheet Export', 'broadsheet');
+  if (!user) return;
+
+  document.getElementById('topbarActions').innerHTML = `
+    <button class="btn btn--secondary" id="exportBtn" onclick="exportExcel()" disabled>
+      <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Export to Excel
+    </button>
+    <button class="btn btn--ghost btn--sm" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Print</button>
+  `;
+
+  const ctx = await loadSchoolContext(user.school_id);
+  term = ctx.term; classes = ctx.classes; subjects = ctx.subjects;
+  grading = ctx.grading;
+
+  const { data: exm } = await db.from('exams').select('*').eq('school_id', user.school_id)
+    .eq('term_id', term?.id || '').order('name');
+  exams = exm || [];
+
+  renderPage();
+})();
+
+function renderPage() {
+  document.getElementById('pageBody').innerHTML = `
+    <div class="page-header">
+      <h1><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Class Broadsheet</h1>
+      <p>Ministry-compliant class performance sheet — ${term?.name || 'No current term'}</p>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+          <label class="form-label">Select Class</label>
+          <select class="form-control" id="classSelect" onchange="loadBroadsheet()">
+            <option value="">Choose a class…</option>
+            ${classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Term</label>
+          <select class="form-control" id="termSelect" onchange="loadBroadsheet()" style="min-width:180px;">
+            ${(window._terms || [term]).filter(Boolean).map(t => `<option value="${t.id}" ${t?.is_current ? 'selected' : ''}>${t.name}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="broadsheetContainer">
+      <div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span></div><p>Select a class to generate the broadsheet.</p></div>
+    </div>
+  `;
+
+  // Load all terms into select
+  db.from('terms').select('*').eq('school_id', user.school_id).order('created_at', {ascending:false}).then(({data:terms}) => {
+    window._terms = terms || [];
+    document.getElementById('termSelect').innerHTML = (terms || []).map(t =>
+      `<option value="${t.id}" ${t.is_current ? 'selected' : ''}>${t.name}</option>`
+    ).join('');
+  });
+}
+
+async function loadBroadsheet() {
+  const classId = document.getElementById('classSelect').value;
+  const termId  = document.getElementById('termSelect').value;
+  if (!classId || !termId) return;
+
+  const container = document.getElementById('broadsheetContainer');
+  showLoader(container, 'Building broadsheet…');
+
+  // Pre-fetch enrolled student IDs so we can use them in the parallel queries below
+  const { data: enrolledIds } = await db.from('enrollments')
+    .select('student_id').eq('class_id', classId).eq('term_id', termId).eq('school_id', user.school_id);
+  const studentIds = (enrolledIds || []).map(e => e.student_id);
+
+  // Load students, results, exams for this term — all in true parallel
+  const [{ data: enrollments }, { data: allResults }, { data: termExams }, { data: scale }] = await Promise.all([
+    db.from('enrollments').select('student_id, students(id,full_name,admission_no,gender)')
+      .eq('class_id', classId).eq('term_id', termId).eq('school_id', user.school_id),
+    studentIds.length
+      ? db.from('results').select('student_id,subject_id,exam_id,score,subjects(id,name,code),exams(id,name,max_score,weight)')
+          .eq('school_id', user.school_id).eq('term_id', termId).in('student_id', studentIds)
+      : Promise.resolve({ data: [] }),
+    db.from('exams').select('*').eq('school_id', user.school_id).eq('term_id', termId).order('name'),
+    db.from('grading_scales').select('*').eq('school_id', user.school_id).order('min_score', {ascending:false})
+  ]);
+
+  const students = (enrollments || []).map(e => e.students).filter(Boolean);
+  const gs = scale || grading;
+
+  if (!students.length) { showEmpty(container, 'No students enrolled in this class for the selected term.', '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>'); return; }
+
+  // Build summaries per student
+  const summaries = students.map(s => {
+    const sResults = (allResults || []).filter(r => r.student_id === s.id);
+    return { student: s, summary: buildTermSummary(sResults, gs) };
+  });
+
+  // Assign positions
+  const positions = assignPositions(summaries.map(s => ({ studentId: s.student.id, overall: s.summary.overall })));
+
+  // Get unique subject names
+  const subjectNames = [...new Set((allResults || []).map(r => r.subjects?.name).filter(Boolean))].sort();
+  const examNames    = [...new Set((termExams || []).map(e => e.name))].sort();
+
+  // Store for export
+  broadsheetData = { students, summaries, positions, subjectNames, examNames, allResults: allResults || [], gs, classId, termId };
+  document.getElementById('exportBtn').disabled = false;
+
+  const cls = classes.find(c => c.id === classId);
+  const termObj = (window._terms || []).find(t => t.id === termId) || term;
+
+  container.innerHTML = `
+    <div class="card" style="padding:0;">
+      <div style="background:var(--ink);color:white;padding:16px 20px;border-radius:var(--radius) var(--radius) 0 0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-size:16px;font-weight:800;">${cls?.name || 'Class'} — ${termObj?.name || 'Term'}</div>
+          <div style="font-size:12px;color:#9ca3af;">${students.length} students · ${subjectNames.length} subjects</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <span style="background:#ffffff22;padding:4px 12px;border-radius:20px;font-size:12px;">Pass ≥ 40%</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="score-table" style="font-size:12px;min-width:${300 + subjectNames.length * 80}px;">
+          <thead>
+            <tr>
+              <th style="min-width:30px;">#</th>
+              <th style="min-width:180px;">Student</th>
+              <th>Adm No</th>
+              ${subjectNames.map(s => `<th style="text-align:center;min-width:70px;">${s}</th>`).join('')}
+              <th style="text-align:center;">Avg</th>
+              <th style="text-align:center;">Position</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${summaries
+              .sort((a,b) => (b.summary.overall||0) - (a.summary.overall||0))
+              .map((s, idx) => {
+                const pos = positions[s.student.id];
+                return `
+                  <tr>
+                    <td style="color:var(--ink-3);">${idx+1}</td>
+                    <td><strong>${s.student.full_name}</strong></td>
+                    <td style="color:var(--ink-3);font-size:11px;">${s.student.admission_no || '—'}</td>
+                    ${subjectNames.map(subName => {
+                      const subData = s.summary.subjects.find(x => x.name === subName);
+                      const total = subData?.total;
+                      const cls_ = total === null || total === undefined ? '' : total >= 70 ? 'high' : total >= 50 ? 'mid' : 'low';
+                      return `<td class="total-cell ${cls_}" style="text-align:center;">${total !== null && total !== undefined ? total : '—'}</td>`;
+                    }).join('')}
+                    <td class="total-cell ${s.summary.overall >= 70 ? 'high' : s.summary.overall >= 50 ? 'mid' : 'low'}" style="text-align:center;font-size:14px;">
+                      ${s.summary.overall !== null ? s.summary.overall + '%' : '—'}
+                    </td>
+                    <td style="text-align:center;font-weight:700;color:var(--primary);">${pos ? pos.suffix : '—'}</td>
+                  </tr>
+                `;
+              }).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3" style="font-weight:700;">Class Statistics</td>
+              ${subjectNames.map(subName => {
+                const scores = summaries.map(s => s.summary.subjects.find(x => x.name === subName)?.total).filter(t => t !== null && t !== undefined);
+                const avg = scores.length ? (scores.reduce((a,b) => a+b, 0) / scores.length).toFixed(1) : '—';
+                return `<td style="text-align:center;">${avg}</td>`;
+              }).join('')}
+              <td style="text-align:center;">
+                ${(() => {
+                  const avgs = summaries.map(s => s.summary.overall).filter(a => a !== null);
+                  return avgs.length ? (avgs.reduce((a,b) => a+b, 0) / avgs.length).toFixed(1) + '%' : '—';
+                })()}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function exportExcel() {
+  if (!broadsheetData) return;
+  const { header, rows } = buildBroadsheetRows(
+    broadsheetData.students,
+    broadsheetData.allResults,
+    broadsheetData.gs,
+    broadsheetData.examNames.map(n => ({ name: n }))
+  );
+  const wsData = [header, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Style header row
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let C = range.s.c; C <= range.e.c; ++C) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+    if (!ws[addr]) continue;
+    ws[addr].s = { font: { bold: true }, fill: { fgColor: { rgb: '0A6E3F' } } };
+  }
+
+  // Auto column widths
+  ws['!cols'] = header.map((h, i) => ({ wch: Math.max(10, String(h).length + 2) }));
+
+  const wb = XLSX.utils.book_new();
+  const cls = classes.find(c => c.id === broadsheetData.classId);
+  XLSX.utils.book_append_sheet(wb, ws, cls?.name || 'Broadsheet');
+
+  const termObj = (window._terms || []).find(t => t.id === broadsheetData.termId) || term;
+  XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  XLSX.writeFile(wb, `Broadsheet_${cls?.name || 'Class'}_${termObj?.name || 'Term'}.xlsx`);
+  toast('Broadsheet exported!', 'success');
+}
+</script>
+
+<script src="../../js/ai-assistant.js" defer></script>
+</body>
+</html>

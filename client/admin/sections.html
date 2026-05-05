@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTrack NG — Staff Sections</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .section-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;margin-bottom:24px;}
+    .section-card{border:1.5px solid var(--border);border-radius:var(--radius);background:var(--surface);overflow:hidden;}
+    .section-card__head{background:linear-gradient(135deg,var(--primary),var(--primary-dark,#065530));padding:16px 18px;display:flex;align-items:center;justify-content:space-between;}
+    .section-card__name{font-size:16px;font-weight:800;color:white;}
+    .section-card__desc{font-size:12px;color:rgba(255,255,255,.7);margin-top:2px;}
+    .section-card__actions{display:flex;gap:6px;}
+    .section-card__body{padding:14px 18px;}
+    .staff-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:100px;background:var(--surface-2);border:1px solid var(--border);font-size:12px;font-weight:600;margin:3px;color:var(--ink-2);}
+    .staff-chip__avatar{width:22px;height:22px;border-radius:50%;background:var(--primary);color:white;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+    .staff-chip__remove{cursor:pointer;color:var(--danger);font-size:14px;margin-left:2px;background:none;border:none;padding:0;line-height:1;}
+    .assign-form{background:var(--surface-2);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:10px;margin-top:8px;}
+
+    /* Modal */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;pointer-events:none;transition:opacity .2s;}
+    .modal-overlay.open{opacity:1;pointer-events:all;}
+    .modal-box{background:var(--surface);border-radius:var(--radius);width:100%;max-width:440px;padding:24px;}
+    .form-group{margin-bottom:14px;}
+    .form-group label{font-size:12px;font-weight:700;color:var(--ink-2);display:block;margin-bottom:5px;}
+    .form-group input,.form-group select,.form-group textarea{width:100%;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:14px;background:var(--surface);color:var(--ink);outline:none;font-family:inherit;box-sizing:border-box;}
+    .form-group input:focus,.form-group select:focus{border-color:var(--primary);}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- Section modal -->
+<div class="modal-overlay" id="sectionModal">
+  <div class="modal-box">
+    <h3 id="sectionModalTitle" style="font-size:17px;font-weight:800;margin-bottom:16px;">Add Section</h3>
+    <input type="hidden" id="editSectionId">
+    <div class="form-group">
+      <label>Section Name *</label>
+      <input type="text" id="sectionName" placeholder="E.g. Junior Secondary, Senior Section, Primary">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <input type="text" id="sectionDesc" placeholder="Optional description">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">
+      <button class="btn btn--ghost" onclick="closeSectionModal()">Cancel</button>
+      <button class="btn btn--primary" onclick="saveSection()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save Section</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Staff Modal -->
+<div class="modal-overlay" id="assignModal">
+  <div class="modal-box">
+    <h3 style="font-size:17px;font-weight:800;margin-bottom:6px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/><line x1="14" y1="10" x2="18" y2="14"/></svg></span> Assign Staff</h3>
+    <p id="assignModalSection" style="font-size:13px;color:var(--ink-3);margin-bottom:14px;"></p>
+    <input type="hidden" id="assignSectionId">
+    <div class="form-group">
+      <label>Select Staff Member</label>
+      <select id="assignStaffSelect">
+        <option value="">— Select Staff —</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn btn--ghost" onclick="closeAssignModal()">Cancel</button>
+      <button class="btn btn--primary" onclick="doAssignStaff()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Assign</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+<script src="../api/database.js"></script>
+<script src="../api/auth.js"></script>
+<script src="../api/calculations.js"></script>
+<script src="../assets/js/sidebar.js"></script>
+<script>
+let user, sections = [], assignments = [], allStaff = [];
+
+(async () => {
+  user = await initPage(['admin'], 'Staff Sections', 'sections');
+  if (!user) return;
+
+  document.getElementById('topbarActions').innerHTML =
+    `<button class="btn btn--primary btn--sm" onclick="openSectionModal()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Add Section</button>`;
+
+  await loadAll();
+})();
+
+async function loadAll() {
+  const [{ data: secs }, { data: assigns }, { data: staff }] = await Promise.all([
+    db.from('school_sections').select('*').eq('school_id', user.school_id).order('name'),
+    db.from('staff_section_assignments')
+      .select('*,users(id,full_name,role),school_sections(name)')
+      .eq('school_id', user.school_id),
+    db.from('users').select('id,full_name,role,is_active').eq('school_id', user.school_id)
+      .eq('is_active', true).not('role','in','(admin,parent,saas_owner)').order('full_name')
+  ]);
+  sections   = secs   || [];
+  assignments = assigns || [];
+  allStaff   = staff  || [];
+  renderPage();
+}
+
+function renderPage() {
+  const body = document.getElementById('pageBody');
+
+  // Build assignment map: section_id → [staff records]
+  const secStaff = {};
+  assignments.forEach(a => {
+    if (!secStaff[a.section_id]) secStaff[a.section_id] = [];
+    secStaff[a.section_id].push(a);
+  });
+
+  body.innerHTML = `
+    <div class="page-header">
+      <h1><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><rect x="7" y="7" width="3" height="3"/><rect x="14" y="7" width="3" height="3"/><rect x="7" y="14" width="3" height="3"/><rect x="14" y="14" width="3" height="3"/></svg></span> Staff Sections</h1>
+      <p>Organise staff by school branch or section (Junior, Senior, Primary, etc.).</p>
+    </div>
+
+    ${sections.length === 0
+      ? `<div class="card"><div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><rect x="7" y="7" width="3" height="3"/><rect x="14" y="7" width="3" height="3"/><rect x="7" y="14" width="3" height="3"/><rect x="14" y="14" width="3" height="3"/></svg></span></div>
+          <p>No sections created yet.<br>Create a section to assign staff to specific branches.</p>
+          <button class="btn btn--primary" onclick="openSectionModal()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Create First Section</button>
+          </div></div>`
+      : `<div class="section-grid">
+          ${sections.map(sec => {
+            const staffInSec = secStaff[sec.id] || [];
+            return `
+              <div class="section-card">
+                <div class="section-card__head">
+                  <div>
+                    <div class="section-card__name"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><rect x="7" y="7" width="3" height="3"/><rect x="14" y="7" width="3" height="3"/><rect x="7" y="14" width="3" height="3"/><rect x="14" y="14" width="3" height="3"/></svg></span> ${escHtml(sec.name)}</div>
+                    ${sec.description ? `<div class="section-card__desc">${escHtml(sec.description)}</div>` : ''}
+                    <div class="section-card__desc" style="margin-top:4px;">${staffInSec.length} staff member${staffInSec.length!==1?'s':''}</div>
+                  </div>
+                  <div class="section-card__actions">
+                    <button class="btn btn--sm" style="background:rgba(255,255,255,.15);color:white;border:none;" onclick="editSection('${sec.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>️</button>
+                    <button class="btn btn--sm" style="background:rgba(255,0,0,.2);color:white;border:none;" onclick="deleteSection('${sec.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span></button>
+                  </div>
+                </div>
+                <div class="section-card__body">
+                  <div style="margin-bottom:8px;">
+                    ${staffInSec.map(a => `
+                      <span class="staff-chip">
+                        <span class="staff-chip__avatar">${(a.users?.full_name||'?').charAt(0)}</span>
+                        ${escHtml(a.users?.full_name||'')}
+                        <span style="font-size:10px;color:var(--ink-4);">(${(a.users?.role||'').replace('_',' ')})</span>
+                        <button class="staff-chip__remove" onclick="removeAssignment('${a.id}')" title="Remove">×</button>
+                      </span>
+                    `).join('')}
+                    ${staffInSec.length === 0 ? `<p style="font-size:12px;color:var(--ink-4);margin:0;">No staff assigned yet.</p>` : ''}
+                  </div>
+                  <button class="btn btn--secondary btn--sm" onclick="openAssignModal('${sec.id}','${escHtml(sec.name)}')">
+                    <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Assign Staff
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+         </div>`
+    }
+
+    <!-- Staff without a section -->
+    <div class="card">
+      <div class="card__header">
+        <span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/><line x1="14" y1="10" x2="18" y2="14"/></svg></span> Staff Overview</span>
+        <span style="font-size:13px;color:var(--ink-3);">${allStaff.length} total active staff</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);">
+              <th style="padding:10px;text-align:left;font-weight:700;">Name</th>
+              <th style="padding:10px;text-align:left;font-weight:700;">Role</th>
+              <th style="padding:10px;text-align:left;font-weight:700;">Sections</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allStaff.map(s => {
+              const myAssigns = assignments.filter(a => a.staff_id === s.id);
+              return `
+                <tr style="border-bottom:1px solid var(--border);">
+                  <td style="padding:10px;">${escHtml(s.full_name)}</td>
+                  <td style="padding:10px;"><span class="chip">${s.role.replace('_',' ')}</span></td>
+                  <td style="padding:10px;">
+                    ${myAssigns.length > 0
+                      ? myAssigns.map(a => `<span class="chip" style="background:var(--primary-light);color:var(--primary);">${escHtml(a.school_sections?.name||'')}</span>`).join(' ')
+                      : `<span style="color:var(--ink-4);font-size:12px;">Unassigned</span>`
+                    }
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ── Section CRUD ───────────────────────────────────────────────
+function openSectionModal(sec = null) {
+  document.getElementById('sectionModalTitle').textContent = sec ? 'Edit Section' : 'Add Section';
+  document.getElementById('editSectionId').value  = sec ? sec.id  : '';
+  document.getElementById('sectionName').value    = sec ? sec.name : '';
+  document.getElementById('sectionDesc').value    = sec ? (sec.description||'') : '';
+  document.getElementById('sectionModal').classList.add('open');
+}
+function closeSectionModal() { document.getElementById('sectionModal').classList.remove('open'); }
+
+function editSection(id) {
+  const sec = sections.find(s => s.id === id);
+  if (sec) openSectionModal(sec);
+}
+
+async function saveSection() {
+  const id   = document.getElementById('editSectionId').value;
+  const name = document.getElementById('sectionName').value.trim();
+  const desc = document.getElementById('sectionDesc').value.trim();
+  if (!name) { toast('Section name is required.', 'error'); return; }
+
+  const row = { school_id: user.school_id, name, description: desc || null };
+  let error;
+  if (id) {
+    ({ error } = await db.from('school_sections').update(row).eq('id', id));
+  } else {
+    ({ error } = await db.from('school_sections').insert(row));
+  }
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  toast(id ? '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Section updated!' : '<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Section created!', 'success');
+  closeSectionModal();
+  await loadAll();
+}
+
+async function deleteSection(id) {
+  if (!confirm('Delete this section? Staff will be unassigned.')) return;
+  const { error } = await db.from('school_sections').delete().eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  toast('Section deleted.', 'success');
+  await loadAll();
+}
+
+// ── Assign / Remove staff ──────────────────────────────────────
+function openAssignModal(secId, secName) {
+  document.getElementById('assignSectionId').value = secId;
+  document.getElementById('assignModalSection').textContent = `Assigning to: ${secName}`;
+
+  // Only show staff not already in this section
+  const alreadyIn = new Set(assignments.filter(a => a.section_id === secId).map(a => a.staff_id));
+  const sel = document.getElementById('assignStaffSelect');
+  sel.innerHTML = `<option value="">— Select Staff —</option>` +
+    allStaff.filter(s => !alreadyIn.has(s.id)).map(s =>
+      `<option value="${s.id}">${s.full_name} (${s.role.replace('_',' ')})</option>`
+    ).join('');
+  document.getElementById('assignModal').classList.add('open');
+}
+function closeAssignModal() { document.getElementById('assignModal').classList.remove('open'); }
+
+async function doAssignStaff() {
+  const sectionId = document.getElementById('assignSectionId').value;
+  const staffId   = document.getElementById('assignStaffSelect').value;
+  if (!staffId) { toast('Please select a staff member.', 'error'); return; }
+
+  const { error } = await db.from('staff_section_assignments').insert({
+    school_id: user.school_id, section_id: sectionId, staff_id: staffId
+  });
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  toast('<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Staff assigned to section!', 'success');
+  closeAssignModal();
+  await loadAll();
+}
+
+async function removeAssignment(assignId) {
+  if (!confirm('Remove this staff from section?')) return;
+  const { error } = await db.from('staff_section_assignments').delete().eq('id', assignId);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  toast('Removed.', 'success');
+  await loadAll();
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+<script src="../js/pwa.js"></script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>

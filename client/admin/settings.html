@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EduTrack NG">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>EduTrack NG — Settings</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    .combo-card { border:2px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;transition:var(--transition);margin-bottom:10px; }
+    .combo-card:hover { border-color:var(--primary); }
+    .combo-card.selected { background:var(--primary-light); }
+    .combo-dot { width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:6px;flex-shrink:0; }
+    .subject-chip { display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:100px;font-size:12px;font-weight:600;margin:3px;border:1.5px solid var(--border);cursor:pointer;transition:var(--transition);user-select:none; }
+    .subject-chip.core { background:var(--primary-light);border-color:var(--primary);color:var(--primary); }
+    .subject-chip.elective { background:var(--info-light);border-color:var(--info);color:var(--info); }
+    .subject-chip.unassigned { background:var(--surface-3);color:var(--ink-3);border-color:var(--border); }
+    .toggle-row { display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border); }
+    .toggle-row:last-child { border-bottom:none; }
+    .toggle { position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0; }
+    .toggle input { opacity:0;width:0;height:0; }
+    .slider { position:absolute;cursor:pointer;inset:0;background:var(--border-2);border-radius:24px;transition:.3s; }
+    .slider:before { content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s; }
+    .toggle input:checked+.slider { background:var(--primary); }
+    .toggle input:checked+.slider:before { transform:translateX(20px); }
+    .upload-zone { border:2px dashed var(--border);border-radius:var(--radius);padding:24px;text-align:center;cursor:pointer;transition:var(--transition); }
+    .upload-zone:hover { border-color:var(--primary);background:var(--primary-light); }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+  <script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+let currentUser, classes=[], subjects=[], terms=[], gradingScale=[], combinations=[], dashSettings={}, academicYears=[];
+
+(async()=>{
+  currentUser = await initAdminLayout('settings','Settings');
+  if(!currentUser) return;
+  renderPage();
+  await loadAll();
+})();
+
+function renderPage(){
+  document.getElementById('pageBody').innerHTML=`
+    <div class="page-header"><h1>Settings</h1><p>School profile, subjects, combinations, and portal controls</p></div>
+    <div class="tabs" style="overflow-x:auto;white-space:nowrap;">
+      <button class="tab active" onclick="showTab('school',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span> School & Logo</button>
+      <button class="tab" onclick="showTab('terms',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span> Terms</button>
+      <button class="tab" onclick="showTab('classes',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>️ Classes</button>
+      <button class="tab" onclick="showTab('subjects',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> Subjects</button>
+      <button class="tab" onclick="showTab('combinations',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v8L4.72 20.55A1 1 0 0 0 5.6 22h12.8a1 1 0 0 0 .88-1.45L14 10V2"/><line x1="8.5" y1="2" x2="15.5" y2="2"/></svg></span> Combinations</button>
+      <button class="tab" onclick="showTab('grading',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></span> Grading</button>
+      <button class="tab" onclick="showTab('exams',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>️ Exams</button>
+      <button class="tab" onclick="showTab('portals',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>️ Portal Controls</button>
+      <button class="tab" onclick="showTab('stuaccounts',this)"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> Student Logins</button>
+    </div>
+    <div id="settingsContent"></div>`;
+  showTab('school', document.querySelector('.tab'));
+}
+
+function showTab(tab,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  
+  // Show loading state while async render completes
+  document.getElementById('settingsContent').innerHTML = '<div style="padding:24px;text-align:center;"><div style="font-size:24px;margin-bottom:12px;">⏳</div><p>Loading...</p></div>';
+  
+  // Call the render function and let it handle its own async operations
+  ({school:renderSchool,terms:renderTerms,classes:renderClasses,subjects:renderSubjects,
+    combinations:renderCombinations,grading:renderGrading,exams:renderExams,
+    portals:renderPortalControls,stuaccounts:renderStudentAccounts})[tab]?.();
+}
+
+async function loadAll(){
+  const[{data:cls},{data:sub},{data:trm},{data:scale},{data:combos},{data:dash},{data:ayrs}] = await Promise.all([
+    db.from('classes').select('id,name,level,combination_id').eq('school_id',currentUser.school_id).order('name'),
+    db.from('subjects').select('id,name,code').eq('school_id',currentUser.school_id).order('name'),
+    db.from('terms').select('*').eq('school_id',currentUser.school_id).order('created_at',{ascending:false}),
+    db.from('grading_scales').select('*').eq('school_id',currentUser.school_id).order('min_score',{ascending:false}),
+    db.from('subject_combinations').select('*').eq('school_id',currentUser.school_id).order('name'),
+    db.from('dashboard_settings').select('*').eq('school_id',currentUser.school_id).maybeSingle(),
+    db.from('academic_years').select('*').eq('school_id',currentUser.school_id).order('label',{ascending:false})
+  ]);
+  classes=cls||[]; subjects=sub||[]; terms=trm||[]; gradingScale=scale||[]; combinations=combos||[]; dashSettings=dash||{}; academicYears=ayrs||[];
+}
+
+// ── SCHOOL & LOGO ─────────────────────────────────────────────
+function renderSchool(){
+  const s=currentUser.schools||{};
+  document.getElementById('settingsContent').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:800px;">
+      <div class="card">
+        <div class="card__header"><span class="card__title">School Logo</span></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+          <div id="logoPreview" style="width:100px;height:100px;border-radius:14px;overflow:hidden;border:2px solid var(--border);background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:42px;">
+            ${s.logo_url?`<img src="${s.logo_url}" style="width:100%;height:100%;object-fit:cover;">`:'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>'}
+          </div>
+          <div class="upload-zone" style="width:100%;" onclick="document.getElementById('logoFile').click()">
+            <div style="font-size:24px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span></div>
+            <div style="font-size:14px;font-weight:600;margin-top:6px;">Upload School Logo</div>
+            <div style="font-size:12px;color:var(--ink-3);">PNG, JPG up to 2MB</div>
+          </div>
+          <input type="file" id="logoFile" accept="image/*" style="display:none;" onchange="handleLogoUpload(this)">
+          ${s.logo_url?`<button class="btn btn--ghost btn--sm btn--full" onclick="removeLogo()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span> Remove Logo</button>`:''}
+        </div>
+        <div id="logoProgress" style="display:none;margin-top:12px;">
+          <div class="progress-bar"><div class="progress-bar__fill" id="logoBar" style="width:0%;"></div></div>
+          <p id="logoStatus" style="font-size:12px;color:var(--ink-3);text-align:center;margin-top:4px;"></p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card__header"><span class="card__title">School Profile</span></div>
+        <div class="form-group"><label class="form-label">School Name</label><input id="scName" class="form-control" value="${s.name||''}"></div>
+        <div class="form-group"><label class="form-label">Phone</label><input id="scPhone" class="form-control" value="${s.phone||''}"></div>
+        <div class="form-group"><label class="form-label">Email</label><input id="scEmail" type="email" class="form-control" value="${s.email||''}"></div>
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">State</label><input id="scState" class="form-control" value="${s.state||''}"></div>
+          <div class="form-group"><label class="form-label">LGA</label><input id="scLga" class="form-control" value="${s.lga||''}"></div>
+        </div>
+        <div class="form-group"><label class="form-label">Address</label><input id="scAddress" class="form-control" value="${s.address||''}"></div>
+        <div class="form-group"><label class="form-label">School Motto</label><input id="scMotto" class="form-control" value="${s.motto||''}"></div>
+        <button class="btn btn--primary btn--full" onclick="saveSchool()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save Profile</button>
+      </div>
+    </div>
+
+    <!-- Official Signatures & Stamps -->
+    <div style="margin-top:20px;max-width:800px;">
+      <div class="card">
+        <div class="card__header">
+          <span class="card__title">Official Signatures &amp; Stamps</span>
+          <span style="font-size:12px;color:var(--ink-3);font-weight:400;">These appear on printed report cards. Upload PNG with transparent background for best results.</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;padding-top:4px;">
+
+          ${['class_teacher','vp','exam_officer','principal'].map(role => {
+            const label = role === 'class_teacher' ? 'Class Teacher' : role === 'vp' ? 'VP Academic' : role === 'exam_officer' ? 'Exam Officer' : 'Principal';
+            const col   = role === 'vp' ? 'vp_signature_url' : `${role}_signature_url`;
+            const existing = s[col] || '';
+            return `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+              <div style="font-size:12px;font-weight:700;color:var(--ink-2);">${label}</div>
+              <div id="sigPreview_${role}" style="width:120px;height:60px;border:1.5px dashed var(--border);border-radius:6px;background:#f9fafb;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                ${existing ? `<img src="${existing}" style="max-height:56px;max-width:116px;object-fit:contain;">` : '<span style="font-size:10px;color:var(--ink-3);">No signature</span>'}
+              </div>
+              <button class="btn btn--secondary btn--sm" onclick="document.getElementById('sigFile_${role}').click()" style="font-size:11px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Upload
+              </button>
+              <input type="file" id="sigFile_${role}" accept="image/*" style="display:none;" onchange="handleSigUpload(this,'${role}','${col}')">
+              ${existing ? `<button class="btn btn--ghost btn--sm" onclick="removeSig('${col}','${role}')" style="font-size:10px;color:var(--danger);">Remove</button>` : ''}
+            </div>`;
+          }).join('')}
+
+        </div>
+      </div>
+    </div>`;
+}
+
+async function handleLogoUpload(input){
+  const file=input.files[0]; if(!file) return;
+  if(!file.type.startsWith('image/')){ toast('Select an image file.','error'); return; }
+  if(file.size>2097152){ toast('Image must be under 2MB.','error'); return; }
+  document.getElementById('logoProgress').style.display='block';
+  document.getElementById('logoBar').style.width='30%';
+  document.getElementById('logoStatus').textContent='Uploading…';
+  try {
+    const ext=file.name.split('.').pop();
+    const path=`logos/school-${currentUser.school_id}.${ext}`;
+    const{error:upErr}=await db.storage.from('school-assets').upload(path,file,{upsert:true});
+    if(upErr) throw upErr;
+    document.getElementById('logoBar').style.width='70%';
+    const{data:urlData}=db.storage.from('school-assets').getPublicUrl(path);
+    const logoUrl=urlData.publicUrl+'?t='+Date.now();
+    await db.from('schools').update({logo_url:urlData.publicUrl}).eq('id',currentUser.school_id);
+    document.getElementById('logoBar').style.width='100%';
+    document.getElementById('logoStatus').textContent='Uploaded!';
+    document.getElementById('logoPreview').innerHTML=`<img src="${logoUrl}" style="width:100%;height:100%;object-fit:cover;">`;
+    // Update sidebar icon
+    const icon=document.querySelector('.sidebar__logo-icon');
+    if(icon) icon.innerHTML=`<img src="${logoUrl}" style="width:36px;height:36px;border-radius:7px;object-fit:cover;">`;
+    toast('Logo uploaded!','success');
+    setTimeout(()=>document.getElementById('logoProgress').style.display='none',2000);
+  } catch(err){
+    document.getElementById('logoStatus').textContent='Failed: '+err.message;
+    toast('Upload failed. Create a "school-assets" storage bucket in Supabase first.','error');
+  }
+}
+
+async function removeLogo(){
+  if(!confirm('Remove logo?')) return;
+  await db.from('schools').update({logo_url:null}).eq('id',currentUser.school_id);
+  toast('Logo removed.','success'); renderSchool();
+}
+
+async function handleSigUpload(input, role, col) {
+  const file = input.files[0]; if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Select an image file.', 'error'); return; }
+  if (file.size > 1048576) { toast('Signature image must be under 1MB.', 'error'); return; }
+  toast('Uploading signature…');
+  try {
+    const ext  = file.name.split('.').pop();
+    const path = `signatures/${currentUser.school_id}_${role}.${ext}`;
+    const { error: upErr } = await db.storage.from('school-assets').upload(path, file, { upsert: true });
+    if (upErr) throw upErr;
+    const { data: urlData } = db.storage.from('school-assets').getPublicUrl(path);
+    const sigUrl = urlData.publicUrl + '?t=' + Date.now();
+    await db.from('schools').update({ [col]: urlData.publicUrl }).eq('id', currentUser.school_id);
+    const prev = document.getElementById(`sigPreview_${role}`);
+    if (prev) prev.innerHTML = `<img src="${sigUrl}" style="max-height:56px;max-width:116px;object-fit:contain;">`;
+    toast('Signature uploaded!', 'success');
+  } catch(err) {
+    toast('Upload failed: ' + err.message, 'error');
+  }
+}
+
+async function removeSig(col, role) {
+  if (!confirm('Remove this signature?')) return;
+  await db.from('schools').update({ [col]: null }).eq('id', currentUser.school_id);
+  toast('Signature removed.', 'success');
+  renderSchool();
+}
+
+async function saveSchool(){
+  const{error}=await db.from('schools').update({
+    name:document.getElementById('scName').value,
+    phone:document.getElementById('scPhone').value,
+    email:document.getElementById('scEmail').value,
+    state:document.getElementById('scState').value,
+    lga:document.getElementById('scLga').value,
+    address:document.getElementById('scAddress').value,
+    motto:document.getElementById('scMotto').value,
+  }).eq('id',currentUser.school_id);
+  if(error){toast(error.message,'error');return;}
+  toast('School profile saved!','success');
+}
+
+// ── TERMS ─────────────────────────────────────────────────────
+function renderTerms(){
+  // Group terms by academic year for display
+  const byYear = {};
+  terms.forEach(t => {
+    const yid = t.academic_year_id || '__none__';
+    if (!byYear[yid]) byYear[yid] = [];
+    byYear[yid].push(t);
+  });
+  const yearLabel = id => academicYears.find(y => y.id === id)?.label || 'Ungrouped';
+
+  document.getElementById('settingsContent').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:900px;">
+      <div class="card">
+        <div class="card__header"><span class="card__title">Terms by Session</span></div>
+        <div id="termsList">
+          ${Object.entries(byYear).map(([yid, yterms]) => `
+            <div style="margin-bottom:16px;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ink-3);letter-spacing:.06em;margin-bottom:6px;">
+                <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span> ${yid === '__none__' ? 'No Session Assigned' : yearLabel(yid)}
+              </div>
+              ${yterms.map(t=>`
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+                  <div><div style="font-weight:600;">${t.name}</div>
+                  <div style="font-size:12px;color:var(--ink-3);">${t.start_date?formatDate(t.start_date)+' – '+formatDate(t.end_date):'No dates'}</div></div>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    ${t.is_current?'<span class="badge badge--green">Current</span>':`<button class="btn btn--secondary btn--sm" onclick="setCurrentTerm('${t.id}')">Set Current</button>`}
+                    <button class="btn btn--ghost btn--sm" onclick="deleteTerm('${t.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span></button>
+                  </div>
+                </div>`).join('')}
+            </div>`).join('') || '<p style="color:var(--ink-3);">No terms yet.</p>'}
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="card__header"><span class="card__title">Add Session (Academic Year)</span></div>
+          <p style="font-size:13px;color:var(--ink-3);margin-bottom:10px;">
+            Create a session first (e.g. <strong>2024/2025</strong>), then add terms under it.
+            Students enrolled in any term of a session automatically appear in all other terms.
+          </p>
+          <div class="form-group"><label class="form-label">Session Label</label>
+            <input id="newAYLabel" class="form-control" placeholder="2024/2025"></div>
+          <button class="btn btn--secondary" onclick="addAcademicYear()">+ Add Session</button>
+        </div>
+        <div class="card">
+          <div class="card__header"><span class="card__title">Add Term</span></div>
+          <div class="form-group"><label class="form-label">Session</label>
+            <select id="newTermYear" class="form-control">
+              <option value="">— Select session —</option>
+              ${academicYears.map(y=>`<option value="${y.id}">${y.label}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Term Name</label>
+            <input id="newTermName" class="form-control" placeholder="First Term"></div>
+          <div class="form-group"><label class="form-label">Start Date</label>
+            <input type="date" id="newTermStart" class="form-control"></div>
+          <div class="form-group"><label class="form-label">End Date</label>
+            <input type="date" id="newTermEnd" class="form-control"></div>
+          <button class="btn btn--primary" onclick="addTerm()">+ Add Term</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function addAcademicYear(){
+  const label = document.getElementById('newAYLabel').value.trim();
+  if(!label){toast('Enter a session label e.g. 2024/2025','error');return;}
+  const{error}=await db.from('academic_years').insert({school_id:currentUser.school_id,label});
+  if(error){toast('Error: '+error.message,'error');return;}
+  document.getElementById('newAYLabel').value='';
+  await loadAll(); renderTerms(); toast('Session added!','success');
+}
+
+async function addTerm(){
+  const name=document.getElementById('newTermName').value.trim();
+  const yearId=document.getElementById('newTermYear').value||null;
+  if(!name){toast('Enter term name.','error');return;}
+  if(!yearId){toast('Please select a session for this term. This links all three terms together so students appear automatically.','error');return;}
+  const{error}=await db.from('terms').insert({
+    school_id:currentUser.school_id,
+    name,
+    academic_year_id: yearId,
+    start_date:document.getElementById('newTermStart').value||null,
+    end_date:document.getElementById('newTermEnd').value||null
+  });
+  if(error){toast('Error: '+error.message,'error');return;}
+  // Back-fill: sync any existing enrollments into this new term
+  await db.rpc('sync_session_enrollments',{p_school_id:currentUser.school_id});
+  bustSchoolContextCache(currentUser.school_id);
+  await loadAll(); renderTerms(); toast('Term added! Existing enrollments synced.','success');
+}
+async function setCurrentTerm(id){
+  // 1. Find the current term before switching (we'll carry its enrollments forward)
+  const prevTerm = terms.find(t => t.is_current);
+
+  // 2. Atomic two-step: clear current, set new current
+  const { error } = await db.from('terms')
+    .update({ is_current: false })
+    .eq('school_id', currentUser.school_id)
+    .neq('id', id);
+  if (error) { toast('Failed to update terms: ' + error.message, 'error'); return; }
+  const { error: err2 } = await db.from('terms').update({ is_current: true }).eq('id', id);
+  if (err2) { toast('Failed to set current term: ' + err2.message, 'error'); return; }
+
+  // 3. ISSUE A-01 fix: carry all active student enrollments from the previous term
+  //    into the new current term so students don't vanish from class lists.
+  if (prevTerm && prevTerm.id !== id) {
+    const { data: carryResult, error: carryErr } = await db.rpc('carry_forward_enrollments', {
+      p_school_id: currentUser.school_id,
+      p_from_term: prevTerm.id,
+      p_to_term:   id,
+    });
+    if (carryErr) {
+      console.warn('[EduTrack] carry_forward_enrollments error:', carryErr.message);
+      toast('Term set, but enrollment carry-forward had an issue. Check class lists.', 'warning');
+    } else {
+      const n = carryResult?.inserted ?? 0;
+      console.log(`[EduTrack] Carried ${n} enrollment(s) into new term.`);
+    }
+  }
+
+  // 4. ISSUE B-02 fix: bust the school context cache so the next loadSchoolContext()
+  //    reflects the new current term instead of returning stale cached data.
+  bustSchoolContextCache(currentUser.school_id);
+
+  await loadAll(); renderTerms();
+  toast('Current term set! All student enrollments carried forward.', 'success');
+}
+async function deleteTerm(id){
+  if(!confirm('Delete term? This cannot be undone.')) return;
+  const { error } = await db.from('terms').delete().eq('id',id);
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  await loadAll(); renderTerms(); toast('Term deleted.', 'success');
+}
+
+// ── CLASSES ───────────────────────────────────────────────────
+async function renderClasses(){
+  // Reload classes and combinations from database
+  const [{ data: cls }, { data: combos }] = await Promise.all([
+    db.from('classes').select('id,name,level,combination_id').eq('school_id',currentUser.school_id).order('name'),
+    db.from('subject_combinations').select('id,name,color').eq('school_id',currentUser.school_id).order('name')
+  ]);
+  
+  classes = cls || [];
+  combinations = combos || [];
+  
+  document.getElementById('settingsContent').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:800px;">
+      <div class="card">
+        <div class="card__header"><span class="card__title">Classes (${classes.length})</span></div>
+        <div style="max-height:400px;overflow-y:auto;">
+          ${classes.map(c=>{
+            const combo=combinations.find(cb=>cb.id===c.combination_id);
+            return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+              <div><span style="font-weight:600;">${c.name}</span>
+                ${c.level?`<span class="chip" style="margin-left:6px;">${c.level}</span>`:''}
+                ${combo?`<span style="font-size:11px;margin-left:6px;padding:2px 6px;border-radius:3px;background:${combo.color}22;color:${combo.color};font-weight:700;">${combo.name}</span>`:''}
+              </div>
+              <button class="btn btn--ghost btn--sm" onclick="deleteClass('${c.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span></button>
+            </div>`;
+          }).join('')||'<p style="color:var(--ink-3);">No classes.</p>'}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card__header"><span class="card__title">Add Class</span></div>
+        <div class="form-group"><label class="form-label">Name <span class="required">*</span></label><input id="newClassName" class="form-control" placeholder="JSS 1A"></div>
+        <div class="form-group"><label class="form-label">Level</label>
+          <select id="newClassLevel" class="form-control"><option value="">Optional</option><option>Primary</option><option>Junior</option><option>Senior</option></select></div>
+        <div class="form-group"><label class="form-label">Combination</label>
+          <select id="newClassCombo" class="form-control"><option value="">— None —</option>
+            ${combinations.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+          </select></div>
+        <button class="btn btn--primary" onclick="addClass()">+ Add</button>
+        <hr style="margin:16px 0;border-color:var(--border);">
+        <div class="form-group"><label class="form-label">Bulk Add (comma-separated)</label>
+          <input id="bulkClasses" class="form-control" placeholder="JSS 1A, JSS 1B, SS1A"></div>
+        <button class="btn btn--secondary" onclick="bulkAddClasses()">Bulk Add</button>
+      </div>
+    </div>`;
+}
+async function addClass(){
+  const name=document.getElementById('newClassName').value.trim();
+  if(!name){toast('Enter a class name.','error');return;}
+  const{error}=await db.from('classes').insert({school_id:currentUser.school_id,name,
+    level:document.getElementById('newClassLevel').value||null,
+    combination_id:document.getElementById('newClassCombo').value||null});
+  if(error){toast('Error: '+error.message,'error');return;}
+  document.getElementById('newClassName').value = '';
+  document.getElementById('newClassLevel').value = '';
+  document.getElementById('newClassCombo').value = '';
+  bustSchoolContextCache(currentUser.school_id); // B-02: stale classes list
+  await renderClasses();
+  toast('Class added!','success');
+}
+async function bulkAddClasses(){
+  const names=document.getElementById('bulkClasses').value.split(',').map(n=>n.trim()).filter(Boolean);
+  if(!names.length) return;
+  const{error}=await db.from('classes').insert(names.map(name=>({school_id:currentUser.school_id,name})));
+  if(error){toast('Error: '+error.message,'error');return;}
+  document.getElementById('bulkClasses').value = '';
+  bustSchoolContextCache(currentUser.school_id); // B-02: stale classes list
+  await renderClasses();
+  toast(`${names.length} classes added!`,'success');
+}
+async function deleteClass(id){
+  if(!confirm('Delete class? This cannot be undone.')) return;
+  const { error } = await db.from('classes').delete().eq('id',id);
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  bustSchoolContextCache(currentUser.school_id); // B-02: stale classes list
+  await renderClasses();
+  toast('Class deleted.','success');
+}
+
+// ── SUBJECTS ──────────────────────────────────────────────────
+function renderSubjects(){
+  document.getElementById('settingsContent').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:800px;">
+      <div class="card">
+        <div class="card__header"><span class="card__title">Subjects (${subjects.length})</span></div>
+        <div style="max-height:420px;overflow-y:auto;">
+          ${subjects.map(s=>`
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+              <div><span style="font-weight:600;">${s.name}</span>
+                ${s.code?`<span style="background:var(--primary-light);color:var(--primary);font-size:11px;font-weight:700;padding:2px 6px;border-radius:3px;margin-left:6px;">${s.code}</span>`:''}
+              </div>
+              <button class="btn btn--ghost btn--sm" onclick="deleteSubject('${s.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span></button>
+            </div>`).join('')||'<p style="color:var(--ink-3);">No subjects yet.</p>'}
+        </div>
+        <button class="btn btn--secondary btn--sm btn--full" style="margin-top:12px;" onclick="addDefaultSubjects()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Load 30 Nigerian Standard Subjects</button>
+      </div>
+      <div class="card">
+        <div class="card__header"><span class="card__title">Add Subject</span></div>
+        <div class="form-group"><label class="form-label">Name <span class="required">*</span></label><input id="newSubName" class="form-control" placeholder="Mathematics"></div>
+        <div class="form-group"><label class="form-label">Code</label><input id="newSubCode" class="form-control" placeholder="MTH"></div>
+        <button class="btn btn--primary" onclick="addSubject()">+ Add</button>
+        <hr style="margin:16px 0;border-color:var(--border);">
+        <div class="form-group"><label class="form-label">Bulk Add (comma-separated)</label>
+          <textarea id="bulkSubs" class="form-control" rows="3" placeholder="Physics, Chemistry, Biology"></textarea></div>
+        <button class="btn btn--secondary" onclick="bulkAddSubjects()">Bulk Add</button>
+      </div>
+    </div>`;
+}
+async function addSubject(){
+  const name=document.getElementById('newSubName').value.trim();
+  if(!name){toast('Enter name.','error');return;}
+  const{error}=await db.from('subjects').insert({school_id:currentUser.school_id,name,code:document.getElementById('newSubCode').value.trim()||null});
+  if(error){toast(error.message,'error');return;}
+  bustSchoolContextCache(currentUser.school_id); // B-02: stale subjects list
+  await loadAll(); renderSubjects(); toast('Subject added!','success');
+}
+async function bulkAddSubjects(){
+  const names=document.getElementById('bulkSubs').value.split(',').map(n=>n.trim()).filter(Boolean);
+  if(!names.length) return;
+  await db.from('subjects').upsert(names.map(name=>({school_id:currentUser.school_id,name})),{onConflict:'school_id,name'});
+  bustSchoolContextCache(currentUser.school_id); // B-02: stale subjects list
+  await loadAll(); renderSubjects(); toast(`${names.length} subjects added!`,'success');
+}
+async function addDefaultSubjects(){
+  const defaults=[
+    {name:'English Language',code:'ENG'},{name:'Mathematics',code:'MTH'},
+    {name:'Civic Education',code:'CVE'},{name:'Basic Science',code:'BSC'},
+    {name:'Social Studies',code:'SST'},{name:'Agricultural Science',code:'AGR'},
+    {name:'Computer Studies',code:'CMP'},{name:'Christian Religious Studies',code:'CRS'},
+    {name:'Islamic Studies',code:'ISL'},{name:'Yoruba',code:'YRB'},
+    {name:'Igbo',code:'IGB'},{name:'Hausa',code:'HAS'},
+    {name:'Physics',code:'PHY'},{name:'Chemistry',code:'CHM'},
+    {name:'Biology',code:'BIO'},{name:'Further Mathematics',code:'FMT'},
+    {name:'Literature in English',code:'LIT'},{name:'Government',code:'GOV'},
+    {name:'History',code:'HIS'},{name:'Geography',code:'GEO'},
+    {name:'Economics',code:'ECO'},{name:'Commerce',code:'COM'},
+    {name:'Accounting',code:'ACC'},{name:'Fine Arts',code:'FNA'},
+    {name:'Music',code:'MUS'},{name:'Physical & Health Education',code:'PHE'},
+    {name:'French',code:'FRE'},{name:'Technical Drawing',code:'TDD'},
+    {name:'Food & Nutrition',code:'FDN'},{name:'Home Economics',code:'HEC'}
+  ];
+  await db.from('subjects').upsert(defaults.map(s=>({school_id:currentUser.school_id,...s})),{onConflict:'school_id,name'});
+  await loadAll(); renderSubjects(); toast('30 standard subjects loaded!','success');
+}
+async function deleteSubject(id){
+  if(!confirm('Delete subject? This cannot be undone.')) return;
+  const { error } = await db.from('subjects').delete().eq('id',id);
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  await loadAll(); renderSubjects(); toast('Subject deleted.', 'success');
+}
+
+// ── COMBINATIONS ──────────────────────────────────────────────
+let activeComboId=null;
+
+async function renderCombinations(){
+  // First, show loading state
+  document.getElementById('settingsContent').innerHTML=`
+    <div style="padding:24px;text-align:center;">
+      <div style="font-size:24px;margin-bottom:12px;">⏳</div>
+      <p>Loading combinations...</p>
+    </div>
+  `;
+  
+  // Reload combinations from database
+  const { data: combos } = await db.from('subject_combinations')
+    .select('*').eq('school_id', currentUser.school_id).order('name');
+  combinations = combos || [];
+  activeComboId = null;  // Reset selection
+  
+  // Now render the page
+  document.getElementById('settingsContent').innerHTML=`
+    <div style="max-width:960px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h3 style="font-size:16px;font-weight:700;">Subject Combinations</h3>
+          <p style="font-size:13px;color:var(--ink-3);">Group subjects into Science, Art, Commercial tracks. Assign to classes.</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn--secondary btn--sm" onclick="loadNigerianCombinations()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Load Nigerian Standard</button>
+          <button class="btn btn--primary btn--sm" onclick="toggleAddCombo()">+ New Combination</button>
+        </div>
+      </div>
+
+      <div class="card" id="addComboCard" style="display:none;margin-bottom:16px;max-width:500px;">
+        <div class="card__header"><span class="card__title">New Combination</span>
+          <button class="btn btn--ghost btn--sm" onclick="toggleAddCombo()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button></div>
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">Name <span class="required">*</span></label>
+            <input id="comboName" class="form-control" placeholder="Science"></div>
+          <div class="form-group"><label class="form-label">Color</label>
+            <input type="color" id="comboColor" class="form-control" value="#2563eb" style="height:42px;padding:4px;"></div>
+          <div class="form-group col-full"><label class="form-label">Description</label>
+            <input id="comboDesc" class="form-control" placeholder="Physics, Chemistry, Biology…"></div>
+        </div>
+        <button class="btn btn--primary" onclick="saveNewCombo()">Save</button>
+      </div>
+
+      ${combinations.length===0?`
+        <div class="card et-empty">
+          <div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v8L4.72 20.55A1 1 0 0 0 5.6 22h12.8a1 1 0 0 0 .88-1.45L14 10V2"/><line x1="8.5" y1="2" x2="15.5" y2="2"/></svg></span></div>
+          <p>No combinations yet.<br>Click "Load Nigerian Standard" to get started.</p>
+        </div>`:`
+        <div style="display:grid;grid-template-columns:260px 1fr;gap:20px;" id="comboGrid">
+          <div id="comboList">
+            ${combinations.map(c=>`
+              <div class="combo-card ${activeComboId===c.id?'selected':''}" onclick="selectCombo('${c.id}')"
+                   style="border-color:${activeComboId===c.id?c.color:'var(--border)'};">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                  <span class="combo-dot" style="background:${c.color||'#374151'};"></span>
+                  <strong>${c.name}</strong>
+                </div>
+                <div style="font-size:12px;color:var(--ink-3);margin-bottom:8px;">${c.description||''}</div>
+                <button class="btn btn--ghost btn--sm" onclick="event.stopPropagation();deleteCombo('${c.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span> Delete</button>
+              </div>`).join('')}
+          </div>
+          <div class="card" id="comboSubjects">
+            <div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg></span></div><p>Select a combination to assign subjects.</p></div>
+          </div>
+        </div>`}
+    </div>`;
+}
+
+function toggleAddCombo(){
+  const c=document.getElementById('addComboCard');
+  c.style.display=c.style.display==='none'?'':'none';
+}
+
+async function saveNewCombo(){
+  const name=document.getElementById('comboName').value.trim();
+  if(!name){toast('Enter name.','error');return;}
+  const { error } = await db.from('subject_combinations').insert({
+    school_id:currentUser.school_id,
+    name,
+    color:document.getElementById('comboColor').value,
+    description:document.getElementById('comboDesc').value||null
+  });
+  
+  if (error) {
+    toast('Error: ' + error.message, 'error');
+    return;
+  }
+  
+  document.getElementById('comboName').value = '';
+  document.getElementById('comboColor').value = '#2563eb';
+  document.getElementById('comboDesc').value = '';
+  toggleAddCombo();
+  toast('Combination added!','success');
+  
+  // Reload combinations and re-render
+  await renderCombinations();
+}
+
+async function selectCombo(id){
+  activeComboId=id;
+  const combo=combinations.find(c=>c.id===id);
+  if(!combo) return;
+  const{data:assigned}=await db.from('combination_subjects').select('subject_id,is_compulsory').eq('combination_id',id);
+  const aMap={};
+  (assigned||[]).forEach(a=>aMap[a.subject_id]=a.is_compulsory);
+
+  document.getElementById('comboSubjects').innerHTML=`
+    <div class="card__header">
+      <div>
+        <span class="card__title">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${combo.color};margin-right:6px;"></span>
+          ${combo.name} Subjects
+        </span>
+        <div style="font-size:12px;color:var(--ink-3);">${combo.description||''}</div>
+      </div>
+      <button class="btn btn--primary btn--sm" onclick="saveComboSubjects('${id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save</button>
+    </div>
+    <div style="margin-bottom:10px;font-size:13px;color:var(--ink-3);">
+      Tap once = <span style="background:var(--primary-light);color:var(--primary);padding:1px 6px;border-radius:3px;font-weight:700;">Core</span> (compulsory) &nbsp;
+      Tap again = <span style="background:var(--info-light);color:var(--info);padding:1px 6px;border-radius:3px;font-weight:700;">Elective</span> &nbsp;
+      Tap again = Remove
+    </div>
+    <div id="chipArea" style="display:flex;flex-wrap:wrap;">
+      ${subjects.map(s=>{
+        const state=s.id in aMap?(aMap[s.id]?'core':'elective'):'unassigned';
+        return`<div class="subject-chip ${state}" id="chip-${s.id}" data-state="${state}" onclick="cycleChip('${s.id}','${s.name}','${s.code||''}')">
+          ${s.code||s.name.substring(0,4)}
+          <span style="font-size:10px;">${state==='core'?'<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>':state==='elective'?'◆':''}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+      <div style="font-size:12px;color:var(--ink-3);">
+        <span id="coreCount">${Object.values(aMap).filter(v=>v).length}</span> core · 
+        <span id="electiveCount">${Object.values(aMap).filter(v=>!v).length}</span> elective
+      </div>
+    </div>
+  `;
+
+  // Highlight selected card
+  document.querySelectorAll('.combo-card').forEach(c=>{
+    const isActive=c.onclick?.toString().includes(`'${id}'`);
+    c.classList.toggle('selected',isActive);
+    if(isActive) c.style.borderColor=combo.color;
+    else c.style.borderColor='var(--border)';
+  });
+}
+
+function cycleChip(subjectId, name, code){
+  const chip=document.getElementById(`chip-${subjectId}`);
+  const state=chip.dataset.state;
+  const display=code||name.substring(0,4);
+  if(state==='unassigned'){
+    chip.dataset.state='core'; chip.className='subject-chip core';
+    chip.innerHTML=`${display} <span style="font-size:10px;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span></span>`;
+  } else if(state==='core'){
+    chip.dataset.state='elective'; chip.className='subject-chip elective';
+    chip.innerHTML=`${display} <span style="font-size:10px;">◆</span>`;
+  } else {
+    chip.dataset.state='unassigned'; chip.className='subject-chip unassigned';
+    chip.innerHTML=`${display} <span style="font-size:10px;"></span>`;
+  }
+  // Update counts
+  const chips=[...document.querySelectorAll('#chipArea .subject-chip')];
+  const coreCount=chips.filter(c=>c.dataset.state==='core').length;
+  const elecCount=chips.filter(c=>c.dataset.state==='elective').length;
+  const cc=document.getElementById('coreCount'); if(cc) cc.textContent=coreCount;
+  const ec=document.getElementById('electiveCount'); if(ec) ec.textContent=elecCount;
+}
+
+async function saveComboSubjects(comboId){
+  const chips=[...document.querySelectorAll('#chipArea .subject-chip')];
+  const rows=chips.filter(c=>c.dataset.state!=='unassigned').map(c=>({
+    combination_id:comboId,
+    subject_id:c.id.replace('chip-',''),
+    school_id:currentUser.school_id,
+    is_compulsory:c.dataset.state==='core'
+  }));
+  await db.from('combination_subjects').delete().eq('combination_id',comboId);
+  if(rows.length){
+    const{error}=await db.from('combination_subjects').insert(rows);
+    if(error){toast('Save failed: '+error.message,'error');return;}
+  }
+  toast(`${rows.length} subjects saved! <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>`,'success');
+}
+
+async function deleteCombo(id){
+  if(!confirm('Delete this combination? This cannot be undone.')) return;
+  if(activeComboId===id) activeComboId=null;
+  const { error } = await db.from('subject_combinations').delete().eq('id',id);
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  await loadAll(); renderCombinations(); toast('Combination deleted.', 'success');
+}
+
+async function loadNigerianCombinations(){
+  if(!subjects.length){ toast('Load subjects first (Subjects tab → Load Nigerian Standard Subjects)','info'); return; }
+  if(!confirm('Add Science, Art, Commercial, General combinations?')) return;
+
+  const{data:inserted}=await db.from('subject_combinations').upsert([
+    {school_id:currentUser.school_id,name:'Core Subjects',description:'Compulsory for ALL students',color:'#374151'},
+    {school_id:currentUser.school_id,name:'Science',description:'Physics, Chemistry, Biology, Further Maths',color:'#2563eb'},
+    {school_id:currentUser.school_id,name:'Art',description:'Literature, Government, History, CRS/IRS',color:'#7c3aed'},
+    {school_id:currentUser.school_id,name:'Commercial',description:'Economics, Accounting, Commerce',color:'#d97706'},
+    {school_id:currentUser.school_id,name:'General',description:'Mixed subjects for JSS level',color:'#16a34a'},
+  ],{onConflict:'school_id,name'}).select();
+
+  const subMap={}; subjects.forEach(s=>subMap[s.name]=s.id);
+  const combMap={}; (inserted||[]).forEach(c=>combMap[c.name]=c.id);
+
+  const rows=[];
+  const assign=(combo,names,core)=>names.forEach(n=>{ if(subMap[n]&&combMap[combo]) rows.push({combination_id:combMap[combo],subject_id:subMap[n],school_id:currentUser.school_id,is_compulsory:core}); });
+
+  assign('Core Subjects',['English Language','Mathematics','Civic Education','Physical & Health Education'],true);
+  assign('Science',['Physics','Chemistry','Biology','Further Mathematics','Agricultural Science','Computer Studies'],false);
+  assign('Art',['Literature in English','Government','History','Christian Religious Studies','Islamic Studies','Yoruba','Igbo','Hausa','Fine Arts','Music','French'],false);
+  assign('Commercial',['Economics','Commerce','Accounting','Geography'],false);
+  assign('General',['Basic Science','Social Studies','Computer Studies','Agricultural Science','Home Economics'],false);
+
+  if(rows.length) await db.from('combination_subjects').upsert(rows,{onConflict:'combination_id,subject_id'});
+  await renderCombinations(); toast('Nigerian combinations loaded! <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>','success');
+}
+
+// ── GRADING ───────────────────────────────────────────────────
+function renderGrading(){
+  document.getElementById('settingsContent').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:700px;">
+      <div class="card">
+        <div class="card__header"><span class="card__title">Grading Scale</span></div>
+        ${gradingScale.length?`
+          <div class="table-wrap" style="border:none;">
+            <table><thead><tr><th>Grade</th><th>Min</th><th>Max</th><th>Remark</th><th></th></tr></thead>
+            <tbody>${gradingScale.map(g=>`<tr>
+              <td><strong>${g.grade}</strong></td><td>${g.min_score}</td><td>${g.max_score}</td>
+              <td style="color:var(--ink-3);">${g.remark||'—'}</td>
+              <td><button class="btn btn--ghost btn--sm" onclick="deleteGrade('${g.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span></button></td>
+            </tr>`).join('')}</tbody></table>
+          </div>`:'<p style="color:var(--ink-3);">No grading scale.</p>'}
+        <button class="btn btn--secondary btn--sm btn--full" style="margin-top:12px;" onclick="addNigerianGrading()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Load Nigerian A1–F9</button>
+      </div>
+      <div class="card">
+        <div class="card__header"><span class="card__title">Add Grade Band</span></div>
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">Grade</label><input id="gGrade" class="form-control" placeholder="A1"></div>
+          <div class="form-group"><label class="form-label">Remark</label><input id="gRemark" class="form-control" placeholder="Excellent"></div>
+          <div class="form-group"><label class="form-label">Min</label><input type="number" id="gMin" class="form-control" placeholder="75"></div>
+          <div class="form-group"><label class="form-label">Max</label><input type="number" id="gMax" class="form-control" placeholder="100"></div>
+        </div>
+        <button class="btn btn--primary" onclick="addGrade()">+ Add</button>
+      </div>
+    </div>`;
+}
+async function addNigerianGrading(){
+  await db.from('grading_scales').delete().eq('school_id',currentUser.school_id);
+  await db.from('grading_scales').insert([
+    {grade:'A1',min_score:75,max_score:100,remark:'Excellent'},
+    {grade:'B2',min_score:70,max_score:74,remark:'Very Good'},
+    {grade:'B3',min_score:65,max_score:69,remark:'Good'},
+    {grade:'C4',min_score:60,max_score:64,remark:'Credit'},
+    {grade:'C5',min_score:55,max_score:59,remark:'Credit'},
+    {grade:'C6',min_score:50,max_score:54,remark:'Credit'},
+    {grade:'D7',min_score:45,max_score:49,remark:'Pass'},
+    {grade:'E8',min_score:40,max_score:44,remark:'Pass'},
+    {grade:'F9',min_score:0,max_score:39,remark:'Fail'},
+  ].map(s=>({school_id:currentUser.school_id,...s})));
+  await loadAll(); renderGrading(); toast('Nigerian grading loaded!','success');
+}
+async function addGrade(){
+  const grade=document.getElementById('gGrade').value.trim();
+  const min=Number(document.getElementById('gMin').value);
+  const max=Number(document.getElementById('gMax').value);
+  if(!grade){toast('Fill all fields.','error');return;}
+  await db.from('grading_scales').insert({school_id:currentUser.school_id,grade,min_score:min,max_score:max,remark:document.getElementById('gRemark').value||null});
+  await loadAll(); renderGrading();
+}
+async function deleteGrade(id){
+  await db.from('grading_scales').delete().eq('id',id);
+  await loadAll(); renderGrading();
+}
+
+// ── EXAMS ─────────────────────────────────────────────────────
+function renderExams(){
+  document.getElementById('settingsContent').innerHTML=`
+    <div style="max-width:640px;">
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card__header"><span class="card__title">Exam Components</span></div>
+        <div id="examList"><div class="et-loader"><div class="et-spinner"></div></div></div>
+      </div>
+      <div class="card">
+        <div class="card__header"><span class="card__title">Add Component</span></div>
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">Name</label><input id="exName" class="form-control" placeholder="CA1"></div>
+          <div class="form-group"><label class="form-label">Max Score</label><input type="number" id="exMax" class="form-control" placeholder="100"></div>
+          <div class="form-group"><label class="form-label">Weight</label><input type="number" id="exWeight" class="form-control" value="1"></div>
+        </div>
+        <button class="btn btn--primary" onclick="addExam()">+ Add</button>
+        <button class="btn btn--secondary" style="margin-left:8px;" onclick="addDefaultExams()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Load CA1+CA2+Exam</button>
+      </div>
+    </div>`;
+  loadExams();
+}
+async function loadExams(){
+  const{data}=await db.from('exams').select('*').eq('school_id',currentUser.school_id).order('name');
+  document.getElementById('examList').innerHTML=data?.length?`
+    <table style="width:100%;font-size:14px;border-collapse:collapse;">
+      <thead><tr style="background:var(--surface-3);">
+        <th style="padding:8px 12px;text-align:left;">Name</th>
+        <th style="padding:8px 12px;">Max</th>
+        <th style="padding:8px 12px;">Weight</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${data.map(e=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px 12px;font-weight:600;">${e.name}</td>
+        <td style="padding:8px 12px;">${e.max_score}</td>
+        <td style="padding:8px 12px;">${e.weight}</td>
+        <td style="padding:8px 12px;"><button class="btn btn--ghost btn--sm" onclick="deleteExam('${e.id}')"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span></button></td>
+      </tr>`).join('')}</tbody>
+    </table>`:'<p style="color:var(--ink-3);">No exam components yet.</p>';
+}
+async function addExam(){
+  const name=document.getElementById('exName').value.trim();
+  const max=Number(document.getElementById('exMax').value);
+  if(!name||!max){toast('Fill name and max score.','error');return;}
+  await db.from('exams').insert({school_id:currentUser.school_id,name,max_score:max,weight:Number(document.getElementById('exWeight').value)||1,term_id:terms.find(t=>t.is_current)?.id||null});
+  renderExams(); toast('Added!','success');
+}
+async function addDefaultExams(){
+  const termId=terms.find(t=>t.is_current)?.id||null;
+  await db.from('exams').upsert([
+    {school_id:currentUser.school_id,name:'CA 1',max_score:20,weight:1,term_id:termId},
+    {school_id:currentUser.school_id,name:'CA 2',max_score:20,weight:1,term_id:termId},
+    {school_id:currentUser.school_id,name:'Exam',max_score:60,weight:1,term_id:termId},
+  ],{onConflict:'school_id,name'});
+  renderExams(); toast('Standard components added!','success');
+}
+async function deleteExam(id){
+  if(!confirm('Delete this exam component? This cannot be undone.')) return;
+  const { error } = await db.from('exams').delete().eq('id',id);
+  if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+  renderExams(); toast('Exam component deleted.', 'success');
+}
+
+// ── PORTAL CONTROLS ───────────────────────────────────────────
+async function renderPortalControls(){
+  let{data:ds}=await db.from('dashboard_settings').select('*').eq('school_id',currentUser.school_id).maybeSingle();
+  if(!ds){
+    const{data:c}=await db.from('dashboard_settings').insert({school_id:currentUser.school_id}).select().single();
+    ds=c||{};
+  }
+  dashSettings=ds;
+
+  const tog=(key,label,desc)=>`
+    <div class="toggle-row">
+      <div><div style="font-size:14px;font-weight:500;">${label}</div>
+        <div style="font-size:12px;color:var(--ink-3);">${desc}</div></div>
+      <label class="toggle">
+        <input type="checkbox" ${ds[key]!==false?'checked':''} onchange="saveDash('${key}',this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>`;
+
+  document.getElementById('settingsContent').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;max-width:960px;">
+      <div class="card">
+        <div class="card__header"><span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/><line x1="14" y1="10" x2="18" y2="14"/></svg></span> Teacher Portal</span></div>
+        ${tog('teacher_see_attendance','Attendance','Can take & view attendance')}
+        ${tog('teacher_see_scores','Score Entry','Can enter student scores')}
+        ${tog('teacher_see_students','Student List','Can view their students')}
+      </div>
+      <div class="card">
+        <div class="card__header"><span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> Student Portal</span></div>
+        ${tog('student_see_results','Results','Can view own results')}
+        ${tog('student_see_attendance','Attendance','Can view attendance record')}
+        ${tog('student_see_fees','Fee Status','Can view fee balance')}
+      </div>
+      <div class="card">
+        <div class="card__header"><span class="card__title"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Parent Portal</span></div>
+        ${tog('parent_see_results','Results','Can view child results')}
+        ${tog('parent_see_attendance','Attendance','Can view child attendance')}
+        ${tog('parent_see_fees','Fees','Can view fee status')}
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;max-width:440px;background:var(--primary-light);border-color:var(--primary);">
+      <p style="font-size:13px;color:var(--primary);"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span> Changes apply immediately on next page load.</p>
+    </div>`;
+}
+
+async function saveDash(key,value){
+  const{error}=await db.from('dashboard_settings').update({[key]:value,updated_at:new Date().toISOString()}).eq('school_id',currentUser.school_id);
+  if(error){toast(error.message,'error');return;}
+  dashSettings[key]=value;
+  toast('Setting saved!','success');
+}
+
+// ── STUDENT ACCOUNTS ──────────────────────────────────────────
+async function renderStudentAccounts(){
+  const{data:students}=await db.from('students')
+    .select('id,full_name,admission_no,can_login,pin,enrollments(classes(name))')
+    .eq('school_id',currentUser.school_id).eq('is_active',true).order('full_name');
+
+  window._stuList=students||[];
+
+  document.getElementById('settingsContent').innerHTML=`
+    <div style="max-width:860px;">
+      <div class="card" style="margin-bottom:16px;background:var(--info-light);border-color:var(--info);">
+        <p style="font-size:13px;color:var(--info);">
+          <strong>ℹ️ How Student Login Works:</strong><br>
+          Students log in at <strong>student/index.html</strong> using their <strong>Admission Number</strong> as username and a <strong>PIN</strong> you set here.
+          Enable the toggle and set a PIN for each student who should have access.
+        </p>
+      </div>
+      <div class="filter-bar">
+        <div class="search-box" style="flex:1;max-width:280px;">
+          <input class="form-control" id="stuSearch" placeholder="Search…" oninput="filterStu()">
+        </div>
+        <button class="btn btn--secondary btn--sm" onclick="enableAll()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Enable All</button>
+        <button class="btn btn--ghost btn--sm" onclick="disableAll()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span> Disable All</button>
+      </div>
+      <div class="card" style="padding:0;">
+        <div class="table-wrap" id="stuTable" style="border:none;"></div>
+      </div>
+    </div>`;
+
+  filterStu();
+}
+
+function filterStu(){
+  const q=(document.getElementById('stuSearch')?.value||'').toLowerCase();
+  const f=(window._stuList||[]).filter(s=>s.full_name.toLowerCase().includes(q)||s.admission_no?.toLowerCase().includes(q));
+  renderStuTable(f);
+}
+
+function renderStuTable(students){
+  if(!students.length){showEmpty('#stuTable','No students found.','<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>');return;}
+  document.getElementById('stuTable').innerHTML=`
+    <table>
+      <thead><tr><th>Student</th><th>Class</th><th>Adm. No.</th><th>PIN</th><th>Login</th><th></th></tr></thead>
+      <tbody>
+        ${students.map(s=>`
+          <tr>
+            <td><div class="student-cell">
+              <div class="avatar avatar--sm">${s.full_name.charAt(0)}</div>
+              <div class="info"><div class="name">${s.full_name}</div></div>
+            </div></td>
+            <td><span class="chip">${s.enrollments?.[0]?.classes?.name||'—'}</span></td>
+            <td style="font-family:var(--mono);font-size:13px;">${s.admission_no||'—'}</td>
+            <td>
+              <input type="text" id="pin-${s.id}" maxlength="8"
+                style="width:80px;padding:5px 8px;border:1.5px solid var(--border);border-radius:5px;font-family:var(--mono);font-size:13px;"
+                value="${s.pin||''}" placeholder="Set PIN">
+            </td>
+            <td>
+              <label class="toggle">
+                <input type="checkbox" ${s.can_login?'checked':''} onchange="toggleStu('${s.id}',this.checked)">
+                <span class="slider"></span>
+              </label>
+            </td>
+            <td>
+              <button class="btn btn--primary btn--sm" onclick="saveStuPin('${s.id}')">Save</button>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function toggleStu(id,val){
+  await db.from('students').update({can_login:val}).eq('id',id);
+  const s=window._stuList?.find(s=>s.id===id); if(s) s.can_login=val;
+  toast(`Login ${val?'enabled':'disabled'}.`,'success');
+}
+async function saveStuPin(id){
+  const pin=document.getElementById(`pin-${id}`)?.value?.trim();
+  if(!pin||pin.length<4){toast('PIN must be 4+ characters.','error');return;}
+  await db.from('students').update({pin,can_login:true}).eq('id',id);
+  const s=window._stuList?.find(s=>s.id===id); if(s){s.pin=pin;s.can_login=true;}
+  toast('PIN saved! Login enabled.','success');
+}
+async function enableAll(){
+  if(!confirm('Enable login for all students?')) return;
+  await db.from('students').update({can_login:true}).eq('school_id',currentUser.school_id).eq('is_active',true);
+  toast('All student logins enabled!','success'); renderStudentAccounts();
+}
+async function disableAll(){
+  if(!confirm('Disable all student logins?')) return;
+  await db.from('students').update({can_login:false}).eq('school_id',currentUser.school_id);
+  toast('All disabled.','success'); renderStudentAccounts();
+}
+</script>
+<script src="../js/pwa.js"></script>
+
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>
