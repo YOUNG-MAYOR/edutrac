@@ -768,8 +768,9 @@ async function doResetStaffPassword() {
 
   btn.disabled = true; btn.textContent = 'Resetting…';
   try {
-    // Call the server-side password reset edge function
-    const res = await fetch('/api/reset-staff-password', {
+    // Call the Express backend password reset route
+    const _apiBase = (window.__EDUTRAC_CONFIG__ || {}).API_BASE_URL || '';
+    const res = await fetch(_apiBase + '/api/reset-staff-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: id, new_password: pwd1 }),

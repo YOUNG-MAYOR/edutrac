@@ -141,6 +141,68 @@
     }
     .summary-bar span { color: var(--ink-3); }
     .summary-bar strong { color: var(--ink); margin-left: 4px; }
+
+    /* ── Import modal ─────────────────────────────────────────── */
+    .import-modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      z-index: 200; display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .import-modal {
+      background: var(--surface); border-radius: var(--radius);
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+      width: 100%; max-width: 680px; max-height: 90vh;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .import-modal__header {
+      padding: 18px 22px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+    }
+    .import-modal__title { font-size: 16px; font-weight: 700; color: var(--ink); }
+    .import-modal__close {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--surface-3); border: none; cursor: pointer;
+      font-size: 18px; color: var(--ink-3); display: flex; align-items: center; justify-content: center;
+      transition: var(--transition);
+    }
+    .import-modal__close:hover { background: var(--danger-light); color: var(--danger); }
+    .import-modal__body { padding: 20px 22px; overflow-y: auto; flex: 1; }
+    .import-modal__footer {
+      padding: 14px 22px; border-top: 1px solid var(--border);
+      display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0;
+    }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed var(--border); border-radius: var(--radius);
+      padding: 36px 20px; text-align: center; cursor: pointer;
+      transition: var(--transition); background: var(--surface-2);
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--primary); background: var(--primary-light);
+    }
+    .drop-zone__icon { font-size: 40px; margin-bottom: 10px; }
+    .drop-zone__text { font-size: 14px; color: var(--ink-2); font-weight: 600; }
+    .drop-zone__sub  { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+
+    /* Import preview table */
+    .import-preview { margin-top: 16px; }
+    .import-preview table { width: 100%; font-size: 13px; }
+    .import-preview th { background: var(--surface-3); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; padding: 8px 12px; }
+    .import-preview td { padding: 7px 12px; border-bottom: 1px solid var(--border); }
+    .match-ok    { color: var(--success); font-weight: 700; }
+    .match-warn  { color: var(--warning); font-weight: 700; }
+    .match-err   { color: var(--danger);  font-weight: 700; }
+    .import-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; font-size: 13px; }
+    .import-stats span { padding: 4px 10px; border-radius: 100px; font-weight: 600; }
+
+    /* Submit confirmation badge */
+    .submit-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #eff6ff; border: 1px solid #93c5fd;
+      color: #1d4ed8; border-radius: 6px; padding: 4px 10px;
+      font-size: 12px; font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -149,7 +211,10 @@
   <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Offline Mode — Scores are saved locally and will sync automatically when you reconnect
 </div>
 
+<div id="importModal" style="display:none;"></div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="../../js/config.js"></script>
 <script src="../../api/database.js"></script>
 <script src="../../api/auth.js"></script>
@@ -612,6 +677,7 @@ function renderScoreTable() {
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           ${hasPending ? `<span style="background:#d97706;color:white;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> ${Object.keys(pendingForKey).length} offline</span>` : ''}
+          <button class="btn btn--secondary btn--sm" onclick="openImportModal()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:white;"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Import</button>
           <button class="btn btn--primary btn--sm" onclick="saveAllScores()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save All</button>
         </div>
       </div>
@@ -700,7 +766,9 @@ function renderScoreTable() {
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn--secondary btn--sm" onclick="clearAllScores()">Clear All</button>
+          <button class="btn btn--secondary btn--sm" onclick="openImportModal()" title="Import scores from Excel/CSV"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Import Scores</button>
           <button class="btn btn--primary" onclick="saveAllScores()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span> Save All Scores</button>
+          <button class="btn btn--sm" onclick="submitToExamOfficer()" style="background:#1d4ed8;color:white;border-color:#1d4ed8;" title="Send these scores to the Exam Officer / VP Academic for review"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></span> Submit to Exam Officer</button>
         </div>
       </div>
     </div>
@@ -911,6 +979,333 @@ async function syncPending() {
   }
   toast(failed ? `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>️ ${synced} synced, ${failed} failed` : `<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${synced} scores synced!`, failed ? 'error' : 'success');
   if (selectedExamId) loadScores();
+}
+
+// ── Submit scores to Exam Officer / VP Academic ────────────────
+async function submitToExamOfficer() {
+  if (!term) { toast('No current term set.', 'error'); return; }
+
+  // Make sure there are saved scores to submit
+  const enteredCount = students.filter(s => {
+    const v = document.getElementById(`sc_${s.id}`)?.value;
+    return v !== '' && v !== undefined && !isNaN(parseFloat(v));
+  }).length;
+
+  if (enteredCount === 0) {
+    toast('Enter and save scores first before submitting.', 'error');
+    return;
+  }
+
+  if (!confirm(`Submit ${enteredCount} score(s) to the Exam Officer / VP Academic for review?\n\nMake sure all scores have been saved first.`)) return;
+
+  try {
+    const { data: recipients } = await db
+      .from('users')
+      .select('id, full_name, role')
+      .eq('school_id', user.school_id)
+      .eq('is_active', true)
+      .in('role', ['exam_officer', 'vp_academic', 'admin']);
+
+    if (!recipients || !recipients.length) {
+      toast('No Exam Officer / VP Academic found in this school.', 'error');
+      return;
+    }
+
+    const classLabel   = selectedClassObj?.name || 'a class';
+    const subjectLabel = selectedSubjectName || 'a subject';
+    const examObj      = exams.find(e => e.id === selectedExamId);
+    const examLabel    = examObj?.name || 'an assessment';
+
+    const notifRows = recipients.map(r => ({
+      school_id:   user.school_id,
+      user_id:     r.id,
+      student_id:  null,
+      title:       `📋 Scores Submitted for Review — ${subjectLabel} (${classLabel})`,
+      body:        `${user.full_name || 'A teacher'} has formally submitted ${enteredCount} score(s) for ${subjectLabel} — ${examLabel}, ${classLabel}, ${term.name}. Please review and approve.`,
+      type:        'result',
+      sender_role: 'teacher',
+      sender_name: user.full_name || 'Teacher'
+    }));
+
+    const { error } = await db.from('notifications').insert(notifRows);
+    if (error) throw error;
+
+    // Show a "submitted" badge in the save bar
+    const saveBar = document.querySelector('.save-bar__info');
+    if (saveBar) {
+      const badge = document.createElement('span');
+      badge.className = 'submit-badge';
+      badge.style.marginLeft = '10px';
+      badge.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Submitted to Exam Officer`;
+      saveBar.appendChild(badge);
+    }
+
+    toast(`✅ Scores submitted! ${recipients.length} staff member(s) notified.`, 'success');
+  } catch (e) {
+    toast('Failed to submit: ' + (e.message || e), 'error');
+  }
+}
+
+// ── Import Scores ──────────────────────────────────────────────
+let importPreviewData = []; // holds parsed rows ready to apply
+
+function openImportModal() {
+  if (!students.length) {
+    toast('Load students first by selecting Section → Class → Subject & Assessment.', 'error');
+    return;
+  }
+
+  importPreviewData = [];
+  const modal = document.getElementById('importModal');
+  modal.style.display = 'block';
+  modal.innerHTML = `
+    <div class="import-modal-backdrop" onclick="closeImportModal(event)">
+      <div class="import-modal" onclick="event.stopPropagation()">
+        <div class="import-modal__header">
+          <div>
+            <div class="import-modal__title">📥 Import Scores</div>
+            <div style="font-size:12px;color:var(--ink-3);margin-top:3px;">${selectedClassObj?.name} · ${selectedSubjectName} · ${exams.find(e=>e.id===selectedExamId)?.name || ''}</div>
+          </div>
+          <button class="import-modal__close" onclick="closeImportModal()">×</button>
+        </div>
+
+        <div class="import-modal__body">
+          <!-- Format guide -->
+          <div style="background:var(--info-light);border:1px solid var(--info);border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--info);">
+            <strong>Expected format:</strong> Spreadsheet (.xlsx / .xls) or CSV with columns:<br>
+            &nbsp;&nbsp;• <code>admission_no</code> or <code>adm_no</code> (recommended) — or —<br>
+            &nbsp;&nbsp;• <code>student_name</code> or <code>full_name</code> or <code>name</code><br>
+            &nbsp;&nbsp;• <code>score</code> or <code>marks</code> or <code>result</code><br>
+            Column headers are case-insensitive. Extra columns are ignored.
+          </div>
+
+          <!-- Download template link -->
+          <div style="margin-bottom:14px;">
+            <button class="btn btn--secondary btn--sm" onclick="downloadImportTemplate()">
+              ⬇ Download Template (.csv)
+            </button>
+          </div>
+
+          <!-- Drop zone -->
+          <div class="drop-zone" id="importDropZone"
+               onclick="document.getElementById('importFileInput').click()"
+               ondragover="event.preventDefault();this.classList.add('dragover')"
+               ondragleave="this.classList.remove('dragover')"
+               ondrop="handleImportDrop(event)">
+            <div class="drop-zone__icon">📄</div>
+            <div class="drop-zone__text">Click to choose file or drag & drop here</div>
+            <div class="drop-zone__sub">Supports .xlsx, .xls, .csv — max 2MB</div>
+          </div>
+          <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv"
+                 style="display:none;" onchange="handleImportFile(this.files[0])">
+
+          <!-- Preview area -->
+          <div id="importPreviewArea"></div>
+        </div>
+
+        <div class="import-modal__footer">
+          <button class="btn btn--secondary" onclick="closeImportModal()">Cancel</button>
+          <button class="btn btn--primary" id="applyImportBtn" style="display:none;" onclick="applyImportedScores()">
+            ✅ Apply Scores to Table
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function closeImportModal(e) {
+  if (e && e.target !== e.currentTarget) return;
+  document.getElementById('importModal').style.display = 'none';
+  importPreviewData = [];
+}
+
+function handleImportDrop(e) {
+  e.preventDefault();
+  document.getElementById('importDropZone').classList.remove('dragover');
+  const file = e.dataTransfer?.files?.[0];
+  if (file) handleImportFile(file);
+}
+
+function downloadImportTemplate() {
+  const headers = ['admission_no', 'student_name', 'score'];
+  const rows = students.map(s => [s.admission_no || '', s.full_name, '']);
+  let csv = headers.join(',') + '\n';
+  csv += rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: `scores_template_${selectedClassObj?.name || 'class'}_${selectedSubjectName || 'subject'}.csv` });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function handleImportFile(file) {
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('File too large (max 2MB).', 'error'); return; }
+
+  const preview = document.getElementById('importPreviewArea');
+  preview.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3);">Parsing file…</div>';
+
+  let rows = [];
+  try {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext === 'csv') {
+      const text = await file.text();
+      rows = parseCSV(text);
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      if (typeof XLSX === 'undefined') {
+        preview.innerHTML = '<div style="padding:16px;color:var(--danger);">SheetJS not loaded. Please use CSV format.</div>';
+        return;
+      }
+      const buf = await file.arrayBuffer();
+      const wb  = XLSX.read(buf, { type: 'array' });
+      const ws  = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      rows = raw.map(r => {
+        const norm = {};
+        Object.entries(r).forEach(([k, v]) => { norm[k.toLowerCase().trim().replace(/\s+/g,'_')] = String(v).trim(); });
+        return norm;
+      });
+    } else {
+      preview.innerHTML = '<div style="padding:16px;color:var(--danger);">Unsupported file type. Use .xlsx, .xls, or .csv.</div>';
+      return;
+    }
+  } catch (e) {
+    preview.innerHTML = `<div style="padding:16px;color:var(--danger);">Error reading file: ${e.message}</div>`;
+    return;
+  }
+
+  if (!rows.length) {
+    preview.innerHTML = '<div style="padding:16px;color:var(--danger);">No data rows found in the file.</div>';
+    return;
+  }
+
+  // Detect score column
+  const sample = rows[0];
+  const scoreKey = ['score','marks','result','mark','total','points'].find(k => k in sample);
+  if (!scoreKey) {
+    preview.innerHTML = `<div style="padding:16px;color:var(--danger);">Could not find a <code>score</code> column. Found columns: ${Object.keys(sample).join(', ')}</div>`;
+    return;
+  }
+
+  // Detect name/admno column
+  const admKey  = ['admission_no','adm_no','adm','admno','reg_no','reg'].find(k => k in sample);
+  const nameKey = ['student_name','full_name','name','student'].find(k => k in sample);
+
+  // Build lookup maps from current students
+  const byAdm  = {};
+  const byName = {};
+  students.forEach(s => {
+    if (s.admission_no) byAdm[s.admission_no.toLowerCase().trim()] = s;
+    byName[s.full_name.toLowerCase().trim()] = s;
+  });
+
+  // Match each row
+  importPreviewData = [];
+  rows.forEach(row => {
+    const scoreRaw = row[scoreKey];
+    const scoreNum = parseFloat(scoreRaw);
+    const validScore = !isNaN(scoreNum) && scoreNum >= 0 && scoreNum <= selectedExamMax;
+
+    let student = null;
+    let matchBy = '';
+
+    if (admKey && row[admKey]) {
+      student = byAdm[row[admKey].toLowerCase().trim()];
+      if (student) matchBy = 'Adm No';
+    }
+    if (!student && nameKey && row[nameKey]) {
+      student = byName[row[nameKey].toLowerCase().trim()];
+      if (student) matchBy = 'Name';
+    }
+
+    importPreviewData.push({
+      raw_adm:   admKey  ? row[admKey]  : '',
+      raw_name:  nameKey ? row[nameKey] : '',
+      raw_score: scoreRaw,
+      score:     validScore ? scoreNum : null,
+      student,
+      matchBy,
+      validScore,
+    });
+  });
+
+  const matched   = importPreviewData.filter(r => r.student && r.validScore).length;
+  const unmatched = importPreviewData.filter(r => !r.student).length;
+  const badScore  = importPreviewData.filter(r => r.student && !r.validScore).length;
+
+  preview.innerHTML = `
+    <div class="import-preview">
+      <div class="import-stats">
+        <span style="background:#dcfce7;color:#166534;">${matched} ✓ matched &amp; valid</span>
+        ${unmatched ? `<span style="background:#fee2e2;color:#991b1b;">${unmatched} ✗ not matched</span>` : ''}
+        ${badScore  ? `<span style="background:#fef9c3;color:#854d0e;">${badScore} ⚠ invalid score</span>` : ''}
+      </div>
+      <div style="overflow-x:auto;max-height:320px;overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>File: Adm / Name</th>
+              <th>Matched Student</th>
+              <th>Score</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${importPreviewData.map((r, i) => {
+              let status, statusClass;
+              if (!r.student)         { status = '✗ No match';      statusClass = 'match-err';  }
+              else if (!r.validScore) { status = '⚠ Bad score';     statusClass = 'match-warn'; }
+              else                    { status = `✓ via ${r.matchBy}`; statusClass = 'match-ok';  }
+              return `
+                <tr>
+                  <td style="color:var(--ink-3);">${i+1}</td>
+                  <td style="font-size:12px;">${r.raw_adm ? `<strong>${r.raw_adm}</strong>` : ''}${r.raw_adm && r.raw_name ? ' / ' : ''}${r.raw_name || ''}</td>
+                  <td style="font-size:12px;">${r.student ? r.student.full_name : '<span style="color:var(--ink-4);">—</span>'}</td>
+                  <td style="text-align:center;font-weight:700;">${r.raw_score}</td>
+                  <td class="${statusClass}" style="font-size:12px;">${status}</td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const applyBtn = document.getElementById('applyImportBtn');
+  if (applyBtn) applyBtn.style.display = matched > 0 ? 'inline-flex' : 'none';
+}
+
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return [];
+  const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').toLowerCase().trim().replace(/\s+/g,'_'));
+  return lines.slice(1).map(line => {
+    const vals = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g) || [];
+    const row = {};
+    headers.forEach((h, i) => { row[h] = (vals[i] || '').replace(/^"|"$/g, '').trim(); });
+    return row;
+  });
+}
+
+function applyImportedScores() {
+  const toApply = importPreviewData.filter(r => r.student && r.validScore);
+  if (!toApply.length) return;
+
+  let applied = 0;
+  toApply.forEach(r => {
+    const input = document.getElementById(`sc_${r.student.id}`);
+    if (input) {
+      input.value = r.score;
+      input.classList.add('has-value');
+      updateRow(r.student.id);
+      applied++;
+    }
+  });
+
+  closeImportModal();
+  toast(`📥 ${applied} score(s) imported. Review then click Save All.`, 'success');
 }
 </script>
 

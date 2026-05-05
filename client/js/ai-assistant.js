@@ -538,9 +538,10 @@
     showTyping();
 
     try {
-      // Calls our Netlify Edge Function proxy at /api/ai-chat
+      // Calls the Express backend proxy at /api/ai-chat
       // which holds the ANTHROPIC_API_KEY server-side (no CORS issues)
-      const res = await fetch('/api/ai-chat', {
+      const _apiBase = (window.__EDUTRAC_CONFIG__ || {}).API_BASE_URL || '';
+      const res = await fetch(_apiBase + '/api/ai-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

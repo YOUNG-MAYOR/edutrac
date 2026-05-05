@@ -277,7 +277,8 @@ async function approveAndProvision(id, adminNote) {
   if (btn) { btn.disabled = true; btn.textContent = 'Provisioning…'; }
 
   try {
-    const res = await fetch('/api/provision-school', {
+    const _apiBase = (window.__EDUTRAC_CONFIG__ || {}).API_BASE_URL || '';
+    const res = await fetch(_apiBase + '/api/provision-school', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ application_id: id, admin_note: adminNote }),

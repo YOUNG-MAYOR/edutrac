@@ -25,7 +25,7 @@ function requireStudentAuth() {
 
 function studentLogout() {
   sessionStorage.removeItem('et_student_session');
-  window.location.href = '../index.html';
+  window.location.href = 'login.html';
 }
 
 // ── Sidebar toggle (required by topbar hamburger & overlay) ──
