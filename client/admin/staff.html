@@ -341,12 +341,16 @@ const PORTAL_LINKS = {
   document.getElementById('topbarActions').innerHTML =
     `<button class="btn btn--primary" onclick="openAddStaff()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> Add Staff</button>`;
 
-  const [{ data: cls }, { data: sub }, { data: term }] = await Promise.all([
-    db.from('classes').select('id, name').eq('school_id', currentUser.school_id).order('name'),
-    db.from('subjects').select('id, name, code').eq('school_id', currentUser.school_id).order('name'),
-    db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current', true).maybeSingle()
-  ]);
-  classes = cls || []; subjects = sub || []; currentTerm = term;
+  try {
+    const [{ data: cls }, { data: sub }, { data: term }] = await Promise.all([
+      db.from('classes').select('id, name').eq('school_id', currentUser.school_id).order('name'),
+      db.from('subjects').select('id, name, code').eq('school_id', currentUser.school_id).order('name'),
+      db.from('terms').select('*').eq('school_id', currentUser.school_id).eq('is_current', true).maybeSingle()
+    ]);
+    classes = cls || []; subjects = sub || []; currentTerm = term;
+  } catch(e) {
+    console.warn('EduTrack: failed to load classes/subjects/term:', e);
+  }
 
   renderPage();
   await loadStaff();

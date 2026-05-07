@@ -464,7 +464,8 @@
   }
 
   btn.addEventListener('click', toggle);
-  document.getElementById('edt-hd-close').addEventListener('click', toggle);
+  const _hdClose = document.getElementById('edt-hd-close');
+  if (_hdClose) _hdClose.addEventListener('click', toggle);
 
   chips.addEventListener('click', e => {
     const c = e.target.closest('.edt-chip');

@@ -68,23 +68,51 @@ button{font-family:var(--B);cursor:pointer;border:none}
   max-width:1140px;
   margin:0 auto;
 }
+/* ── Mobile step indicator (shown only on small screens) ── */
+.mobile-steps{
+  display:none;
+  background:white;border:1px solid var(--BD);border-radius:var(--rad);
+  padding:14px 16px;box-shadow:0 2px 8px rgba(0,0,0,.05);
+}
+.mobile-steps-row{display:flex;align-items:center;gap:10px}
+.mobile-steps-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--GL);border:1px solid var(--GL2);
+  padding:5px 12px 5px 8px;border-radius:100px;
+  font-size:11px;font-weight:700;color:var(--G);flex-shrink:0;
+}
+.mobile-steps-dot{width:7px;height:7px;border-radius:50%;background:var(--G3);animation:blink 2s ease-in-out infinite;}
+.mobile-step-label{font-size:13px;font-weight:700;color:var(--INK);flex:1}
+.mobile-step-counter{font-size:12px;color:var(--T3);font-weight:500;flex-shrink:0}
+.mobile-steps-track{
+  display:flex;gap:4px;margin-top:10px;
+}
+.mobile-steps-track-item{
+  flex:1;height:4px;border-radius:2px;background:var(--S2);
+  transition:background .3s;
+}
+.mobile-steps-track-item.done{background:var(--G3);}
+.mobile-steps-track-item.active{background:var(--G);}
+
 @media(max-width:860px){
   .page-wrap{
     grid-template-columns:1fr;
-    padding:78px 14px 60px;
-    gap:16px;
+    padding:72px 14px 60px;
+    gap:14px;
   }
-  .sidebar{position:static;height:auto}
-  .sidebar-card{padding:20px 16px}
-  .steps-list{display:none} /* hide step list on mobile, save space */
-  .info-box{display:none}
+  /* Hide the full sidebar on mobile — form is self-contained */
+  .sidebar{display:none}
+  /* Show the compact mobile step bar instead */
+  .mobile-steps{display:block}
+  .form-card{margin-top:0}
 }
 @media(max-width:480px){
-  .page-wrap{padding:72px 12px 60px}
-  .step-panel{padding:24px 16px 20px}
-  .form-nav{padding:16px 16px 24px}
+  .page-wrap{padding:68px 10px 60px}
+  .step-panel{padding:22px 14px 18px}
+  .form-nav{padding:14px 14px 22px;flex-direction:column-reverse;gap:10px}
+  .btn-next,.btn-prev{width:100%;justify-content:center}
+  .btn-prev{visibility:visible!important}
   .step-h{font-size:18px}
-  .sidebar-h{font-size:18px}
 }
 
 /* ── SIDEBAR ── */
@@ -340,6 +368,24 @@ button{font-family:var(--B);cursor:pointer;border:none}
 
 <!-- ── MAIN LAYOUT ── -->
 <div class="page-wrap">
+
+  <!-- Mobile compact step indicator (hidden on desktop, visible on mobile via CSS) -->
+  <div class="mobile-steps" id="mobileSteps">
+    <div class="mobile-steps-row">
+      <div class="mobile-steps-badge">
+        <span class="mobile-steps-dot"></span>
+        Free to register
+      </div>
+      <span class="mobile-step-label" id="mobileStepLabel">Admin Information</span>
+      <span class="mobile-step-counter" id="mobileStepCounter">1 / 4</span>
+    </div>
+    <div class="mobile-steps-track">
+      <div class="mobile-steps-track-item active" id="mst1"></div>
+      <div class="mobile-steps-track-item" id="mst2"></div>
+      <div class="mobile-steps-track-item" id="mst3"></div>
+      <div class="mobile-steps-track-item" id="mst4"></div>
+    </div>
+  </div>
 
   <!-- SIDEBAR -->
   <aside class="sidebar">
@@ -756,12 +802,24 @@ function validateStep(step){
   return ok;
 }
 
+const STEP_LABELS = ['Admin Information','School Profile','Location','Review & Submit'];
+
 function updateSidebar(){
   for(let i=1;i<=totalSteps;i++){
     const el = document.getElementById('sn'+i);
     if(i < currentStep) el.className='step-num done', el.textContent='✓';
     else if(i===currentStep) el.className='step-num active', el.textContent=i;
     else el.className='step-num', el.textContent=i;
+  }
+  // Sync mobile step indicator
+  const lbl = document.getElementById('mobileStepLabel');
+  const ctr = document.getElementById('mobileStepCounter');
+  if(lbl) lbl.textContent = STEP_LABELS[currentStep-1] || '';
+  if(ctr) ctr.textContent = currentStep + ' / ' + totalSteps;
+  for(let i=1;i<=totalSteps;i++){
+    const t = document.getElementById('mst'+i);
+    if(!t) continue;
+    t.className = 'mobile-steps-track-item' + (i < currentStep ? ' done' : i===currentStep ? ' active' : '');
   }
 }
 

@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a6e3f">
+  <title>EduTrack NG — Lesson Note Generator</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <style>
+    /* ── Page layout ── */
+    .ln-shell {
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      gap: 0;
+      min-height: calc(100vh - var(--header-h));
+      align-items: start;
+    }
+
+    /* ── Form panel ── */
+    .ln-form-panel {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: var(--header-h);
+      height: calc(100vh - var(--header-h));
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .ln-form-header {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      z-index: 10;
+    }
+    .ln-form-header h2 { font-size: 15px; font-weight: 700; color: var(--ink); }
+    .ln-form-header p  { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+    .ln-form-body { padding: 16px 20px 24px; flex: 1; overflow-y: auto; }
+    .ln-section { margin-bottom: 20px; }
+    .ln-section-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--ink-3); margin-bottom: 10px;
+      padding-bottom: 6px; border-bottom: 1px solid var(--border);
+    }
+
+    /* Level selector pills */
+    .level-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .level-pill {
+      padding: 7px 14px; border-radius: 100px; font-size: 13px; font-weight: 600;
+      border: 1.5px solid var(--border); background: var(--surface-2);
+      color: var(--ink-2); cursor: pointer; transition: all .18s;
+    }
+    .level-pill:hover { border-color: var(--primary); color: var(--primary); }
+    .level-pill.active {
+      background: var(--primary); border-color: var(--primary);
+      color: white; box-shadow: 0 2px 8px rgba(10,110,63,.3);
+    }
+
+    /* Form grid */
+    .ln-grid   { display: grid; gap: 12px; }
+    .ln-grid-2 { grid-template-columns: 1fr 1fr; }
+
+    /* Material chips */
+    .material-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .material-chip {
+      padding: 5px 11px; border-radius: 100px; font-size: 12px; font-weight: 600;
+      border: 1.5px solid var(--border); background: var(--surface-2);
+      color: var(--ink-2); cursor: pointer; transition: all .15s;
+      user-select: none;
+    }
+    .material-chip:hover { border-color: var(--primary-dark); }
+    .material-chip.selected {
+      background: var(--primary-light); border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* Generate button */
+    .ln-generate-btn {
+      width: 100%; padding: 13px; border-radius: var(--radius);
+      background: linear-gradient(135deg, var(--primary), #0e9254);
+      color: white; font-size: 15px; font-weight: 700; cursor: pointer;
+      border: none; display: flex; align-items: center; justify-content: center;
+      gap: 8px; transition: all .2s; box-shadow: 0 4px 16px rgba(10,110,63,.35);
+      margin-top: 4px;
+    }
+    .ln-generate-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(10,110,63,.45);
+    }
+    .ln-generate-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+    .ln-spinner {
+      width: 18px; height: 18px; border: 2.5px solid rgba(255,255,255,.4);
+      border-top-color: white; border-radius: 50%;
+      animation: spin .7s linear infinite; display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Preview panel ── */
+    .ln-preview-panel {
+      padding: 24px 28px;
+      min-height: calc(100vh - var(--header-h));
+    }
+    .ln-preview-toolbar {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .ln-preview-toolbar h3 { font-size: 15px; font-weight: 700; flex: 1; }
+
+    /* Empty state */
+    .ln-empty {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 420px; text-align: center; color: var(--ink-3);
+    }
+    .ln-empty-icon {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: var(--primary-light); display: flex; align-items: center;
+      justify-content: center; font-size: 36px; margin-bottom: 16px;
+    }
+    .ln-empty h4 { font-size: 17px; font-weight: 700; color: var(--ink-2); margin-bottom: 8px; }
+    .ln-empty p  { font-size: 14px; max-width: 340px; line-height: 1.6; }
+
+    /* ── Lesson note document ── */
+    .ln-doc {
+      background: white; border-radius: var(--radius-lg);
+      border: 1px solid var(--border); box-shadow: var(--shadow);
+      overflow: hidden; max-width: 860px;
+    }
+    .ln-doc-header {
+      background: linear-gradient(135deg, var(--primary) 0%, #065530 100%);
+      color: white; padding: 28px 32px 24px; text-align: center;
+    }
+    .ln-doc-school-logo {
+      width: 64px; height: 64px; border-radius: 50%; background: white;
+      margin: 0 auto 12px; display: flex; align-items: center; justify-content: center;
+      font-size: 30px; overflow: hidden; border: 3px solid rgba(255,255,255,.3);
+    }
+    .ln-doc-school-logo img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .ln-doc-school-name { font-size: 20px; font-weight: 800; letter-spacing: .3px; }
+    .ln-doc-school-addr { font-size: 12px; opacity: .75; margin-top: 3px; }
+    .ln-doc-title {
+      margin-top: 16px; font-size: 13px; font-weight: 700;
+      letter-spacing: 2px; text-transform: uppercase;
+      background: rgba(255,255,255,.15); display: inline-block;
+      padding: 5px 20px; border-radius: 100px;
+    }
+
+    .ln-meta-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 0; border-bottom: 1px solid var(--border);
+    }
+    .ln-meta-cell {
+      padding: 12px 16px; border-right: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .ln-meta-cell:last-child { border-right: none; }
+    .ln-meta-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-3); margin-bottom: 3px; }
+    .ln-meta-value { font-weight: 700; color: var(--ink); }
+
+    .ln-doc-body { padding: 24px 32px; }
+
+    .ln-section-box { margin-bottom: 22px; }
+    .ln-section-heading {
+      font-size: 11px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 1px; color: white; background: var(--primary);
+      padding: 5px 12px; border-radius: 4px; display: inline-block; margin-bottom: 10px;
+    }
+    .ln-section-heading.accent { background: var(--accent); color: var(--ink); }
+    .ln-section-heading.info   { background: var(--info); }
+    .ln-section-heading.dark   { background: var(--ink-2); }
+
+    /* Objectives list */
+    .ln-obj-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    .ln-obj-item {
+      display: flex; gap: 10px; font-size: 13px; align-items: flex-start;
+      padding: 8px 12px; border-radius: var(--radius-sm);
+      background: var(--surface-2); border: 1px solid var(--border);
+    }
+    .ln-obj-tag {
+      padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 700;
+      flex-shrink: 0; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .ln-obj-tag.cog  { background: var(--info-light); color: var(--info); }
+    .ln-obj-tag.aff  { background: var(--success-light); color: var(--success); }
+    .ln-obj-tag.psy  { background: var(--warning-light); color: var(--warning); }
+
+    /* Development table */
+    .ln-dev-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .ln-dev-table th {
+      background: var(--surface-3); font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .6px; color: var(--ink-2);
+      padding: 9px 12px; text-align: left; border: 1px solid var(--border);
+    }
+    .ln-dev-table td {
+      padding: 10px 12px; border: 1px solid var(--border);
+      vertical-align: top; line-height: 1.55;
+    }
+    .ln-dev-table tr:nth-child(even) td { background: var(--surface-2); }
+    .ln-step-num {
+      width: 28px; height: 28px; border-radius: 50%; background: var(--primary);
+      color: white; font-size: 12px; font-weight: 800;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Evaluation */
+    .ln-eval-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .ln-eval-item {
+      display: flex; gap: 10px; font-size: 13px;
+      padding: 10px 14px; border-radius: var(--radius-sm);
+      background: var(--surface-2); border-left: 3px solid var(--primary);
+    }
+    .ln-eval-num { font-weight: 800; color: var(--primary); flex-shrink: 0; min-width: 22px; }
+
+    /* Assignment & summary */
+    .ln-box {
+      padding: 14px 16px; border-radius: var(--radius-sm);
+      background: var(--surface-2); border: 1px solid var(--border);
+      font-size: 13px; line-height: 1.65;
+    }
+    .ln-box.green { background: var(--primary-light); border-color: #b2dfcc; }
+    .ln-box.amber { background: var(--accent-light); border-color: #fbbf24; }
+
+    /* Signature row */
+    .ln-sig-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
+      margin-top: 32px; padding-top: 20px; border-top: 1px dashed var(--border);
+    }
+    .ln-sig-box { text-align: center; }
+    .ln-sig-line { border-top: 1px solid var(--ink-2); margin-top: 36px; margin-bottom: 5px; }
+    .ln-sig-label { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+    .ln-sig-sub   { font-size: 11px; color: var(--ink-3); }
+
+    /* Error state */
+    .ln-error {
+      background: var(--danger-light); border: 1px solid #fca5a5;
+      border-radius: var(--radius); padding: 16px 18px;
+      font-size: 13px; color: #991b1b; line-height: 1.6;
+    }
+
+    /* Generating overlay */
+    .ln-generating {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; min-height: 420px; gap: 16px;
+    }
+    .ln-gen-ring {
+      width: 60px; height: 60px; border-radius: 50%;
+      border: 4px solid var(--primary-light);
+      border-top-color: var(--primary);
+      animation: spin .9s linear infinite;
+    }
+    .ln-gen-text { font-size: 15px; font-weight: 600; color: var(--ink-2); }
+    .ln-gen-sub  { font-size: 13px; color: var(--ink-3); }
+
+    /* ── Print styles ── */
+    @media print {
+      .ln-form-panel, .ln-preview-toolbar, .topbar,
+      .sidebar, .bottom-nav, .sidebar-overlay { display: none !important; }
+      .ln-shell { display: block; }
+      .ln-preview-panel { padding: 0; }
+      .main-content { margin-left: 0 !important; }
+      .ln-doc { box-shadow: none; border: none; border-radius: 0; }
+      .ln-doc-body { padding: 16px 24px; }
+      .ln-dev-table td, .ln-dev-table th { page-break-inside: avoid; }
+      .ln-section-box { page-break-inside: avoid; }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .ln-shell { grid-template-columns: 1fr; }
+      .ln-form-panel { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      .ln-preview-panel { padding: 16px; }
+      .ln-meta-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 560px) {
+      .ln-meta-grid { grid-template-columns: 1fr; }
+      .ln-grid-2    { grid-template-columns: 1fr; }
+      .ln-sig-row   { grid-template-columns: 1fr; gap: 20px; }
+      .ln-doc-body  { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<script src="../js/config.js"></script>
+<script src="../js/supabase.js"></script>
+<script src="../js/layout.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   EduTrack NG — Nigerian Lesson Note Generator
+   ═══════════════════════════════════════════════════════════════ */
+
+// ── Nigerian Curriculum Data ─────────────────────────────────────
+
+const LEVELS = [
+  { key:'nursery', label:'Nursery' },
+  { key:'primary', label:'Primary' },
+  { key:'jss',     label:'Sec. (JSS)' },
+  { key:'sss',     label:'Sec. (SSS)' },
+];
+
+const CLASSES = {
+  nursery: ['Pre-Nursery', 'Nursery 1', 'Nursery 2'],
+  primary: ['Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6'],
+  jss:     ['JSS 1', 'JSS 2', 'JSS 3'],
+  sss:     ['SSS 1', 'SSS 2', 'SSS 3'],
+};
+
+const SUBJECTS = {
+  nursery: ['Literacy & Phonics','Numeracy','Rhymes & Songs','Storytelling','Social Habits & Norms',
+    'Cultural & Creative Arts','Physical Education','Basic Science','Drawing & Colouring',
+    'Handwriting & Pre-Writing','Environmental Studies'],
+  primary: ['English Language','Mathematics','Basic Science & Technology','Social Studies',
+    'Civic Education','Cultural & Creative Arts','Basic Technology','Agricultural Science',
+    'Home Economics','Physical & Health Education','Computer Studies / ICT',
+    'Christian Religious Studies','Islamic Religious Studies',
+    'Yoruba Language','Igbo Language','Hausa Language','French Language'],
+  jss: ['English Language','Mathematics','Basic Science','Basic Technology','Social Studies',
+    'Civic Education','Computer Studies','Agricultural Science','Home Economics',
+    'Business Studies','French Language','Cultural & Creative Arts',
+    'Physical & Health Education','Christian Religious Studies','Islamic Religious Studies',
+    'Yoruba Language','Igbo Language','Hausa Language'],
+  sss: ['English Language','Mathematics','Physics','Chemistry','Biology','Further Mathematics',
+    'Geography','Economics','Government','Commerce','Financial Accounting',
+    'Literature in English','History','Agricultural Science','Technical Drawing',
+    'Food & Nutrition','Computer Studies','French Language',
+    'Christian Religious Studies','Islamic Religious Studies','Fine Arts',
+    'Physical & Health Education','Marketing','Insurance'],
+};
+
+const TEXTBOOKS = {
+  nursery: 'Rainbow Nursery Scheme; Pearls Pre-School Series; Nigerian National Curriculum for Early Childhood',
+  primary: 'Universal Basic Education (UBE) Curriculum; NERDC Approved Textbooks; New Concept Series; Essential Series',
+  jss: 'NERDC / UBE Curriculum; Intensive English for JSS; New General Mathematics for JSS; Macmillan Integrated Science',
+  sss: 'WAEC / NECO Syllabus; NERDC Curriculum; Ababio Chemistry; Fundamental Physics; Essential Government; Comprehensive Economics',
+};
+
+const MATERIALS = [
+  'Chalkboard / Whiteboard','Charts','Flashcards','Models / Specimens',
+  'Projector / Smart Board','Textbooks','Workbooks','Calculators',
+  'Ruler & Protractor','Globe / Maps','Science equipment','Computer / Tablet',
+  'Realia (real objects)','Picture cards','Audio recording',
+];
+
+// ── Page State ───────────────────────────────────────────────────
+let _user = null;
+let _selectedMaterials = new Set(['Chalkboard / Whiteboard','Textbooks']);
+let _currentLevel = 'primary';
+let _generating = false;
+let _lastNote = null;
+
+// ── Init ─────────────────────────────────────────────────────────
+(async () => {
+  try {
+    _user = await initAdminLayout('lesson-notes', 'Lesson Note Generator');
+    if (!_user) return;
+    document.getElementById('topbarActions').innerHTML = `
+      <button class="btn btn--ghost btn--sm" onclick="printNote()" id="printBtn" style="display:none">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print Note
+      </button>`;
+    renderPage();
+  } catch(e) {
+    console.error('Lesson notes init error:', e);
+  }
+})();
+
+function renderPage() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('pageBody').innerHTML = `
+    <div class="ln-shell">
+
+      <!-- ── LEFT: Generation Form ──────────────────────── -->
+      <div class="ln-form-panel">
+        <div class="ln-form-header">
+          <h2>📝 Generate Lesson Note</h2>
+          <p>Fill in the details below to generate a Nigerian-standard lesson note</p>
+        </div>
+        <div class="ln-form-body">
+
+          <!-- Level -->
+          <div class="ln-section">
+            <div class="ln-section-title">Education Level</div>
+            <div class="level-pills" id="levelPills">
+              ${LEVELS.map(l => `<button class="level-pill${l.key===_currentLevel?' active':''}" onclick="setLevel('${l.key}')">${l.label}</button>`).join('')}
+            </div>
+          </div>
+
+          <!-- Class & Subject -->
+          <div class="ln-section">
+            <div class="ln-section-title">Class & Subject</div>
+            <div class="ln-grid">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Class <span class="required">*</span></label>
+                <select id="ln_class" class="form-control">${CLASSES[_currentLevel].map(c=>`<option>${c}</option>`).join('')}</select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Subject <span class="required">*</span></label>
+                <select id="ln_subject" class="form-control">${SUBJECTS[_currentLevel].map(s=>`<option>${s}</option>`).join('')}</select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Term, Week, Date, Duration -->
+          <div class="ln-section">
+            <div class="ln-section-title">Session Details</div>
+            <div class="ln-grid ln-grid-2">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Term</label>
+                <select id="ln_term" class="form-control">
+                  <option value="First Term">First Term</option>
+                  <option value="Second Term">Second Term</option>
+                  <option value="Third Term">Third Term</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Week</label>
+                <select id="ln_week" class="form-control">
+                  ${Array.from({length:13},(_,i)=>`<option value="Week ${i+1}">Week ${i+1}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Date</label>
+                <input type="date" id="ln_date" class="form-control" value="${today}">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Duration (min)</label>
+                <select id="ln_duration" class="form-control">
+                  <option value="35">35 min</option>
+                  <option value="40" selected>40 min</option>
+                  <option value="45">45 min</option>
+                  <option value="60">60 min</option>
+                  <option value="70">70 min</option>
+                  <option value="80">80 min</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Topic -->
+          <div class="ln-section">
+            <div class="ln-section-title">Lesson Topic</div>
+            <div class="ln-grid">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Topic <span class="required">*</span></label>
+                <input type="text" id="ln_topic" class="form-control" placeholder="e.g. Fractions — Introduction">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Sub-topic <span style="color:var(--ink-4)">(optional)</span></label>
+                <input type="text" id="ln_subtopic" class="form-control" placeholder="e.g. Proper and Improper Fractions">
+              </div>
+            </div>
+          </div>
+
+          <!-- Teaching Materials -->
+          <div class="ln-section">
+            <div class="ln-section-title">Teaching / Learning Materials</div>
+            <div class="material-chips" id="materialChips">
+              ${MATERIALS.map(m => `<div class="material-chip${_selectedMaterials.has(m)?' selected':''}" onclick="toggleMaterial(this,'${m.replace(/'/g,'\\\'')}')">${m}</div>`).join('')}
+            </div>
+            <div class="form-group" style="margin-top:10px;margin-bottom:0">
+              <input type="text" id="ln_extraMaterials" class="form-control" placeholder="Other materials (comma-separated)…">
+            </div>
+          </div>
+
+          <!-- Previous Knowledge & Extra -->
+          <div class="ln-section">
+            <div class="ln-section-title">Extra Context</div>
+            <div class="ln-grid">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Previous Knowledge / Entry Behavior</label>
+                <input type="text" id="ln_prevKnowledge" class="form-control" placeholder="What students already know…">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Special Instructions</label>
+                <textarea id="ln_extra" class="form-control" rows="2" placeholder="Any special requirements, emphasis or notes…"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Generate button -->
+          <button class="ln-generate-btn" id="generateBtn" onclick="generateNote()">
+            <div class="ln-spinner" id="genSpinner"></div>
+            <svg id="genIcon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Generate Lesson Note
+          </button>
+
+        </div>
+      </div>
+
+      <!-- ── RIGHT: Preview ──────────────────────────────── -->
+      <div class="ln-preview-panel">
+        <div class="ln-preview-toolbar" id="previewToolbar" style="display:none">
+          <h3>Generated Lesson Note</h3>
+          <button class="btn btn--ghost btn--sm" onclick="generateNote()">↻ Regenerate</button>
+          <button class="btn btn--primary btn--sm" onclick="printNote()">🖨 Print</button>
+        </div>
+        <div id="previewArea">
+          ${emptyState()}
+        </div>
+      </div>
+
+    </div>
+  `;
+}
+
+function emptyState() {
+  return `<div class="ln-empty">
+    <div class="ln-empty-icon">📋</div>
+    <h4>No lesson note yet</h4>
+    <p>Fill in the form on the left and click <strong>Generate Lesson Note</strong> to create a detailed, curriculum-aligned lesson note in seconds.</p>
+  </div>`;
+}
+
+// ── Level / class / subject selectors ────────────────────────────
+function setLevel(key) {
+  _currentLevel = key;
+  document.querySelectorAll('.level-pill').forEach(p => p.classList.toggle('active', p.textContent.trim() === LEVELS.find(l=>l.key===key)?.label));
+  const cls = document.getElementById('ln_class');
+  const sub = document.getElementById('ln_subject');
+  if (cls) cls.innerHTML = CLASSES[key].map(c=>`<option>${c}</option>`).join('');
+  if (sub) sub.innerHTML = SUBJECTS[key].map(s=>`<option>${s}</option>`).join('');
+}
+
+function toggleMaterial(el, name) {
+  el.classList.toggle('selected');
+  if (_selectedMaterials.has(name)) _selectedMaterials.delete(name);
+  else _selectedMaterials.add(name);
+}
+
+// ── AI Generation ────────────────────────────────────────────────
+function getVal(id) { return (document.getElementById(id)||{}).value?.trim() || ''; }
+
+async function generateNote() {
+  const topic = getVal('ln_topic');
+  if (!topic) { toast('Please enter a lesson topic', 'error'); return; }
+  if (_generating) return;
+  _generating = true;
+
+  const subject   = getVal('ln_subject');
+  const cls       = getVal('ln_class');
+  const term      = getVal('ln_term');
+  const week      = getVal('ln_week');
+  const duration  = getVal('ln_duration');
+  const date      = getVal('ln_date');
+  const subtopic  = getVal('ln_subtopic');
+  const prev      = getVal('ln_prevKnowledge');
+  const extra     = getVal('ln_extra');
+  const extraMats = getVal('ln_extraMaterials');
+
+  const allMaterials = [
+    ...[..._selectedMaterials],
+    ...(extraMats ? extraMats.split(',').map(s=>s.trim()).filter(Boolean) : [])
+  ];
+
+  const levelLabel = LEVELS.find(l=>l.key===_currentLevel)?.label || '';
+  const schoolName = _user?.schools?.name || 'Our School';
+  const schoolAddr = [_user?.schools?.address, _user?.schools?.lga, _user?.schools?.state].filter(Boolean).join(', ') || 'Nigeria';
+
+  // UI: show generating spinner
+  const btn    = document.getElementById('generateBtn');
+  const spinner= document.getElementById('genSpinner');
+  const icon   = document.getElementById('genIcon');
+  btn.disabled = true;
+  spinner.style.display = 'block';
+  icon.style.display = 'none';
+  btn.childNodes[btn.childNodes.length-1].textContent = ' Generating…';
+
+  document.getElementById('previewArea').innerHTML = `
+    <div class="ln-generating">
+      <div class="ln-gen-ring"></div>
+      <div class="ln-gen-text">Generating lesson note…</div>
+      <div class="ln-gen-sub">Writing objectives, lesson steps, evaluation and more</div>
+    </div>`;
+  document.getElementById('previewToolbar').style.display = 'none';
+
+  try {
+    const _apiBase = (window.__EDUTRAC_CONFIG__ || {}).API_BASE_URL || '';
+    const systemPrompt = `You are an expert Nigerian school lesson note writer with deep knowledge of the Nigerian National Curriculum, NERDC, UBE and WAEC/NECO syllabuses. You write complete, detailed, curriculum-aligned lesson notes for Nigerian schools.
+
+CRITICAL OUTPUT FORMAT: Return ONLY valid JSON matching this exact schema (no markdown, no extra text):
+{
+  "behavioralObjectives": [
+    { "type": "cognitive", "text": "..." },
+    { "type": "affective", "text": "..." },
+    { "type": "psychomotor", "text": "..." }
+  ],
+  "entryBehavior": "...",
+  "referenceBooks": "...",
+  "setInduction": "...",
+  "lessonSteps": [
+    { "step": 1, "title": "...", "duration": "...", "teacherActivity": "...", "studentActivity": "..." },
+    ...
+  ],
+  "evaluation": ["question1", "question2", "question3", "question4", "question5"],
+  "assignment": "...",
+  "summary": "..."
+}
+
+RULES:
+- Write 4-6 behavioral objectives (mix cognitive, affective, psychomotor using Bloom's taxonomy verbs).
+- Cognitive verbs: identify, state, list, explain, calculate, define, describe, differentiate, analyze, compare.
+- Affective verbs: appreciate, participate, show interest in, value, cooperate.
+- Psychomotor verbs: demonstrate, perform, construct, draw, write, model.
+- Set induction must relate the topic to pupils' everyday Nigerian life experience (markets, food, nature, community).
+- Lesson steps should have 4-6 steps. Each step should have a clear title, approximate duration, and specific teacher + student activities.
+- Step 1 is always Introduction/Revision. Last step is always Evaluation questions (oral).
+- Evaluation: exactly 5 specific questions appropriate to the topic and class level.
+- Assignment: one meaningful take-home task.
+- Reference books must include real Nigerian/NERDC approved books for this level and subject.
+- Write at the correct cognitive complexity for the class level.
+- For Nursery: simple, play-based, concrete. For Primary: activity-based. For JSS/SSS: progressive higher-order thinking.
+- All text must be professional and suitable for the classroom.`;
+
+    const userMsg = `Generate a complete lesson note for:
+School Level: ${levelLabel}
+Class: ${cls}
+Subject: ${subject}
+Term: ${term}, ${week}
+Topic: ${topic}${subtopic ? '\nSub-topic: ' + subtopic : ''}
+Duration: ${duration} minutes
+Teaching Materials: ${allMaterials.join(', ')}${prev ? '\nPrevious Knowledge / Entry Behavior: ' + prev : ''}${extra ? '\nSpecial Instructions: ' + extra : ''}
+
+Return ONLY the JSON object. No markdown formatting.`;
+
+    const res = await fetch(_apiBase + '/api/ai-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMsg }],
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 3000,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`API error ${res.status}: ${errText}`);
+    }
+
+    const data = await res.json();
+    const rawText = (data.content?.[0]?.text || data.text || '').trim();
+
+    // Parse JSON — strip any accidental markdown fences
+    const clean = rawText.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
+    const note = JSON.parse(clean);
+
+    _lastNote = {
+      schoolName, schoolAddr,
+      level: levelLabel, cls, subject, term, week,
+      date: date ? new Date(date).toLocaleDateString('en-NG',{day:'2-digit',month:'long',year:'numeric'}) : '',
+      duration, topic, subtopic, materials: allMaterials, note,
+      textbooks: TEXTBOOKS[_currentLevel],
+    };
+
+    renderNote(_lastNote);
+    document.getElementById('previewToolbar').style.display = '';
+    document.getElementById('printBtn') && (document.getElementById('printBtn').style.display = '');
+
+  } catch(err) {
+    console.error('Lesson note generation error:', err);
+    let msg = err.message || 'Unknown error';
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError'))
+      msg = 'Could not reach the AI server. Make sure your Express/Netlify server is running and <code>ANTHROPIC_API_KEY</code> is configured.';
+    document.getElementById('previewArea').innerHTML = `
+      <div class="ln-error">
+        <strong>⚠️ Generation failed</strong><br>${msg}
+      </div>
+      ${emptyState()}`;
+    document.getElementById('previewToolbar').style.display = 'none';
+  } finally {
+    _generating = false;
+    btn.disabled = false;
+    spinner.style.display = 'none';
+    icon.style.display = '';
+    if (btn.lastChild?.nodeType === 3) btn.lastChild.textContent = ' Generate Lesson Note';
+  }
+}
+
+// ── Render the generated lesson note ─────────────────────────────
+function renderNote(d) {
+  const n = d.note;
+  const schoolLogo = _user?.schools?.logo_url
+    ? `<img src="${_user.schools.logo_url}" onerror="this.parentElement.innerHTML='🏫'">`
+    : '🏫';
+
+  const objRows = (n.behavioralObjectives || []).map(o => `
+    <li class="ln-obj-item">
+      <span class="ln-obj-tag ${o.type==='cognitive'?'cog':o.type==='affective'?'aff':'psy'}">${o.type.slice(0,3).toUpperCase()}</span>
+      <span>${escHtml(o.text)}</span>
+    </li>`).join('');
+
+  const devRows = (n.lessonSteps || []).map((s, i) => `
+    <tr>
+      <td style="text-align:center;width:44px"><div class="ln-step-num">${s.step||i+1}</div></td>
+      <td><strong>${escHtml(s.title||'')}</strong><br><span style="font-size:11px;color:var(--ink-3)">${escHtml(s.duration||'')}</span></td>
+      <td>${escHtml(s.teacherActivity||'').replace(/\n/g,'<br>')}</td>
+      <td>${escHtml(s.studentActivity||'').replace(/\n/g,'<br>')}</td>
+    </tr>`).join('');
+
+  const evalItems = (n.evaluation || []).map((q, i) => `
+    <li class="ln-eval-item">
+      <span class="ln-eval-num">${i+1}.</span>
+      <span>${escHtml(q)}</span>
+    </li>`).join('');
+
+  document.getElementById('previewArea').innerHTML = `
+    <div class="ln-doc" id="lnDoc">
+
+      <!-- Header -->
+      <div class="ln-doc-header">
+        <div class="ln-doc-school-logo">${schoolLogo}</div>
+        <div class="ln-doc-school-name">${escHtml(d.schoolName)}</div>
+        <div class="ln-doc-school-addr">${escHtml(d.schoolAddr)}</div>
+        <div class="ln-doc-title">Lesson Note</div>
+      </div>
+
+      <!-- Meta grid -->
+      <div class="ln-meta-grid">
+        <div class="ln-meta-cell"><div class="ln-meta-label">Subject</div><div class="ln-meta-value">${escHtml(d.subject)}</div></div>
+        <div class="ln-meta-cell"><div class="ln-meta-label">Class</div><div class="ln-meta-value">${escHtml(d.cls)}</div></div>
+        <div class="ln-meta-cell"><div class="ln-meta-label">Level</div><div class="ln-meta-value">${escHtml(d.level)}</div></div>
+        <div class="ln-meta-cell"><div class="ln-meta-label">Term / Week</div><div class="ln-meta-value">${escHtml(d.term)} · ${escHtml(d.week)}</div></div>
+        <div class="ln-meta-cell"><div class="ln-meta-label">Date</div><div class="ln-meta-value">${escHtml(d.date)}</div></div>
+        <div class="ln-meta-cell"><div class="ln-meta-label">Duration</div><div class="ln-meta-value">${escHtml(d.duration)} minutes</div></div>
+      </div>
+
+      <div class="ln-doc-body">
+
+        <!-- Topic -->
+        <div class="ln-section-box" style="padding:14px 0 18px;border-bottom:1px solid var(--border);margin-bottom:20px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-3);margin-bottom:6px;">Topic</div>
+          <div style="font-size:20px;font-weight:800;color:var(--ink)">${escHtml(d.topic)}</div>
+          ${d.subtopic ? `<div style="font-size:14px;color:var(--ink-3);margin-top:4px">Sub-topic: ${escHtml(d.subtopic)}</div>` : ''}
+        </div>
+
+        <!-- Behavioral Objectives -->
+        <div class="ln-section-box">
+          <div class="ln-section-heading">Behavioural Objectives</div>
+          <p style="font-size:13px;color:var(--ink-2);margin-bottom:10px">By the end of this lesson, pupils / students should be able to:</p>
+          <ul class="ln-obj-list">${objRows}</ul>
+        </div>
+
+        <!-- Entry Behavior -->
+        <div class="ln-section-box">
+          <div class="ln-section-heading info">Entry Behaviour / Previous Knowledge</div>
+          <div class="ln-box">${escHtml(n.entryBehavior||'').replace(/\n/g,'<br>')}</div>
+        </div>
+
+        <!-- Instructional Materials -->
+        <div class="ln-section-box">
+          <div class="ln-section-heading accent">Instructional Materials</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            ${d.materials.map(m=>`<span style="background:var(--accent-light);border:1px solid #fbbf24;color:var(--warning);padding:4px 12px;border-radius:100px;font-size:12px;font-weight:600">${escHtml(m)}</span>`).join('')}
+          </div>
+        </div>
+
+        <!-- Reference Books -->
+        <div class="ln-section-box">
+          <div class="ln-section-heading dark">Reference Books / Materials</div>
+          <div class="ln-box">${escHtml(n.referenceBooks||d.textbooks)}</div>
+        </div>
+
+        <!-- Set Induction -->
+        <div class="ln-section-box">
+          <div class="ln-section-heading">Set Induction (Introduction)</div>
+          <div class="ln-box green">${escHtml(n.setInduction||'').replace(/\n/g,'<br>')}</div>
+        </div>
+
+        <!-- Lesson Development -->
+        <div class="ln-section-box">
+          <div class="ln-section-heading">Lesson Development</div>
+          <div style="overflow-x:auto">
+            <table class="ln-dev-table">
+              <thead>
+                <tr>
+                  <th style="width:44px">Step</th>
+                  <th style="width:150px">Activity Title</th>
+                  <th>Teacher's Activity</th>
+                  <th>Students' Activity</th>
+                </tr>
+              </thead>
+              <tbody>${devRows}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Evaluation -->
+        <div class="ln-section-box">
+          <div class="ln-section-heading accent">Evaluation</div>
+          <p style="font-size:13px;color:var(--ink-3);margin-bottom:10px">Ask pupils / students the following questions:</p>
+          <ul class="ln-eval-list">${evalItems}</ul>
+        </div>
+
+        <!-- Assignment -->
+        <div class="ln-section-box">
+          <div class="ln-section-heading dark">Assignment</div>
+          <div class="ln-box amber">${escHtml(n.assignment||'').replace(/\n/g,'<br>')}</div>
+        </div>
+
+        <!-- Summary -->
+        <div class="ln-section-box">
+          <div class="ln-section-heading">Summary / Conclusion</div>
+          <div class="ln-box">${escHtml(n.summary||'').replace(/\n/g,'<br>')}</div>
+        </div>
+
+        <!-- Signature -->
+        <div class="ln-sig-row">
+          <div class="ln-sig-box">
+            <div class="ln-sig-line"></div>
+            <div class="ln-sig-label">Class Teacher</div>
+            <div class="ln-sig-sub">Signature & Date</div>
+          </div>
+          <div class="ln-sig-box">
+            <div class="ln-sig-line"></div>
+            <div class="ln-sig-label">Head of Department / Principal</div>
+            <div class="ln-sig-sub">Signature & Date</div>
+          </div>
+        </div>
+
+        <!-- Generated by -->
+        <div style="margin-top:20px;text-align:center;font-size:11px;color:var(--ink-4)">
+          Generated by EduTrack NG Lesson Note AI · ${new Date().toLocaleString('en-NG')}
+        </div>
+
+      </div>
+    </div>`;
+}
+
+// ── Print ─────────────────────────────────────────────────────────
+function printNote() {
+  if (!_lastNote) { toast('No lesson note generated yet.', 'error'); return; }
+  window.print();
+}
+
+// ── Helpers ───────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
+<script src="../js/pwa.js" defer></script>
+<script src="../js/ai-assistant.js" defer></script>
+</body>
+</html>
