@@ -1,9 +1,6 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
 
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -17,17 +14,6 @@ dotenv.config();
 
 const app = express();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const clientDir = path.join(__dirname, "..", "client");
-
-// ── Startup Check ─────────────────────────────────────────────────
-const indexFile = path.join(clientDir, "index.html");
-
-console.log("Client dir :", clientDir);
-console.log("index.html exists:", fs.existsSync(indexFile));
-
 // ── Security Middleware ───────────────────────────────────────────
 app.use(
   helmet({
@@ -37,92 +23,74 @@ app.use(
 );
 
 // ── CORS ──────────────────────────────────────────────────────────
+// In production, set CLIENT_ORIGIN to your Netlify URL.
+// Multiple origins can be comma-separated:  https://a.netlify.app,https://yourdomain.com
+const rawOrigins = process.env.CLIENT_ORIGIN || "*";
+const allowedOrigins =
+  rawOrigins === "*"
+    ? "*"
+    : rawOrigins.split(",").map((o) => o.trim());
+
 app.use(
   cors({
-    origin: "*"
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: allowedOrigins !== "*"
   })
 );
 
 // ── Body Parser ───────────────────────────────────────────────────
 app.use(express.json());
 
+// ── Health Check (Railway uses this) ─────────────────────────────
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 /*
 |--------------------------------------------------------------------------
-| GLOBAL API LIMITER
+| RATE LIMITERS
 |--------------------------------------------------------------------------
 */
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
-  message: {
-    success: false,
-    message: "Too many API requests. Please try again later."
-  },
+  message: { success: false, message: "Too many API requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false
 });
 
-/*
-|--------------------------------------------------------------------------
-| AI REQUEST LIMITER
-|--------------------------------------------------------------------------
-*/
 const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  message: {
-    success: false,
-    message: "AI request limit exceeded. Please wait before trying again."
-  }
+  message: { success: false, message: "AI request limit exceeded. Please wait before trying again." }
 });
 
-/*
-|--------------------------------------------------------------------------
-| PASSWORD RESET LIMITER
-|--------------------------------------------------------------------------
-*/
 const passwordResetLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 3,
-  message: {
-    success: false,
-    message: "Too many password reset attempts. Try again later."
-  }
+  message: { success: false, message: "Too many password reset attempts. Try again later." }
 });
 
-// ── Apply Global API Limiter ONLY to API Routes ──────────────────
+// ── Apply Global Limiter to all /api Routes ───────────────────────
 app.use("/api", globalLimiter);
 
 // ── API Routes ────────────────────────────────────────────────────
-
-// Lesson routes
 app.use("/api", lessonRoute);
-
-// AI routes protected with stricter limiter
 app.use("/api", aiLimiter, aiChatRoute);
-
-// School provisioning routes
 app.use("/api", provisionRoute);
-
-// Password reset routes protected heavily
 app.use("/api", passwordResetLimiter, resetPasswordRoute);
 
-// ── Static Frontend Files ─────────────────────────────────────────
-app.use(express.static(clientDir));
-
-// ── Explicit Root Route ───────────────────────────────────────────
-app.get("/", (_req, res) => {
-  res.sendFile(indexFile);
-});
-
-// ── SPA Fallback Route ────────────────────────────────────────────
+// ── 404 for unknown routes ────────────────────────────────────────
 app.use((_req, res) => {
-  res.sendFile(indexFile);
+  res.status(404).json({ error: "Route not found" });
 });
 
 // ── Start Server ──────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`EduTrack backend running on port ${PORT}`);
+  console.log(`CORS origin: ${rawOrigins}`);
 });

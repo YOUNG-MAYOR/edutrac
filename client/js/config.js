@@ -2,19 +2,17 @@
  * EduTrack NG — Client Configuration
  *
  * API_BASE_URL:
- *   - In development, leave as empty string '' so that fetch('/api/...')
- *     hits the Express server which also serves these static files.
- *   - If you deploy the client separately (e.g. a CDN), set this to
- *     your Express server's full URL, e.g. 'https://api.yourschool.com'.
+ *   - Set this to your Railway backend URL after deploying.
+ *     Example: 'https://edutrac-backend-production.up.railway.app'
+ *   - Leave as '' only when client and server are on the same origin.
  */
 window.__EDUTRAC_CONFIG__ = {
   SUPABASE_URL:      'https://nbgdjwuoiglkrmdeezsk.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iZ2Rqd3VvaWdsa3JtZGVlenNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxODM5ODgsImV4cCI6MjA4OTc1OTk4OH0.x2pGldYnTMZSNMARQ2H4IBIWrUL2OtVQVOoWzkhU_Xg',
 
-  // Base URL for the Express backend. Empty string = same origin (recommended).
-  // Change to 'http://localhost:5000' only if serving the client from a
-  // different port (e.g. VS Code Live Server during development).
-  API_BASE_URL: '',
+  // ⬇ Set this to your Railway backend URL after deploying the server.
+  // Example: 'https://edutrac-backend-production.up.railway.app'
+  API_BASE_URL: 'REPLACE_WITH_RAILWAY_URL',
 };
 
 // ── Validate at load time ─────────────────────────────────────────
@@ -23,6 +21,7 @@ window.__EDUTRAC_CONFIG__ = {
   const missing = [];
   if (!cfg.SUPABASE_URL      || cfg.SUPABASE_URL.startsWith('REPLACE_'))      missing.push('SUPABASE_URL');
   if (!cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_ANON_KEY.startsWith('REPLACE_')) missing.push('SUPABASE_ANON_KEY');
+  if (!cfg.API_BASE_URL      || cfg.API_BASE_URL.startsWith('REPLACE_'))      missing.push('API_BASE_URL (set to your Railway URL)');
 
   if (missing.length) {
     const msg =

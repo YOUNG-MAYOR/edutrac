@@ -1,275 +1,310 @@
 // ============================================================
-//  EduTrack NG — Service Worker v2.1 (ISSUE D-04 fix)
-//  Offline-first caching + Background Sync for queued writes
-//  ─────────────────────────────────────────────────────────────
-//  Strategy:
-//   • Truly public assets (login, offline, shared CSS/JS) → Cache-first
-//   • Supabase API (data)      → Network-only (bypass cache)
-//   • CDN assets (fonts, libs) → Cache-first with 7-day TTL
-//   • Role-specific portal HTML → NEVER cached (no-store)
-//     Covers: /admin/*, /portals/staff/*, /portals/academic-office/*,
-//             /portals/bursary/*, /portals/admin-office/*,
-//             /portals/parent/*, /portals/student/* (except login),
-//             /report-card/*
+//  EduTrack NG — Service Worker v3.1
+//  ─────────────────────────────────────────────────────────
+//  BUGS FIXED vs v3.0:
+//   ① resp.clone() now called synchronously (before any async)
+//     so the body stream is never consumed before cloning.
+//   ② Portal pages cached by PATHNAME only (no query string),
+//     so report-cards.html?class=X always hits the cache even
+//     if the user navigated with a different ?class= param.
+//   ③ stale-while-revalidate uses same synchronous-clone fix.
 //
-//  ISSUE D-04 rationale:
-//    Caching portal HTML in the SW means ANY browser that has visited
-//    an admin/staff/report-card page serves that HTML shell from cache
-//    AFTER logout — leaking UI structure and feature existence to
-//    subsequent users on the same device. Auth checks are in JS and run
-//    after the HTML is already delivered; the HTML itself must never be
-//    cached by the SW.
-//
-//  Background Sync:
-//   • Tag: 'edutrack-sync'
-//   • When online is restored after offline queuing, the SW
-//     wakes and notifies open tabs to run SyncEngine.push()
+//  Strategies:
+//   APP_SHELL  → cache-first, pre-cached on install
+//   Portal HTML → network-first; stored by pathname; served
+//                 from PORTAL_CACHE when offline; cleared on
+//                 CLEAR_PORTAL_CACHE (logout)
+//   Supabase   → always network (data comes from IndexedDB
+//                 via SyncEngine when offline)
+//   CDN        → cache-first
+//   JS/CSS/img → stale-while-revalidate
 // ============================================================
 
-const CACHE_VERSION = 'edutrack-v2.2';
-const SHELL_CACHE   = `${CACHE_VERSION}-shell`;
-const CDN_CACHE     = `${CACHE_VERSION}-cdn`;
+const SW_VERSION    = 'v3.1';
+const SHELL_CACHE   = `edutrack-${SW_VERSION}-shell`;
+const PORTAL_CACHE  = `edutrack-${SW_VERSION}-portal`;
+const CDN_CACHE     = `edutrack-${SW_VERSION}-cdn`;
 
-// ── PUBLIC shell: only truly unauthenticated / shared assets ──
-// Role-specific portal pages are intentionally NOT listed here.
-// They carry Cache-Control: no-store from the server (netlify.toml)
-// AND the SW will refuse to cache them even if somehow requested.
+// ── Pre-cached shell assets ───────────────────────────────────
 const APP_SHELL = [
   '/',
   '/index.html',
   '/login.html',
   '/offline.html',
   '/manifest.json',
-
-  // Shared CSS & JS — safe to cache, contain no auth-gated UI
-  '/css/global.css',
-  '/assets/css/global.css',
+  // ★ config.js MUST be here — contains Supabase URL + anon key
+  '/js/config.js',
   '/js/supabase.js',
-  '/js/layout.js',
-  '/js/sync-engine.js',
-  '/js/notifications.js',
   '/js/pwa.js',
+  '/js/sync-engine.js',
+  '/js/layout.js',
+  '/js/notifications.js',
+  '/js/ai-assistant.js',
   '/api/database.js',
   '/api/auth.js',
   '/api/calculations.js',
   '/assets/js/sidebar.js',
+  '/assets/css/global.css',
+  '/css/global.css',
 ];
 
-// CDN assets to cache (external libraries)
-const CDN_ASSETS = [
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
-  'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap',
-  'https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap',
+// CDN origins to cache
+const CDN_ORIGINS = [
+  'cdn.jsdelivr.net',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
 ];
 
-// ── Role-gated paths — NEVER cache these HTML pages ──────────
-// Matched as prefix; any URL starting with one of these is network-only,
-// no-store. The one exception is the student public login page which is
-// unauthenticated but handled separately below.
-const PROTECTED_PREFIXES = [
+// Portal URL-path prefixes (all treated as portal pages)
+const PORTAL_PREFIXES = [
+  '/portals/',
   '/admin/',
-  '/portals/staff/',
-  '/portals/academic-office/',
-  '/portals/bursary/',
-  '/portals/admin-office/',
-  '/portals/parent/',
-  '/portals/student/',   // includes index, results, attendance, fees, profile
   '/report-card/',
   '/saas-console/',
-  '/saas-console/index.html',
-  '/saas-console/schools.html',
-  '/saas-console/school-detail.html',
-  '/saas-console/users.html',
-  '/saas-console/billing.html',
-  '/saas-console/scratch-cards.html',
-  '/saas-console/card-history.html',
-  '/saas-console/announcements.html',
-  '/saas-console/audit.html',
 ];
 
-// Student portal public login page — unauthenticated, safe to cache
-const STUDENT_PUBLIC_PAGES = [
-  '/portals/student/login.html',
-];
+// ── Helpers ───────────────────────────────────────────────────
+const isPortalPage  = url => url.pathname !== '/portals/student/login.html'
+                           && PORTAL_PREFIXES.some(p => url.pathname.startsWith(p));
+const isSupabase    = url => url.hostname.includes('supabase.co');
+const isCdn         = url => CDN_ORIGINS.includes(url.hostname);
 
-function isProtectedPath(url) {
-  const path = new URL(url).pathname;
-  // Allow the student public login page explicitly
-  if (STUDENT_PUBLIC_PAGES.some(p => path === p || path.endsWith(p))) return false;
-  return PROTECTED_PREFIXES.some(prefix => path.startsWith(prefix));
+/**
+ * Returns a cache key Request using PATHNAME only (strips query
+ * string) so ?class=X and ?class=Y both hit the same cached entry.
+ */
+function portalCacheKey(url) {
+  return new Request(url.origin + url.pathname, { mode: 'same-origin' });
 }
 
-// ── INSTALL ──────────────────────────────────────────────────
+/**
+ * Clone a Response synchronously right away, then fire-and-forget
+ * the async cache write. The clone is captured before any awaits
+ * so the body stream is still available.
+ */
+function cacheResponse(cacheName, cacheKey, response) {
+  if (!response || !response.ok) return;
+  const clone = response.clone(); // ← synchronous, body not yet consumed
+  caches.open(cacheName).then(c => {
+    c.put(cacheKey, clone).catch(e =>
+      console.warn(`[SW ${SW_VERSION}] cache.put failed (${cacheName}):`, e.message)
+    );
+  });
+}
+
+// ── INSTALL ───────────────────────────────────────────────────
 self.addEventListener('install', event => {
-  console.log('[SW v2.1] Installing…');
+  console.log(`[SW ${SW_VERSION}] Installing…`);
   event.waitUntil(
-    Promise.all([
-      caches.open(SHELL_CACHE).then(cache =>
-        Promise.allSettled(
-          APP_SHELL.map(url =>
-            cache.add(url).catch(err =>
-              console.warn(`[SW] Shell cache miss: ${url}`, err.message)
-            )
-          )
+    caches.open(SHELL_CACHE)
+      .then(c => Promise.allSettled(
+        APP_SHELL.map(url =>
+          c.add(url).catch(e => console.warn(`[SW] Shell miss: ${url}`, e.message))
         )
-      ),
-      caches.open(CDN_CACHE).then(cache =>
-        Promise.allSettled(
-          CDN_ASSETS.map(url =>
-            cache.add(url).catch(err =>
-              console.warn(`[SW] CDN cache miss: ${url}`, err.message)
-            )
-          )
-        )
-      ),
-    ]).then(() => {
-      console.log('[SW v2.1] Public shell cached. Role-gated pages excluded.');
-      return self.skipWaiting();
-    })
+      ))
+      .then(() => {
+        console.log(`[SW ${SW_VERSION}] Shell cached (incl. config.js). Activating.`);
+        return self.skipWaiting();
+      })
   );
 });
 
 // ── ACTIVATE ─────────────────────────────────────────────────
 self.addEventListener('activate', event => {
-  console.log('[SW v2.1] Activating…');
+  console.log(`[SW ${SW_VERSION}] Activating…`);
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(
         keys
-          .filter(k => k !== SHELL_CACHE && k !== CDN_CACHE)
-          .map(k => {
-            console.log('[SW v2.1] Purging old cache:', k);
-            return caches.delete(k);
-          })
+          .filter(k => k !== SHELL_CACHE && k !== PORTAL_CACHE && k !== CDN_CACHE)
+          .map(k => { console.log(`[SW ${SW_VERSION}] Purging stale cache:`, k); return caches.delete(k); })
       ))
-      .then(() => self.clients.claim())
+      .then(() => {
+        console.log(`[SW ${SW_VERSION}] Active. Claiming clients.`);
+        return self.clients.claim();
+      })
   );
 });
 
-// ── FETCH ────────────────────────────────────────────────────
+// ── FETCH ─────────────────────────────────────────────────────
 self.addEventListener('fetch', event => {
   const { request } = event;
-  const url = new URL(request.url);
+  let url;
+  try { url = new URL(request.url); } catch { return; }
 
-  // 1. Skip non-GET — let them pass through to network
+  // Only handle GET requests over HTTP(S)
   if (request.method !== 'GET') return;
-
-  // 2. Skip Supabase API calls — always network (live data)
-  if (url.hostname.includes('supabase.co')) return;
-
-  // 3. Skip chrome-extension and non-http
   if (!url.protocol.startsWith('http')) return;
 
-  // 4. ISSUE D-04: Role-specific portal HTML — NEVER serve from cache.
-  //    Respond with a network-only fetch that sets no-store so browsers
-  //    and any intermediate cache also refuse to store it.
-  if (isProtectedPath(request.url) &&
+  // ── 1. Supabase — always network-only ────────────────────
+  //    Offline data served from IndexedDB by the page's SyncEngine
+  if (isSupabase(url)) return;
+
+  // ── 2. CDN — cache-first ─────────────────────────────────
+  if (isCdn(url)) {
+    event.respondWith(handleCdn(request, url));
+    return;
+  }
+
+  // ── 3. Portal HTML navigation — network-first + SW cache ─
+  if (isPortalPage(url) &&
       (request.destination === 'document' || request.mode === 'navigate')) {
-    event.respondWith(
-      fetch(request, { cache: 'no-store' }).catch(() =>
-        // If offline and they try to hit a portal page, send them to login
-        caches.match('/login.html').then(r => r || caches.match('/offline.html'))
-      )
-    );
+    event.respondWith(handlePortalNav(request, url));
     return;
   }
 
-  // 5. CDN assets — cache-first (long TTL)
-  if (CDN_ASSETS.some(a => request.url.startsWith(new URL(a).origin))) {
-    event.respondWith(
-      caches.match(request, { cacheName: CDN_CACHE }).then(cached => {
-        if (cached) return cached;
-        return fetch(request).then(resp => {
-          if (resp.ok) {
-            const clone = resp.clone();
-            caches.open(CDN_CACHE).then(c => c.put(request, clone));
-          }
-          return resp;
-        }).catch(() => cached);
-      })
-    );
-    return;
-  }
-
-  // 6. Public navigation (HTML pages) — cache-first, stale-while-revalidate
-  //    Fallback: login.html (safer than offline.html for auth flows)
+  // ── 4. Public navigation (/, /login.html…) — cache-first ─
   if (request.destination === 'document' || request.mode === 'navigate') {
-    event.respondWith(
-      caches.match(request).then(cached => {
-        const fetchAndCache = fetch(request).then(resp => {
-          if (resp.ok) {
-            const clone = resp.clone();
-            caches.open(SHELL_CACHE).then(c => c.put(request, clone));
-          }
-          return resp;
-        }).catch(() => null);
-
-        if (cached) {
-          fetchAndCache; // fire-and-forget background update
-          return cached;
-        }
-        return fetchAndCache.then(resp => {
-          if (resp) return resp;
-          return caches.match('/offline.html') || caches.match('/login.html');
-        });
-      })
-    );
+    event.respondWith(handlePublicNav(request));
     return;
   }
 
-  // 7. All other GET (CSS, JS, images) — cache-first, stale-while-revalidate
-  event.respondWith(
-    caches.match(request).then(cached => {
-      const fetchAndCache = fetch(request).then(resp => {
-        if (resp && resp.status === 200 && resp.type !== 'opaque') {
-          const clone = resp.clone();
-          caches.open(SHELL_CACHE).then(c => c.put(request, clone));
-        }
-        return resp;
-      }).catch(() => null);
-
-      return cached || fetchAndCache;
-    })
-  );
+  // ── 5. Sub-resources (JS, CSS, fonts, images) ────────────
+  //    Stale-while-revalidate
+  event.respondWith(handleSubResource(request));
 });
 
-// ── BACKGROUND SYNC ──────────────────────────────────────────
-self.addEventListener('sync', event => {
-  console.log('[SW v2.1] Background sync:', event.tag);
-  if (event.tag === 'edutrack-sync') {
-    event.waitUntil(notifyClientsToSync());
-  }
-});
+// ── Strategy implementations ──────────────────────────────────
 
-async function notifyClientsToSync() {
-  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-  if (clients.length === 0) {
-    console.log('[SW v2.1] No open tabs — sync will happen on next open');
-    return;
+async function handleCdn(request, url) {
+  const cached = await caches.match(request, { cacheName: CDN_CACHE });
+  if (cached) return cached;
+  try {
+    const resp = await fetch(request);
+    cacheResponse(CDN_CACHE, request, resp);
+    return resp;
+  } catch {
+    return cached || Response.error();
   }
-  for (const client of clients) {
-    client.postMessage({ type: 'BACKGROUND_SYNC', tag: 'edutrack-sync' });
-  }
-  console.log(`[SW v2.1] Notified ${clients.length} tab(s) to sync`);
 }
 
-// ── PUSH NOTIFICATIONS ───────────────────────────────────────
+async function handlePortalNav(request, url) {
+  const key = portalCacheKey(url); // pathname-only cache key
+
+  try {
+    // Always try network first so the user gets fresh content when online
+    const resp = await fetch(request);
+    // ★ BUG FIX: clone() called synchronously here, before any await
+    cacheResponse(PORTAL_CACHE, key, resp);
+    return resp;
+  } catch {
+    // Offline (or server error) — serve cached shell
+    const cached = await caches.match(key, { cacheName: PORTAL_CACHE });
+    if (cached) {
+      console.log(`[SW ${SW_VERSION}] Serving offline portal: ${url.pathname}`);
+      return cached;
+    }
+    // Never visited while online — show helpful offline page
+    const offlinePage = await caches.match('/offline.html', { cacheName: SHELL_CACHE });
+    return offlinePage || new Response(
+      `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+       <meta name="viewport" content="width=device-width,initial-scale=1">
+       <title>Offline — EduTrack NG</title>
+       <style>body{font-family:system-ui;background:#0d1117;color:#e2e8f0;display:flex;align-items:center;
+       justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+       .c{max-width:380px}h2{font-size:20px;margin-bottom:12px}
+       p{color:#64748b;font-size:14px;line-height:1.6;margin-bottom:20px}
+       a{display:inline-block;padding:10px 24px;background:#0a6e3f;color:white;
+       border-radius:8px;text-decoration:none;font-weight:700;font-size:14px}
+       </style></head><body><div class="c">
+       <div style="font-size:48px;margin-bottom:16px">📶</div>
+       <h2>You are offline</h2>
+       <p>This page hasn't been cached yet.<br>
+       Visit it once while connected so it works offline.</p>
+       <a href="/offline.html">← Back to offline page</a>
+       </div></body></html>`,
+      { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+    );
+  }
+}
+
+async function handlePublicNav(request) {
+  const cached = await caches.match(request, { cacheName: SHELL_CACHE });
+  // Background revalidate
+  const networkPromise = fetch(request).then(resp => {
+    cacheResponse(SHELL_CACHE, request, resp);
+    return resp;
+  }).catch(() => null);
+  // Return cache immediately if available, else wait for network
+  if (cached) { networkPromise; return cached; }
+  return networkPromise.then(r => r || caches.match('/offline.html'));
+}
+
+async function handleSubResource(request) {
+  const cached = await caches.match(request);
+  // ★ BUG FIX: clone() called synchronously in the .then() before awaiting
+  const networkPromise = fetch(request).then(resp => {
+    if (resp && resp.status === 200 && resp.type !== 'opaque')
+      cacheResponse(SHELL_CACHE, request, resp);
+    return resp;
+  }).catch(() => null);
+  // Serve cached immediately, update in background
+  if (cached) { networkPromise; return cached; }
+  return networkPromise;
+}
+
+// ── MESSAGES ─────────────────────────────────────────────────
+self.addEventListener('message', event => {
+  const { type, urls } = event.data || {};
+
+  if (type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
+
+  // Called on logout — clears cached portal shells
+  if (type === 'CLEAR_PORTAL_CACHE') {
+    console.log(`[SW ${SW_VERSION}] Clearing portal cache on logout…`);
+    caches.delete(PORTAL_CACHE)
+      .then(() => console.log(`[SW ${SW_VERSION}] Portal cache cleared.`));
+    return;
+  }
+
+  // Dynamically warm additional non-Supabase URLs
+  if (type === 'CACHE_URLS' && Array.isArray(urls)) {
+    const safe = urls.filter(u => {
+      try { return !isSupabase(new URL(u, self.location.origin)); } catch { return false; }
+    });
+    caches.open(SHELL_CACHE)
+      .then(c => Promise.allSettled(safe.map(u => c.add(u).catch(() => {}))));
+    return;
+  }
+
+  // Ping — used to check if SW is alive
+  if (type === 'PING') {
+    event.source?.postMessage({ type: 'PONG', version: SW_VERSION });
+    return;
+  }
+});
+
+// ── BACKGROUND SYNC ───────────────────────────────────────────
+self.addEventListener('sync', event => {
+  if (event.tag === 'edutrack-sync') {
+    event.waitUntil(
+      self.clients
+        .matchAll({ type: 'window', includeUncontrolled: true })
+        .then(clients => {
+          clients.forEach(c => c.postMessage({ type: 'BACKGROUND_SYNC' }));
+          console.log(`[SW ${SW_VERSION}] BG sync — notified ${clients.length} tab(s).`);
+        })
+    );
+  }
+});
+
+// ── PUSH NOTIFICATIONS ────────────────────────────────────────
 self.addEventListener('push', event => {
   if (!event.data) return;
-  let data;
-  try { data = event.data.json(); } catch { data = { title: 'EduTrack NG', body: event.data.text() }; }
-
-  const options = {
-    body:    data.body   || 'You have a new notification',
-    icon:    data.icon   || '/icons/icon-192.png',
-    badge:   data.badge  || '/icons/icon-72.png',
-    tag:     data.tag    || 'edutrack',
-    data:    data.data   || {},
-    actions: data.actions || [],
-    vibrate: [200, 100, 200],
-  };
+  let d;
+  try { d = event.data.json(); } catch { d = { title: 'EduTrack NG', body: event.data.text() }; }
   event.waitUntil(
-    self.registration.showNotification(data.title || 'EduTrack NG', options)
+    self.registration.showNotification(d.title || 'EduTrack NG', {
+      body:    d.body    || 'You have a new notification',
+      icon:    d.icon    || '/icons/icon-192.png',
+      badge:              '/icons/icon-72.png',
+      tag:     d.tag     || 'edutrack',
+      data:    d.data    || {},
+      vibrate: [200, 100, 200],
+    })
   );
 });
 
@@ -278,26 +313,13 @@ self.addEventListener('notificationclick', event => {
   const url = event.notification.data?.url || '/';
   event.waitUntil(
     self.clients.matchAll({ type: 'window' }).then(clients => {
-      for (const client of clients) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.navigate(url);
-          return client.focus();
+      for (const c of clients) {
+        if (c.url.includes(self.location.origin) && 'focus' in c) {
+          c.navigate(url);
+          return c.focus();
         }
       }
       return self.clients.openWindow(url);
     })
   );
 });
-
-// ── MESSAGE HANDLER (from tabs) ──────────────────────────────
-self.addEventListener('message', event => {
-  if (event.data?.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-  if (event.data?.type === 'CACHE_URLS') {
-    // Only cache URLs that are not in protected paths
-    const safe = (event.data.urls || []).filter(u => !isProtectedPath(u));
-    caches.open(SHELL_CACHE).then(cache => cache.addAll(safe));
-  }
-});
-

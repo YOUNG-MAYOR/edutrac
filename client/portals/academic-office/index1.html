@@ -36,7 +36,7 @@
   showLoader('#pageBody', 'Loading exam overview…');
 
   const [{ data: term }, { data: classes }, { data: students }, { data: exams }] = await Promise.all([
-    db.from('terms').select('*, academic_years(label)').eq('school_id', user.school_id).eq('is_current', true).maybeSingle(),
+    db.from('terms').select('*').eq('school_id', user.school_id).eq('is_current', true).maybeSingle(),
     db.from('classes').select('id, name, level').eq('school_id', user.school_id).order('name'),
     db.from('students').select('id', { count: 'exact', head: true }).eq('school_id', user.school_id).eq('is_active', true),
     db.from('exams').select('*').eq('school_id', user.school_id).order('name'),
@@ -88,7 +88,7 @@
   body.innerHTML = `
     <div class="page-header">
       <h1>Good ${getGreeting()}, ${user.full_name.split(' ')[0]}! <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span></h1>
-      <p>${term ? term.name + (term.academic_years?.label ? ' · ' + term.academic_years.label : '') : 'No active term set'} · ${new Date().toLocaleDateString('en-NG',{weekday:'long',day:'numeric',month:'long'})}</p>
+      <p>${term ? term.name + ' · ' + (term.academic_year_id || '') : 'No active term set'} · ${new Date().toLocaleDateString('en-NG',{weekday:'long',day:'numeric',month:'long'})}</p>
     </div>
 
     ${!term ? `<div class="card" style="border-left:4px solid var(--warning);padding:16px;">

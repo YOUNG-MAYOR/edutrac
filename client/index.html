@@ -216,13 +216,13 @@ img{display:block;max-width:100%}
 }
 .hero h1 .dim{
   color:transparent;
-  -webkit-text-stroke:1.5px rgba(255,255,255,.25);
+  -webkit-text-stroke:1.5px rgba(255, 255, 255, 0.829);
 }
 
 .hero-sub{
   font-size:16px;
   font-size:clamp(16px,2vw,20px);
-  color:rgba(255,255,255,.58);
+  color:rgba(255, 255, 255, 0.774);
   line-height:1.8;max-width:600px;
   margin:0 auto 44px;
 }
@@ -821,7 +821,7 @@ footer{background:var(--INK);padding:68px clamp(20px,5vw,72px) 32px}
   .split-content{padding:44px 36px}
 }
 @media(max-width:768px){
-  .nav-links,.nav-end .n-login{display:none}
+  .nav-links,.nav-end .n-login,.nav-end .n-register,.nav-end .n-start,.nav-end .n-icon,.nav-end .n-divider{display:none}
   .ham{display:block}
   .feat-top{grid-template-columns:1fr;gap:20px}
   .feat-grid{grid-template-columns:1fr}
@@ -1137,10 +1137,18 @@ input,textarea,select,button{
       CBT App
     </a>
     <a href="register.html" onclick="toggleNav()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;background:rgba(10,110,63,.12);border:1.5px solid rgba(10,110,63,.35);border-radius:10px;color:#6ee7a7;font-size:13px;font-weight:700">
-      🏫 Register School
+       Register School
     </a>
   </div>
   <a class="mob-cta" href="login.html">Get Started Free &rarr;</a>
+  <div style="display:flex;gap:8px;padding:4px 0 8px">
+    <a href="login.html" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.18);border-radius:10px;color:rgba(255,255,255,.85);font-size:13px;font-weight:600">
+      Sign In
+    </a>
+    <a href="register.html" onclick="toggleNav()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);border-radius:10px;color:white;font-size:13px;font-weight:700">
+       Register School
+    </a>
+  </div>
 </div>
 
 <!-- ═══ HERO ══════════════════════════════════════════════ -->
@@ -1171,7 +1179,7 @@ input,textarea,select,button{
         Demo
       </button>
       <button class="hbtn-s hbtn-register" onclick="location.href='register.html'">
-        🏫 Register Your School
+          Register Your School
       </button>
       <button class="hbtn-s" onclick="document.getElementById('how').scrollIntoView({behavior:'smooth'})">
         <svg width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 8l6 4-6 4V8z" fill="currentColor"/></svg>
@@ -1442,7 +1450,7 @@ input,textarea,select,button{
             <div class="cbt-progress-bar"><div class="cbt-progress-fill" style="width:38%"></div></div>
             <div class="cbt-nav-row">
               <button class="cbt-nav-btn">← Prev</button>
-              <span style="font-size:11px;color:rgba(255,255,255,.4)">38% done</span>
+              <span style="font-size:11px;color:rgba(255, 255, 255, 0.89)">38% done</span>
               <button class="cbt-nav-btn cbt-nav-next">Next →</button>
             </div>
           </div>

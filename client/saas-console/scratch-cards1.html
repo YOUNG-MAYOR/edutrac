@@ -117,7 +117,7 @@ let user, schools = [], selectedSchool = '', generatedPins = [], existingCards =
     <button class="btn btn--secondary no-print" onclick="window.print()"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span> Print Cards</button>
   `;
 
-  const { data: schoolList } = await db.from('schools').select('id,name,lga,state,logo_url').eq('is_active', true).order('name');
+  const { data: schoolList } = await db.from('schools').select('id,name').eq('is_active', true).order('name');
   schools = schoolList || [];
 
   renderPage();
@@ -185,25 +185,12 @@ function renderPage() {
 
 async function loadExistingCards() {
   const schoolId = document.getElementById('schoolSelect').value;
-  if (!schoolId) { 
-    document.getElementById('cardsContainer').innerHTML = '<div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><line x1="9" y1="12" x2="15" y2="12"/></svg></span></div><p>Select a school and generate PINs to see them here.</p></div>';
-    document.getElementById('statsBar').style.display = 'none';
-    return; 
-  }
-  document.getElementById('cardsContainer').innerHTML = '<div style="padding:32px;text-align:center;color:var(--ink-3);"><div class="et-spinner" style="margin:0 auto 12px;"></div><p>Loading scratch cards…</p></div>';
-  const { data, error } = await db.from('scratch_cards')
-    .select('*').eq('school_id', schoolId).order('created_at', {ascending:false}).limit(1000);
-  if (error) { 
-    document.getElementById('cardsContainer').innerHTML = '<div class="et-empty"><p style="color:var(--danger);">Error loading cards: ' + error.message + '</p></div>';
-    return; 
-  }
+  if (!schoolId) return;
+
+  const { data } = await db.from('scratch_cards')
+    .select('*').eq('school_id', schoolId).order('created_at', {ascending:false}).limit(500);
   existingCards = data || [];
   renderCardStats(existingCards);
-  if (existingCards.length > 0) {
-    renderAllCards(schoolId);
-  } else {
-    document.getElementById('cardsContainer').innerHTML = '<div class="et-empty"><div class="et-empty__icon"><span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><line x1="9" y1="12" x2="15" y2="12"/></svg></span></div><p>No scratch cards assigned to this school yet.</p></div>';
-  }
 }
 
 function updateMaxUsesHint() {
@@ -246,9 +233,8 @@ async function generatePins() {
   generatedPins = data || [];
   toast(`<span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> ${qty} ${cardType === 'registration' ? 'Registration' : 'Result Checking'} PINs generated!`, 'success');
 
-  /* loadExistingCards now auto-renders all batches grouped; 
-     but first scroll to the new batch for convenience */
   await loadExistingCards();
+  renderCards(generatedPins, schoolId, batchLabel);
 }
 
 function renderCardStats(cards) {
@@ -342,87 +328,7 @@ function renderCards(cards, schoolId, batchLabel = '') {
 
 async function renderAllCards(schoolId) {
   const school = schools.find(s => s.id === schoolId);
-  const schoolName = school?.name || 'School';
-  const schoolAddr = [school?.lga, school?.state].filter(Boolean).join(', ') || 'Nigeria';
-  const logoHtml = school?.logo_url
-    ? `<div class="sc-logo"><img src="${school.logo_url}" onerror="this.parentElement.textContent='\u{1F3EB}'"></div>`
-    : `<div class="sc-logo"><span style="font-size:16px;">\u{1F3EB}</span></div>`;
-
-  const cards = existingCards;
-  if (!cards.length) {
-    document.getElementById('cardsContainer').innerHTML = '<div class="et-empty"><p>No scratch cards found for this school.</p></div>';
-    return;
-  }
-
-  /* Group by batch_id */
-  const groups = {};
-  cards.forEach(c => { const k = c.batch_id || 'Ungrouped'; if (!groups[k]) groups[k] = []; groups[k].push(c); });
-
-  document.getElementById('cardsContainer').innerHTML = `
-    <div class="no-print" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-      <div style="font-size:14px;font-weight:700;">${cards.length} total cards across ${Object.keys(groups).length} batch${Object.keys(groups).length !== 1 ? 'es' : ''}</div>
-      <button class="btn btn--ghost btn--sm" onclick="window.print()">\u{1F5A8} Print All</button>
-    </div>
-    ${Object.entries(groups).map(([batch, bCards]) => {
-      const bExpired = bCards.filter(c => { const mu = c.max_uses ?? 3; return c.is_used || (c.uses_count ?? 0) >= mu; }).length;
-      const bPartial = bCards.filter(c => { const mu = c.max_uses ?? 3; const eu = c.is_used || (c.uses_count ?? 0) >= mu; return !eu && (c.uses_count ?? 0) > 0; }).length;
-      const bAvail   = bCards.length - bExpired - bPartial;
-      const bDate    = bCards[bCards.length - 1]?.created_at ? new Date(bCards[bCards.length - 1].created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '';
-      const bType    = bCards[0]?.card_type || 'result';
-      return `
-        <div class="batch-group" style="margin-bottom:32px;">
-          <div class="no-print" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 16px;background:var(--surface-3);border-radius:var(--radius);margin-bottom:12px;border-left:4px solid var(--primary);">
-            <div>
-              <div style="font-size:14px;font-weight:800;color:var(--ink-1);">\u{1F4E6} ${batch}</div>
-              <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${bCards.length} cards &middot; Created ${bDate} &middot; ${bType === 'result' ? 'Result Checking' : 'Registration'}</div>
-            </div>
-            <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-              <span style="font-size:12px;font-weight:700;color:var(--success);">\u2713 ${bAvail} unused</span>
-              <span style="font-size:12px;font-weight:700;color:var(--info);">&#8635; ${bPartial} in use</span>
-              <span style="font-size:12px;font-weight:700;color:var(--warning);">\u{1F512} ${bExpired} expired</span>
-            </div>
-          </div>
-          <div class="cards-grid">
-            ${bCards.map((card, i) => {
-              const cType = card.card_type || 'result';
-              const isResult = cType === 'result';
-              const maxU = card.max_uses ?? (isResult ? 3 : 1);
-              const usedU = card.uses_count ?? 0;
-              const expired = card.is_used || usedU >= maxU;
-              const partial = !expired && usedU > 0;
-              const statusClass = expired ? 'scratch-card--used' : partial ? 'scratch-card--partial' : '';
-              const typeBadge = isResult
-                ? `<span style="font-size:9px;font-weight:700;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;">RESULT CHECKING</span>`
-                : `<span style="font-size:9px;font-weight:700;background:#fef9c3;color:#854d0e;padding:2px 6px;border-radius:4px;">REGISTRATION</span>`;
-              const dots = Array.from({length: maxU}, (_, k) =>
-                `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 1px;background:${k < usedU ? '#dc2626' : '#d1d5db'};"></span>`
-              ).join('');
-              const usageLabel = expired
-                ? `<span style="font-size:7px;font-weight:800;color:#dc2626;text-transform:uppercase;">EXPIRED</span>`
-                : `<span style="font-size:7px;color:#555;">${usedU}/${maxU} used</span>`;
-              const instructions = isResult
-                ? `1. Visit the school result portal<br>2. Enter your Admission No. &amp; this PIN<br>3. <strong>Valid for ${maxU} checks</strong>`
-                : `1. Visit the school registration portal<br>2. Enter this PIN to register your ward<br>3. <strong>Single use only</strong>`;
-              return `
-                <div class="scratch-card ${statusClass}" style="${partial ? 'opacity:.75;border-color:#f59e0b;' : ''}">
-                  <div class="sc-hdr">${logoHtml}<div class="sc-hdr-text"><div class="sc-school">${schoolName}</div><div class="sc-subtitle">${schoolAddr}</div></div></div>
-                  <div class="sc-title-bar" style="${isResult ? '' : 'background:#854d0e;'}">${isResult ? 'RESULT CHECKING CARD' : 'REGISTRATION CARD'}</div>
-                  <div class="sc-body">
-                    <div style="text-align:center;margin-bottom:6px;">${typeBadge}</div>
-                    <div class="sc-scratch-area">&#9733; SCRATCH TO REVEAL PIN &#9733;</div>
-                    <div class="sc-label">PIN / Access Code</div>
-                    <div class="sc-pin-box"><div class="sc-pin">${formatPin(card.pin)}</div></div>
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">${dots}${usageLabel}</div>
-                    <div class="sc-instructions">${instructions}</div>
-                  </div>
-                  <div class="sc-footer"><span class="sc-batch">${batch}</span><span class="sc-num">#${String(i + 1).padStart(3,'0')}</span></div>
-                  <div class="sc-holo"></div>
-                </div>`;
-            }).join('')}
-          </div>
-        </div>`;
-    }).join('')}
-  `;
+  renderCards(existingCards, schoolId, `All Batches (${existingCards.length} total)`);
 }
 </script>
 

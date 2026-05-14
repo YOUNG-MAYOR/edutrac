@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EduTrack NG">
   <title>EduTrack NG — Record Payment</title>
-  <link rel="stylesheet" href="../../assets/css/global.css">
+  <link rel="stylesheet" href="../assets/css/global.css">
   <style>
     /* Receipt print styles */
     .receipt-preview {
@@ -52,11 +52,11 @@
 <div id="app"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
-<script src="../../js/config.js"></script>
-<script src="../../api/database.js"></script>
-<script src="../../api/auth.js"></script>
-<script src="../../api/calculations.js"></script>
-<script src="../../assets/js/sidebar.js"></script>
+<script src="../js/config.js"></script>
+<script src="../api/database.js"></script>
+<script src="../api/auth.js"></script>
+<script src="../api/calculations.js"></script>
+<script src="../assets/js/sidebar.js"></script>
 <script>
 let user, term, students = [], feeTypes = [];
 let selectedStudent = null, selectedFeeType = null, lastPayment = null;
@@ -66,7 +66,7 @@ let selectedStudent = null, selectedFeeType = null, lastPayment = null;
   if (!user) return;
 
   document.getElementById('topbarActions').innerHTML = `
-    <a href="fee-tracker.html" class="btn btn--secondary">
+    <a href="/portals/bursary/fee-tracker.html" class="btn btn--secondary">
       <span class="icon-svg" style="display:inline-flex;align-items:center;vertical-align:middle;line-height:1;">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       </span> Back to Fee Tracker
@@ -228,7 +228,7 @@ function renderPage() {
             Print Receipt
           </button>
           <button class="btn btn--secondary" onclick="recordAnother()">Record Another</button>
-          <a href="fee-tracker.html" class="btn btn--secondary">View Fee Tracker</a>
+          <a href="/portals/bursary/fee-tracker.html" class="btn btn--secondary">View Fee Tracker</a>
         </div>
       </div>
     </div>
@@ -322,7 +322,7 @@ function clearStudent() {
 function renderFeeTypes() {
   const el = document.getElementById('feeTypeList');
   if (!feeTypes.length) {
-    el.innerHTML = '<div style="color:var(--ink-3);font-size:13px;">No fee types configured. Go to <a href="../../admin/fees.html">Fee Management</a>.</div>';
+    el.innerHTML = '<div style="color:var(--ink-3);font-size:13px;">No fee types configured. Go to <a href="../admin/fees.html">Fee Management</a>.</div>';
     return;
   }
 

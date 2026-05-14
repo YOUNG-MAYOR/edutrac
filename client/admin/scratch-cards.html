@@ -418,7 +418,6 @@ function printBatch(batchId) {
     <div class="sc-holo"></div>
   </div>`).join('')}
   </div>
-<script src="../js/ai-assistant.js" defer></script>
 </body></html>`;
   const w = window.open(URL.createObjectURL(new Blob([html], {type:'text/html'})), '_blank', 'width=900,height=700');
   setTimeout(() => { if (w) { w.focus(); w.print(); } }, 700);

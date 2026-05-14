@@ -85,6 +85,9 @@ function redirectByRole(role) {
 
 // ── Logout ─────────────────────────────────────────────────────
 async function logout() {
+  // Clear SW portal cache so next user on same device sees nothing
+  if (typeof clearPortalCacheOnLogout === 'function') clearPortalCacheOnLogout();
+  try { localStorage.removeItem('user'); sessionStorage.removeItem('user'); } catch {}
   await db.auth.signOut();
   window.location.href = '/login.html';
 }
